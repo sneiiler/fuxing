@@ -1,0 +1,90 @@
+<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
+	<ribbon>
+		<tabs>
+			<tab id='AIAssistantTab' label='WordTools'>
+				<group id='TextProcessingGroup' label='文本处理'>
+					<button id='LearnFormatButton'
+                            label='学习格式'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='LearnFormatButton_Click'
+                            screentip='学习当前段落格式'
+                            supertip='学习当前选中段落的所有格式信息，并保存为新样式'/>
+					<button id='LoadDefaultStylesButton'
+                            label='载入默认样式库'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='LoadDefaultStylesButton_Click'
+                            screentip='载入AI默认样式库'
+                            supertip='加载包含AI正文、AI一级到六级标题等预设样式'/>
+				</group>
+				<group id='StandardCheckGroup' label='标准校验'>
+					<button id='CheckStandardValidityButton'
+                            label='校验引用标准'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='CheckStandardValidityButton_Click'
+                            screentip='校验选中文本的标准引用'
+                            supertip='选中文本后点击按钮，将校验文本中引用的标准是否正确'/>
+				</group>
+				<group id='AIToolsGroup' label='AI工具'>
+					<button id='ai_text_correction_btn'
+                            label='选中文本纠错'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='ai_text_correction_btn_Click'
+                            screentip='AI文本纠错'
+                            supertip='使用AI对选中的文本进行纠错和优化'/>
+					<button id='ai_text_correction_all_btn'
+                            label='全文文本纠错'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='ai_text_correction_all_btn_Click'
+                            screentip='全文AI纠错'
+                            supertip='使用AI对整个文档的文本进行纠错和优化'/>
+				</group>
+				<group id='TableToolsGroup' label='表格工具'>
+					<button id='FormatTableStyleButton'
+                            label='格式化选中表格'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='FormatTableStyleButton_Click'
+                            screentip='格式化表格'
+                            supertip='格式化当前选中的表格样式'/>
+					<button id='table_all_style_format_btn'
+                            label='格式化全部表格'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='table_all_style_format_btn_Click'
+                            screentip='格式化所有表格'
+                            supertip='格式化文档中的所有表格样式'/>
+				</group>
+				<group id='AIAssistantGroup' label='AI助手'>
+					<button id='toggle_taskpane_btn'
+                            label='AI助手'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='toggle_taskpane_btn_Click'
+                            screentip='显示/隐藏AI助手'
+                            supertip='打开或关闭AI助手对话窗口'/>
+				</group>
+				<group id='SettingsGroup' label='设置'>
+					<button id='setting_btn'
+                            label='设置'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='setting_btn_Click'
+                            screentip='打开设置'
+                            supertip='打开插件设置界面'/>
+					<button id='about_btn'
+                            label='关于'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='about_btn_Click'
+                            screentip='关于WordTools'
+                            supertip='查看插件版本信息和帮助内容。按住Ctrl点击可显示图标测试'/>
+				</group>
+			</tab>
+		</tabs>
+	</ribbon>
+</customUI>

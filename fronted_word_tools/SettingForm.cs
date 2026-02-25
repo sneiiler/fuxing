@@ -3,7 +3,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace WordTools
+namespace FuXing
 {
     public partial class SettingForm : AntdUI.Window
     {

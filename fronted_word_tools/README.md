@@ -1,4 +1,4 @@
-﻿# WordTools Word 插件
+﻿# FuXing Word 插件
 
 这是一个基于NetOffice框架开发的Microsoft Word COM插件，成功复现了Reference__WPS_VSTO项目的核心功能，并采用现代化的AntdUI界面库。
 
@@ -23,7 +23,7 @@
 - **现代化界面**：使用AntdUI提供美观的配置界面
 
 ### 🎛️ 用户界面
-- **Ribbon界面**：在Word中添加自定义"WordTools"选项卡
+- **Ribbon界面**：在Word中添加自定义"福星"选项卡
 - **右键菜单**：在文本和表格右键菜单中添加快捷操作
 - **现代化设计**：使用AntdUI提供的现代化组件
 - **任务面板**：可停靠的工具面板，方便快速操作
@@ -36,8 +36,8 @@
 ## 📁 项目结构
 
 ```
-WordTools/
-├── WordTools.cs                    # 主插件类 - NetOffice COM插件
+FuXing/
+├── FuXing.cs                       # 主插件类 - NetOffice COM插件
 ├── ConfigLoader.cs                 # 配置加载器 - JSON配置管理
 ├── NetWorkHelper.cs                # 网络请求辅助类 - HTTP通信
 ├── SettingFormAntd.cs              # AntdUI设置窗体
@@ -99,8 +99,8 @@ WordTools/
 
 ## 📊 功能对比
 
-| 功能 | 原VSTO项目 | WordTools NetOffice | 状态 |
-|------|------------|---------------------|------|
+| 功能 | 原VSTO项目 | FuXing NetOffice | 状态 |
+|------|------------|------------------|------|
 | AI文本纠错 | ✅ | ✅ | ✅ 已实现 |
 | 标准校验 | ✅ | ✅ | ✅ 已实现 |
 | 表格格式化 | ✅ | ✅ | ✅ 已实现 |
@@ -132,7 +132,7 @@ WordTools/
 1. **安装插件**：配置Post-Build自动注册
 2. **重启Word**：插件注册后需要重启Word
 3. **查看界面**：
-   - Word Ribbon中的"WordTools"选项卡
+   - Word Ribbon中的"福星"选项卡
    - 文本/表格右键菜单中的快捷操作
    - 可停靠的工具面板
 4. **配置服务器**：点击"配置"按钮设置服务器地址

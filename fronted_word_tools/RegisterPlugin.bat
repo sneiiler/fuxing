@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo WordTools 插件注册工具
+echo FuXing 插件注册工具
 echo ========================================
 
 REM 检查管理员权限
@@ -12,7 +12,7 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-echo 正在注册WordTools插件...
+echo 正在注册FuXing插件...
 
 REM 检查是否为64位系统
 if exist "%WINDIR%\SysWOW64" (
@@ -24,8 +24,8 @@ if exist "%WINDIR%\SysWOW64" (
 )
 
 REM 检查DLL文件是否存在
-if not exist "bin\Debug\WordTools.dll" (
-    echo 错误：找不到 bin\Debug\WordTools.dll
+if not exist "bin\Debug\FuXing.dll" (
+    echo 错误：找不到 bin\Debug\FuXing.dll
     echo 请先编译项目
     pause
     exit /b 1
@@ -33,20 +33,20 @@ if not exist "bin\Debug\WordTools.dll" (
 
 echo.
 echo 1. 首先清理可能的旧注册...
-%REGASM_PATH% "bin\Debug\WordTools.dll" /unregister >nul 2>&1
-reg delete "HKEY_CURRENT_USER\Software\Microsoft\Office\Word\Addins\WordTools.Connect" /f >nul 2>&1
+%REGASM_PATH% "bin\Debug\FuXing.dll" /unregister >nul 2>&1
+reg delete "HKEY_CURRENT_USER\Software\Microsoft\Office\Word\Addins\FuXing.Connect" /f >nul 2>&1
 
 echo.
 echo 2. 注册新的COM组件...
-%REGASM_PATH% "bin\Debug\WordTools.dll" /codebase
+%REGASM_PATH% "bin\Debug\FuXing.dll" /codebase
 
 if %errorLevel% equ 0 (
     echo.
     echo 3. 验证注册状态...
-    reg query "HKEY_CURRENT_USER\Software\Microsoft\Office\Word\Addins\WordTools.Connect" >nul 2>&1
+    reg query "HKEY_CURRENT_USER\Software\Microsoft\Office\Word\Addins\FuXing.Connect" >nul 2>&1
     if %errorLevel% equ 0 (
         echo   ? 注册表项已创建
-        echo   ? WordTools.Connect 已注册
+        echo   ? FuXing.Connect 已注册
     ) else (
         echo   ? 注册表项未找到，可能注册失败
     )
@@ -58,7 +58,7 @@ if %errorLevel% equ 0 (
     echo.
     echo 使用说明：
     echo 1. 重启 Microsoft Word
-    echo 2. 在 Word 的 Ribbon 中查找 "WordTools" 选项卡
+    echo 2. 在 Word 的 Ribbon 中查找 "FuXing" 选项卡
     echo 3. 如果没有显示，请检查：
     echo    - Word 的信任设置
     echo    - 是否启用了COM加载项

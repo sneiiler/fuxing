@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace WordTools
+namespace FuXing
 {
     /// <summary>
     /// 图标测试窗体 - 用于验证资源文件加载是否正常
@@ -25,7 +25,7 @@ namespace WordTools
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(600, 400);
-            this.Text = "WordTools 图标测试";
+            this.Text = "FuXing 图标测试";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.ShowInTaskbar = false;
             
@@ -42,7 +42,7 @@ namespace WordTools
                 // 添加标题
                 var titleLabel = new Label
                 {
-                    Text = "WordTools 图标加载测试",
+                    Text = "FuXing 图标加载测试",
                     Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Bold),
                     Location = new Point(10, 10),
                     Size = new Size(580, 30),

@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Diagnostics;
 
-namespace WordTools
+namespace FuXing
 {
     /// <summary>
     /// 资源管理器 - 处理图标和其他资源文件

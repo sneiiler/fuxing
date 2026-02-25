@@ -13,7 +13,7 @@ using System.Text.RegularExpressions;
 using HeyRed.MarkdownSharp;
 
 
-namespace WordTools
+namespace FuXing
 {
     [ComVisible(true)]
     public partial class TaskPaneControl : UserControl, NetOffice.WordApi.Tools.ITaskPane
@@ -54,7 +54,7 @@ namespace WordTools
                 System.Diagnostics.Debug.WriteLine($"TaskPaneControl constructor exception: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
                 // Don't rethrow in constructor as it can cause issues with COM registration
-                MessageBox.Show($"TaskPane initialization error: {ex.Message}", "WordTools Error",
+                MessageBox.Show($"TaskPane initialization error: {ex.Message}", "FuXing Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -147,17 +147,17 @@ namespace WordTools
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine("WordTools TaskPane InitializeComponent started");
+                System.Diagnostics.Debug.WriteLine("FuXing TaskPane InitializeComponent started");
 
                 // Set control properties
                 BackColor = Color.FromArgb(248, 249, 250);
-                Name = "WordToolsTaskPane";
+                Name = "FuXingTaskPane";
                 Dock = DockStyle.Fill;
 
                 // Create the main chat interface
                 CreateChatInterface();
 
-                System.Diagnostics.Debug.WriteLine("WordTools TaskPane InitializeComponent completed");
+                System.Diagnostics.Debug.WriteLine("FuXing TaskPane InitializeComponent completed");
             }
             catch (Exception ex)
             {

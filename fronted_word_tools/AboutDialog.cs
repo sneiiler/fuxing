@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
 
-namespace WordTools
+namespace FuXing
 {
     public partial class AboutDialog : AntdUI.Window
     {
@@ -16,7 +16,7 @@ namespace WordTools
         private void InitializeComponent()
         {
             // 基础窗体设置
-            Text = "关于 WordTools";
+            Text = "关于 FuXing";
             Size = new Size(500, 500);
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
@@ -55,7 +55,7 @@ namespace WordTools
             // 产品标题
             var titleLabel = new AntdUI.Label
             {
-                Text = "WordTools",
+                Text = "FuXing",
                 Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold),
                 Location = new Point(64, 8),
                 Size = new Size(200, 32),

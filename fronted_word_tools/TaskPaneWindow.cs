@@ -2,7 +2,7 @@ using AntdUI;
 using System;
 using System.Windows.Forms;
 
-namespace WordTools
+namespace FuXing
 {
     public partial class TaskPaneWindow : AntdUI.Window
     {
@@ -14,7 +14,7 @@ namespace WordTools
         private void InitializeComponent()
         {
             // 基础窗体设置
-            Text = "WordTools 工具面板";
+            Text = "FuXing 工具面板";
             Size = new System.Drawing.Size(320, 600);
             StartPosition = FormStartPosition.Manual;
             MaximizeBox = false;
@@ -37,7 +37,7 @@ namespace WordTools
             // 标题
             var titleLabel = new AntdUI.Label
             {
-                Text = "WordTools 工具箱",
+                Text = "FuXing 工具箱",
                 Font = new System.Drawing.Font("Microsoft YaHei UI", 14F, System.Drawing.FontStyle.Bold),
                 Location = new System.Drawing.Point(15, 15),
                 Size = new System.Drawing.Size(290, 35),
@@ -156,7 +156,7 @@ namespace WordTools
                 var connectInstance = Connect.CurrentInstance;
                 if (connectInstance == null)
                 {
-                    AntdUI.Notification.error(this, "错误", "无法获取WordTools插件实例");
+                    AntdUI.Notification.error(this, "错误", "无法获取FuXing插件实例");
                     return;
                 }
 

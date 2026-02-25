@@ -14,7 +14,7 @@
 
 ## 方法2：手动编辑项目文件
 
-如果你更喜欢直接编辑项目文件，在WordTools.csproj的最后（在`</Project>`标签之前）添加：
+如果你更喜欢直接编辑项目文件，在FuXing.csproj的最后（在`</Project>`标签之前）添加：
 
 ```xml
 <Target Name="PostBuild" AfterTargets="PostBuildEvent">

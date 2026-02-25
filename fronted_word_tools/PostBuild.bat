@@ -7,7 +7,7 @@ set "TARGET_NAME=%~2"
 set "CONFIG_NAME=%~3"
 
 echo ========================================
-echo WordTools Post-Build 自动注册
+echo FuXing Post-Build 自动注册
 echo ========================================
 echo 配置: "%CONFIG_NAME%"
 echo 输出路径: "%TARGET_DIR%"

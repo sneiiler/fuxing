@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -7,8 +7,8 @@
     <ProjectGuid>{883997F2-A597-407E-A0F7-0F42DCA953C6}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WordTools</RootNamespace>
-    <AssemblyName>WordTools</AssemblyName>
+    <RootNamespace>FuXing</RootNamespace>
+    <AssemblyName>FuXing</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -94,7 +94,7 @@
     <Compile Include="TaskPaneWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="WordTools.cs">
+    <Compile Include="FuXing.cs">
       <SubType>UserControl</SubType>
     </Compile>
   </ItemGroup>
@@ -129,3 +129,4 @@
     <PostBuildEvent>"$(ProjectDir)PostBuild.bat" "$(TargetDir)" "$(TargetName)" "$(ConfigurationName)"</PostBuildEvent>
   </PropertyGroup>
 </Project>
+

@@ -14,7 +14,7 @@ using NetOffice.WordApi.Tools;
 using NetOffice.OfficeApi.Enums;
 
 
-namespace WordTools
+namespace FuXing
 {
     // MyTaskPane 类定义
     public partial class MyTaskPane : UserControl, NetOffice.WordApi.Tools.ITaskPane
@@ -64,8 +64,8 @@ namespace WordTools
 
     [ComVisible(true)]
     [Guid("C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A")]
-    [ProgId("WordTools.Connect")]
-    [RegistryLocation(RegistrySaveLocation.CurrentUser), CustomUI("WordTools.RibbonUI.xml"), CustomPane(typeof(TaskPaneControl), "AI助手", false, PaneDockPosition.msoCTPDockPositionRight)]
+    [ProgId("FuXing.Connect")]
+    [RegistryLocation(RegistrySaveLocation.CurrentUser), CustomUI("FuXing.RibbonUI.xml"), CustomPane(typeof(TaskPaneControl), "AI助手", false, PaneDockPosition.msoCTPDockPositionRight)]
 	
     public class Connect : NetOffice.WordApi.Tools.COMAddin
     {
@@ -100,7 +100,7 @@ namespace WordTools
                 ResourceManager.CopyResourcesToOutput();
 
                 // 测试：输出资源状态
-                System.Diagnostics.Debug.WriteLine("=== WordTools 资源状态检查 ===");
+                System.Diagnostics.Debug.WriteLine("=== 福星 资源状态检查 ===");
                 System.Diagnostics.Debug.WriteLine(ResourceManager.GetResourceStatus());
                 System.Diagnostics.Debug.WriteLine("================================");
 
@@ -112,7 +112,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("初始化时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("初始化时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -143,7 +143,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("卸载插件时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("卸载插件时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -467,7 +467,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("校验符合标准时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("校验符合标准时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _wordApplication.StatusBar = "校验失败！";
             }
@@ -503,7 +503,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("AI文本纠错时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("AI文本纠错时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _wordApplication.StatusBar = "纠错失败！";
             }
@@ -546,7 +546,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("全文AI纠错时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("全文AI纠错时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _wordApplication.StatusBar = "全文纠错失败！";
             }
@@ -573,7 +573,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("格式化表格时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("格式化表格时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _wordApplication.StatusBar = "表格格式化失败！";
             }
@@ -610,7 +610,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("格式化所有表格时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("格式化所有表格时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _wordApplication.StatusBar = "表格格式化失败！";
             }
@@ -643,7 +643,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("原生TaskPane操作失败: " + ex.Message, "WordTools错误",
+                MessageBox.Show("原生TaskPane操作失败: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 System.Diagnostics.Debug.WriteLine($"原生TaskPane操作失败: {ex.Message}");
             }
@@ -659,7 +659,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("卸载插件时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("卸载插件时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -680,7 +680,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("显示设置信息时错误: " + ex.Message, "WordTools错误",
+                MessageBox.Show("显示设置信息时错误: " + ex.Message, "福星错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -744,14 +744,14 @@ namespace WordTools
             {
                 Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(
                     @"Software\Microsoft\Office\Word\Addins\" + type.FullName);
-                key.SetValue("Description", "WordTools插件 - AI文本纠错、标准校验、表格格式化");
-                key.SetValue("FriendlyName", "WordTools");
+                key.SetValue("Description", "福星插件 - AI文本纠错、标准校验、表格格式化");
+                key.SetValue("FriendlyName", "福星");
                 key.SetValue("LoadBehavior", 3);
                 key.Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("注册时错误: " + ex.Message, "WordTools注册错误",
+                MessageBox.Show("注册时错误: " + ex.Message, "福星注册错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -766,7 +766,7 @@ namespace WordTools
             }
             catch (Exception ex)
             {
-                MessageBox.Show("卸载插件时错误: " + ex.Message, "WordTools卸载错误",
+                MessageBox.Show("卸载插件时错误: " + ex.Message, "福星卸载错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -793,8 +793,8 @@ namespace WordTools
 
         public void AboutButton_Click(NetOffice.OfficeApi.IRibbonControl control)
         {
-            MessageBox.Show(String.Format("WordTools Version {0}", this.GetType().Assembly.GetName().Version),
-                "About WordTools", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(String.Format("福星 Version {0}", this.GetType().Assembly.GetName().Version),
+                "About 福星", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         #endregion

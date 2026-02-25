@@ -8,7 +8,7 @@ using System.Windows.Forms;
 using System.Threading.Tasks;
 using System.Net.Http;
 
-namespace WordTools
+namespace FuXing
 {
     public class NetWorkHelper
     {

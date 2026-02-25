@@ -1,7 +1,7 @@
 <customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
 	<ribbon>
 		<tabs>
-			<tab id='AIAssistantTab' label='WordTools'>
+			<tab id='AIAssistantTab' label='福星'>
 				<group id='TextProcessingGroup' label='文本处理'>
 					<button id='LearnFormatButton'
                             label='学习格式'
@@ -81,8 +81,8 @@
                             size='large'
                             getImage='GetButtonImage'
                             onAction='about_btn_Click'
-                            screentip='关于WordTools'
-                            supertip='查看插件版本信息和帮助内容。按住Ctrl点击可显示图标测试'/>
+                            screentip='关于福星'
+                            supertip='查看福星插件版本信息和帮助内容。按住Ctrl点击可显示图标测试'/>
 				</group>
 			</tab>
 		</tabs>

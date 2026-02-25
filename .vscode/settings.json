@@ -1,3 +1,10 @@
 {
-    "dotnet.preferCSharpExtension": true
+    "dotnet.preferCSharpExtension": true,
+    "terminal.integrated.profiles.windows": {
+        "Developer PowerShell": {
+            "source": "PowerShell",
+            "args": ["-NoExit", "-Command", "& { Import-Module \"$(& 'C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe' -latest -property installationPath)/Common7/Tools/Microsoft.VisualStudio.DevShell.dll\"; Enter-VsDevShell -VsInstallPath (& 'C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe' -latest -property installationPath) -SkipAutomaticLocation }"],
+            "icon": "terminal-powershell"
+        }
+    }
 }

@@ -1,0 +1,105 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "插件：编译 Debug（含自动注册 COM）",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}\\fronted_word_tools\\build.ps1",
+        "-Configuration", "Debug"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile",
+      "detail": "编译 Debug 版本，PostBuild.bat 会自动调用 RegAsm 注册 COM（需管理员权限运行 VS Code）"
+    },
+    {
+      "label": "插件：编译 Release",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}\\fronted_word_tools\\build.ps1",
+        "-Configuration", "Release"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile",
+      "detail": "编译 Release 版本（不自动注册 COM）"
+    },
+    {
+      "label": "插件：手动注册 COM（管理员）",
+      "type": "shell",
+      "command": "${workspaceFolder}\\fronted_word_tools\\RegisterPlugin.bat",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "注册 COM 到 Windows 注册表，需以管理员身份运行 VS Code"
+    },
+    {
+      "label": "插件：注销 COM",
+      "type": "shell",
+      "command": "${workspaceFolder}\\fronted_word_tools\\UnregisterPlugin.bat",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "从注册表中移除插件注册"
+    },
+    {
+      "label": "插件：快速重新注册 COM",
+      "type": "shell",
+      "command": "${workspaceFolder}\\fronted_word_tools\\QuickReregister.bat",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "注销后重新注册，用于更新注册表路径"
+    },
+    {
+      "label": "启动 Word",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}\\fronted_word_tools\\start-word.ps1"
+      ],
+      "isBackground": false,
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "启动 Microsoft Word（等待 3 秒让插件加载）"
+    },
+    {
+      "label": "插件：编译并启动 Word",
+      "dependsOn": [
+        "插件：编译 Debug（含自动注册 COM）",
+        "启动 Word"
+      ],
+      "dependsOrder": "sequence",
+      "group": "none",
+      "problemMatcher": [],
+      "detail": "先编译注册插件，再启动 Word，然后 launch.json 附加调试器"
+    }
+  ]
+}

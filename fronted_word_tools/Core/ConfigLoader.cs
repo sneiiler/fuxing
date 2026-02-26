@@ -9,15 +9,17 @@ namespace FuXing
     {
         public class Config
         {
-            public string llmServerIP { get; set; } = "127.0.0.1";
-            public int llmServerPort { get; set; } = 11434;
-            public int UpdatePort { get; set; } = 11450;
-            public int OtherPort { get; set; } = 0;
-            public string CheckStandardIP { get; set; } = "192.168.1.1";
-            public int CheckStandardPort { get; set; } = 80;
-            // 新增：OpenAI兼容API服务器配置
-            public string OpenAIServerIP { get; set; } = "127.0.0.1";
-            public int OpenAIServerPort { get; set; } = 8000;
+            /// <summary>大模型服务器 Base URL（如 http://127.0.0.1:8000）</summary>
+            public string BaseURL { get; set; } = "http://127.0.0.1:8000";
+
+            /// <summary>API Key / Secret Key</summary>
+            public string ApiKey { get; set; } = "";
+
+            /// <summary>模型名称</summary>
+            public string ModelName { get; set; } = "";
+
+            /// <summary>开发者模式（显示调试日志、额外诊断信息等）</summary>
+            public bool DeveloperMode { get; set; } = false;
         }
 
         // 获取文档目录路径

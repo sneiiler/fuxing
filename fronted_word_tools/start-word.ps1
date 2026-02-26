@@ -1,4 +1,4 @@
-$wordPath = "C:\Program Files\Microsoft Office\Root\Office16\WINWORD.EXE"
+﻿$wordPath = "C:\Program Files\Microsoft Office\Root\Office16\WINWORD.EXE"
 
 if (-not (Test-Path $wordPath)) {
     Write-Error "找不到 Word：$wordPath"

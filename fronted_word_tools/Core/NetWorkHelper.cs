@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -12,14 +14,19 @@ namespace FuXing
 {
     public class NetWorkHelper
     {
-        private string _llmServerIP;
-        private int _llmServerPort;
-        private string _checkStandardServerIP;
-        private int _checkStandardServerPort;
-        private string _openaiServerIP;
-        private int _openaiServerPort;
-        private int _timeout = 10000; // 10秒超时
-        private static readonly HttpClient _httpClient = new HttpClient();
+        private string _baseUrl;
+        private string _apiKey;
+        private string _modelName;
+        private bool _developerMode;
+        private static readonly HttpClient _httpClient;
+
+        static NetWorkHelper()
+        {
+            // 启用 TLS 1.2，现代 HTTPS API 要求此协议
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            _httpClient = new HttpClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(120); // 流式请求需要较长超时
+        }
 
         public NetWorkHelper()
         {
@@ -34,22 +41,17 @@ namespace FuXing
                 var configLoader = new ConfigLoader();
                 var config = configLoader.LoadConfig();
 
-                _llmServerIP = config.llmServerIP;
-                _llmServerPort = config.llmServerPort;
-                _checkStandardServerIP = config.CheckStandardIP;
-                _checkStandardServerPort = config.CheckStandardPort;
-                _openaiServerIP = config.OpenAIServerIP;
-                _openaiServerPort = config.OpenAIServerPort;
+                _baseUrl = (config.BaseURL ?? "http://127.0.0.1:8000").TrimEnd('/');
+                _apiKey = config.ApiKey ?? "";
+                _modelName = (config.ModelName ?? "").Trim();
+                _developerMode = config.DeveloperMode;
             }
             catch (Exception ex)
             {
-                // 如果加载配置失败，使用默认值
-                _llmServerIP = "127.0.0.1";
-                _llmServerPort = 11434;
-                _checkStandardServerIP = "192.168.1.1";
-                _checkStandardServerPort = 80;
-                _openaiServerIP = "127.0.0.1";
-                _openaiServerPort = 8000;
+                _baseUrl = "http://127.0.0.1:8000";
+                _apiKey = "";
+                _modelName = "";
+                _developerMode = false;
                 System.Diagnostics.Debug.WriteLine($"Failed to load configuration: {ex.Message}");
             }
         }
@@ -59,12 +61,14 @@ namespace FuXing
         {
             try
             {
-                string url = $"http://{_llmServerIP}:{_llmServerPort}/api/correct";
+                string url = $"{_baseUrl}/api/correct";
                 
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "POST";
                 request.ContentType = "application/json; charset=UTF-8";
-                request.Timeout = _timeout;
+                request.Timeout = 10000;
+                if (!string.IsNullOrEmpty(_apiKey))
+                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
 
                 var requestData = new { text = text };
                 string jsonData = JsonConvert.SerializeObject(requestData);
@@ -90,17 +94,17 @@ namespace FuXing
             }
         }
 
-        // 获取标准系统的SID
+        // 获取标准系统的SID（标准检验已迁移到后端服务，此方法保留兼容）
         private string GetStandardSystemSid()
         {
             try
             {
-                string loginUrl = $"http://{_checkStandardServerIP}:{_checkStandardServerPort}/portal/r/w?cmd=com.awspaas.user.login";
+                string loginUrl = $"{_baseUrl}/portal/r/w?cmd=com.awspaas.user.login";
                 
                 HttpWebRequest loginRequest = (HttpWebRequest)WebRequest.Create(loginUrl);
                 loginRequest.Method = "POST";
                 loginRequest.ContentType = "application/x-www-form-urlencoded; charset=UTF-8";
-                loginRequest.Timeout = _timeout;
+                loginRequest.Timeout = 10000;
 
                 string postData = "type=login&jsonData={\"userid\":\"guest\",\"userpwd\":\"guest\"}";
                 byte[] data = Encoding.UTF8.GetBytes(postData);
@@ -137,13 +141,13 @@ namespace FuXing
                     return "无法获取登录凭证，标准校验失败";
                 }
 
-                string checkUrl = $"http://{_checkStandardServerIP}:{_checkStandardServerPort}/portal/r/w?sid={sid}&cmd=com.awspaas.user.apps.standard.pubController";
+                string checkUrl = $"{_baseUrl}/portal/r/w?sid={sid}&cmd=com.awspaas.user.apps.standard.pubController";
                 
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(checkUrl);
                 request.Method = "POST";
                 request.ContentType = "application/x-www-form-urlencoded; charset=UTF-8";
                 request.Headers.Add("Cookie", "AWSLOGINUID=null; AWSLOGINPWD=null; AWSLOGINRSAPWD=null");
-                request.Timeout = _timeout;
+                request.Timeout = 10000;
 
                 string searchInfo_cleaned = Regex.Replace(searchInfo, @"[^\w\s\u4e00-\u9fa5\n-]", "");
                 string postData = $"type=serachInfo&jsonData={{\"tableName\":\"BO_EU_STANDARD_QUERY\",\"serachInfo\":\"{searchInfo_cleaned}\"}}";
@@ -221,14 +225,190 @@ namespace FuXing
         {
             public string role { get; set; }
             public string content { get; set; }
+            public ToolCallDelta[] tool_calls { get; set; }
         }
 
-        // 发送流式聊天请求到8000端口的OpenAI兼容API - 使用真正的流式处理
-        public async Task SendStreamChatRequestAsync(string userMessage, string mode, string knowledgeBase, Action<string> onChunkReceived, Action onCompleted, Action<string> onError)
+        public class ToolCallDelta
         {
+            public int index { get; set; }
+            public string id { get; set; }
+            public string type { get; set; }
+            public FunctionCallDelta function { get; set; }
+        }
+
+        public class FunctionCallDelta
+        {
+            public string name { get; set; }
+            public string arguments { get; set; }
+        }
+
+        /// <summary>
+        /// 流式请求结果 — 可能返回文本内容或工具调用
+        /// </summary>
+        public class StreamChatResult
+        {
+            public string Content { get; set; }
+            public List<ToolCallRequest> ToolCalls { get; set; }
+            public bool HasToolCalls => ToolCalls != null && ToolCalls.Count > 0;
+        }
+
+        /// <summary>
+        /// 带上下文记忆的流式聊天请求。使用 ChatMemory 提供完整会话历史，
+        /// 支持 tool_calls 解析。
+        /// </summary>
+        public async Task<StreamChatResult> SendStreamChatWithMemoryAsync(
+            ChatMemory memory,
+            JArray tools,
+            Action<string> onChunkReceived,
+            Action<string> onError)
+        {
+            if (string.IsNullOrWhiteSpace(_baseUrl))
+            {
+                onError?.Invoke("未配置 Base URL，请在设置中配置服务器地址");
+                return null;
+            }
+            if (string.IsNullOrWhiteSpace(_modelName))
+            {
+                onError?.Invoke("未配置模型名称，请在设置中选择或输入模型");
+                return null;
+            }
+
             try
             {
-                string url = $"http://{_openaiServerIP}:{_openaiServerPort}/v1/chat/completions";
+                string url = $"{_baseUrl}/chat/completions";
+
+                var requestObj = new JObject
+                {
+                    ["model"] = _modelName,
+                    ["messages"] = memory.BuildMessagesJson(),
+                    ["stream"] = true,
+                    ["temperature"] = 0.7,
+                    ["max_tokens"] = 4096
+                };
+
+                if (tools != null && tools.Count > 0)
+                    requestObj["tools"] = tools;
+
+                string jsonData = requestObj.ToString(Formatting.None);
+                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+
+                var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+                if (!string.IsNullOrEmpty(_apiKey))
+                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
+
+                var result = new StreamChatResult { Content = "", ToolCalls = new List<ToolCallRequest>() };
+
+                // 用于累积流式 tool_calls 的辅助类
+                var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
+
+                using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync();
+                        onError?.Invoke($"请求失败: {response.StatusCode} - {errorBody}");
+                        return null;
+                    }
+
+                    using (var stream = await response.Content.ReadAsStreamAsync())
+                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    {
+                        string line;
+                        while ((line = await reader.ReadLineAsync()) != null)
+                        {
+                            if (!line.StartsWith("data: "))
+                                continue;
+
+                            string data = line.Substring(6);
+                            if (data == "[DONE]")
+                                break;
+
+                            try
+                            {
+                                var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(data);
+                                if (chunk?.choices == null || chunk.choices.Length == 0)
+                                    continue;
+
+                                var delta = chunk.choices[0].delta;
+                                if (delta == null)
+                                    continue;
+
+                                // 文本内容
+                                if (delta.content != null)
+                                {
+                                    result.Content += delta.content;
+                                    onChunkReceived?.Invoke(delta.content);
+                                }
+
+                                // 工具调用（流式累积）
+                                if (delta.tool_calls != null)
+                                {
+                                    foreach (var tc in delta.tool_calls)
+                                    {
+                                        ToolCallAccumulator acc;
+                                        if (!toolCallAccumulators.TryGetValue(tc.index, out acc))
+                                        {
+                                            acc = new ToolCallAccumulator();
+                                            toolCallAccumulators[tc.index] = acc;
+                                        }
+
+                                        if (!string.IsNullOrEmpty(tc.id))
+                                            acc.Id = tc.id;
+                                        if (!string.IsNullOrEmpty(tc.function?.name))
+                                            acc.Name = tc.function.name;
+                                        if (!string.IsNullOrEmpty(tc.function?.arguments))
+                                            acc.Args.Append(tc.function.arguments);
+                                    }
+                                }
+
+                                // 检测结束原因
+                                if (chunk.choices[0].finish_reason == "tool_calls")
+                                {
+                                    BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"解析流式数据失败: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+
+                // 如果 finish_reason 未触发但有累积的 tool_calls，也补充进去
+                if (result.ToolCalls.Count == 0 && toolCallAccumulators.Count > 0)
+                {
+                    BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                var innerMsg = ex.InnerException != null ? $" -> {ex.InnerException.Message}" : "";
+                onError?.Invoke($"发送聊天请求失败: {ex.Message}{innerMsg}");
+                return null;
+            }
+        }
+
+        // 发送流式聊天请求到后端 OpenAI 兼容 API（旧接口，保留兼容）
+        public async Task SendStreamChatRequestAsync(string userMessage, string mode, string knowledgeBase, Action<string> onChunkReceived, Action onCompleted, Action<string> onError)
+        {
+            // 检查必需配置
+            if (string.IsNullOrWhiteSpace(_baseUrl))
+            {
+                onError?.Invoke("未配置 Base URL，请在设置中配置服务器地址");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_modelName))
+            {
+                onError?.Invoke("未配置模型名称，请在设置中选择或输入模型");
+                return;
+            }
+
+            try
+            {
+                string url = $"{_baseUrl}/chat/completions";
                 
                 // 构建消息数组，可以根据mode和knowledgeBase调整系统消息
                 var systemMessage = GetSystemMessage(mode, knowledgeBase);
@@ -240,7 +420,7 @@ namespace FuXing
 
                 var requestData = new ChatCompletionRequest
                 {
-                    model = "gpt-3.5-turbo",
+                    model = _modelName,
                     messages = messages,
                     stream = true,
                     temperature = 0.7,
@@ -255,11 +435,12 @@ namespace FuXing
                 string jsonData = JsonConvert.SerializeObject(requestData);
                 var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-                // 使用SendAsync而不是PostAsync来获得更好的流式控制
                 var request = new HttpRequestMessage(HttpMethod.Post, url)
                 {
                     Content = content
                 };
+                if (!string.IsNullOrEmpty(_apiKey))
+                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
 
                 using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
                 {
@@ -321,8 +502,42 @@ namespace FuXing
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"流式请求异常: {ex.Message}");
-                onError?.Invoke($"发送聊天请求失败: {ex.Message}");
+                var innerMsg = ex.InnerException != null ? $" -> {ex.InnerException.Message}" : "";
+                System.Diagnostics.Debug.WriteLine($"流式请求异常: {ex.Message}{innerMsg}");
+                System.Diagnostics.Debug.WriteLine($"异常类型: {ex.GetType().FullName}");
+                if (ex.InnerException != null)
+                    System.Diagnostics.Debug.WriteLine($"内部异常: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
+                onError?.Invoke($"发送聊天请求失败: {ex.Message}{innerMsg}");
+            }
+        }
+
+        // 工具调用累积辅助类
+        private class ToolCallAccumulator
+        {
+            public string Id = "";
+            public string Name = "";
+            public StringBuilder Args = new StringBuilder();
+        }
+
+        // 从累积器构建 ToolCallRequest 列表
+        private static void BuildToolCallsFromAccumulators(
+            Dictionary<int, ToolCallAccumulator> accumulators, List<ToolCallRequest> target)
+        {
+            var sortedKeys = new List<int>(accumulators.Keys);
+            sortedKeys.Sort();
+            foreach (int key in sortedKeys)
+            {
+                var acc = accumulators[key];
+                JObject parsedArgs;
+                try { parsedArgs = JObject.Parse(acc.Args.ToString()); }
+                catch { parsedArgs = new JObject(); }
+
+                target.Add(new ToolCallRequest
+                {
+                    Id = acc.Id,
+                    FunctionName = acc.Name,
+                    Arguments = parsedArgs
+                });
             }
         }
 
@@ -356,7 +571,7 @@ namespace FuXing
         {
             try
             {
-                string url = $"http://{_openaiServerIP}:{_openaiServerPort}/v1/files/upload";
+                string url = $"{_baseUrl}/files/upload";
                 
                 using (var form = new MultipartFormDataContent())
                 {

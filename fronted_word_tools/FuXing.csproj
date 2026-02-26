@@ -32,26 +32,36 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="AntdUI, Version=2.1.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\AntdUI.2.1.1\lib\net40\AntdUI.dll</HintPath>
+    <Reference Include="AntdUI, Version=2.2.19.0, Culture=neutral, PublicKeyToken=0e24e5118ea3d6af, processorArchitecture=MSIL">
+      <HintPath>packages\AntdUI.2.2.19\lib\net46\AntdUI.dll</HintPath>
+    </Reference>
+    <Reference Include="AntdUI.EmojiFluentFlat, Version=2026.2.25.0, Culture=neutral, PublicKeyToken=0e24e5118ea3d6af, processorArchitecture=MSIL">
+      <HintPath>packages\AntdUI.EmojiFluentFlat.2026.2.25\lib\net46\AntdUI.EmojiFluentFlat.dll</HintPath>
     </Reference>
     <Reference Include="Markdown, Version=2.0.0.0, Culture=neutral, PublicKeyToken=1b320cc08ad5aa89, processorArchitecture=MSIL">
       <HintPath>packages\Markdown.2.2.1\lib\net451\Markdown.dll</HintPath>
     </Reference>
-    <Reference Include="NetOffice, Version=1.9.7.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
-      <HintPath>packages\NetOfficeFw.Core.1.9.7\lib\net462\NetOffice.dll</HintPath>
+    <Reference Include="NetOffice, Version=1.9.8.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
+      <HintPath>packages\NetOfficeFw.Core.1.9.8\lib\net462\NetOffice.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="OfficeApi, Version=1.9.7.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
-      <HintPath>packages\NetOfficeFw.Office.1.9.7\lib\net462\OfficeApi.dll</HintPath>
+    <Reference Include="OfficeApi, Version=1.9.8.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
+      <HintPath>packages\NetOfficeFw.Office.1.9.8\lib\net462\OfficeApi.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="stdole, Version=17.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\stdole.17.14.40260\lib\net45\stdole.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Design" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Drawing.Common, Version=10.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Drawing.Common.10.0.3\lib\net462\System.Drawing.Common.dll</HintPath>
+    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -59,30 +69,51 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
-    <Reference Include="VBIDEApi, Version=1.9.7.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
-      <HintPath>packages\NetOfficeFw.VBIDE.1.9.7\lib\net462\VBIDEApi.dll</HintPath>
+    <Reference Include="VBIDEApi, Version=1.9.8.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
+      <HintPath>packages\NetOfficeFw.VBIDE.1.9.8\lib\net462\VBIDEApi.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
-    <Reference Include="WordApi, Version=1.9.7.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
-      <HintPath>packages\NetOfficeFw.Word.1.9.7\lib\net462\WordApi.dll</HintPath>
+    <Reference Include="WordApi, Version=1.9.8.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
+      <HintPath>packages\NetOfficeFw.Word.1.9.8\lib\net462\WordApi.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AboutDialog.cs">
+    <!-- Core: 基础设施 & 配置 -->
+    <Compile Include="Core\ChatMemory.cs" />
+    <Compile Include="Core\ConfigLoader.cs" />
+    <Compile Include="Core\NetWorkHelper.cs" />
+    <Compile Include="Core\ResourceManager.cs" />
+    <Compile Include="Core\ToolRegistry.cs" />
+    <!-- UI: 窗体 & 界面 -->
+    <Compile Include="UI\AboutDialog.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="IconTestForm.cs">
+    <Compile Include="UI\SettingForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="SettingForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="TaskPaneControl.cs">
+    <Compile Include="UI\RichChatPanel.cs" />
+    <Compile Include="UI\TaskPaneControl.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="ConfigLoader.cs" />
-    <Compile Include="NetWorkHelper.cs" />
+    <!-- Tools: AI 工具服务 -->
+    <Compile Include="Tools\ITool.cs" />
+    <Compile Include="Tools\TextCorrectionService.cs" />
+    <Compile Include="Tools\CorrectSelectedTextTool.cs" />
+    <Compile Include="Tools\CorrectAllTextTool.cs" />
+    <Compile Include="Tools\FormatSelectedTableTool.cs" />
+    <Compile Include="Tools\FormatAllTablesTool.cs" />
+    <Compile Include="Tools\CheckStandardTool.cs" />
+    <Compile Include="Tools\GetSelectedTextTool.cs" />
+    <Compile Include="Tools\GetDocumentInfoTool.cs" />
+    <Compile Include="Tools\LoadDefaultStylesTool.cs" />
+    <Compile Include="Tools\InsertTextTool.cs" />
+    <Compile Include="Tools\ReplaceSelectedTextTool.cs" />
+    <!-- 插件入口 -->
+    <Compile Include="FuXing.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <!-- Properties -->
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
@@ -90,17 +121,10 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="ResourceManager.cs" />
-    <Compile Include="TaskPaneWindow.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="FuXing.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="packages.config" />
-    <None Include="PostBuild-Setup.md" />
     <None Include="PostBuild.bat" />
     <None Include="QuickReregister.bat" />
     <None Include="README.md" />
@@ -120,7 +144,7 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
-    <EmbeddedResource Include="SettingForm.resx">
+    <EmbeddedResource Include="UI\SettingForm.resx">
       <DependentUpon>SettingForm.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
@@ -129,4 +153,3 @@
     <PostBuildEvent>"$(ProjectDir)PostBuild.bat" "$(TargetDir)" "$(TargetName)" "$(ConfigurationName)"</PostBuildEvent>
   </PropertyGroup>
 </Project>
-

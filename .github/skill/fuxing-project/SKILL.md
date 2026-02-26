@@ -51,6 +51,18 @@ fronted_word_tools/
 - COM 注册脚本：`RegisterPlugin.bat` / `UnregisterPlugin.bat`
 - 编译后自动注册：`PostBuild.bat`
 
+### 编译验证流程
+
+修改前端 C# 代码后，**只需编译确认无错误即可**，不要自动启动 Word 或注册 COM：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "fronted_word_tools\build.ps1" -Configuration Debug
+```
+
+- 编译成功标志：输出 `FuXing -> ...\FuXing.dll` 且无 `error` 行
+- 若 DLL 被 Word 锁定导致复制失败（`MSB3026` warning），属于正常现象——说明编译本身已通过，代码无错误
+- **不要主动关闭 Word、不要主动启动 Word、不要主动注册 COM**，用户会自行处理运行环节
+
 ---
 
 ## 后端子项目：`backend_agents/`

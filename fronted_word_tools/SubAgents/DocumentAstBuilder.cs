@@ -47,11 +47,21 @@ namespace FuXing.SubAgents
             List<InferredHeading> headings;
             bool llmAssisted;
 
+            // 非空段落数太少时，文档内容不足以区分标题与正文，直接返回平面树
+            int nonBlankCount = rawStructure.Paragraphs.Count(p => !p.IsBlank);
+
             if (headingCount >= MinHeadingCountThreshold)
             {
                 // ═══ 快速路径：文档已有规范标题 ═══
                 Debug.WriteLine($"[AstBuilder] 检测到 {headingCount} 个规范标题，直接构建 AST");
                 headings = ExtractFromOutlineLevel(rawStructure);
+                llmAssisted = false;
+            }
+            else if (nonBlankCount <= 3)
+            {
+                // ═══ 简单文档路径：内容太少，无法推断标题规则，直接返回平面树 ═══
+                Debug.WriteLine($"[AstBuilder] 仅 {nonBlankCount} 个非空段落，跳过 LLM 推断，返回平面树");
+                headings = new List<InferredHeading>();
                 llmAssisted = false;
             }
             else
@@ -140,8 +150,11 @@ namespace FuXing.SubAgents
             var rules = ParseLevelMappingRules(result.Output);
 
             if (rules.Count == 0)
-                throw new InvalidOperationException(
-                    $"LLM 未返回有效的层级映射规则。LLM 原始输出:\n{result.Output}");
+            {
+                // LLM 认为文档没有可识别的标题模式，优雅降级为平面树
+                Debug.WriteLine("[AstBuilder] LLM 未返回映射规则，文档可能没有明显的标题结构，返回空列表");
+                return new List<InferredHeading>();
+            }
 
             Debug.WriteLine($"[AstBuilder] LLM 推断出 {rules.Count} 条映射规则:");
             foreach (var r in rules)

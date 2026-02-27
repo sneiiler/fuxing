@@ -238,31 +238,26 @@ namespace FuXing
             return config.RequireApprovalForDangerousTools;
         }
 
-        /// <summary>构建审批摘要文本（展示给用户确认的操作信息）</summary>
+        /// <summary>构建审批摘要文本（仅返回参数部分，工具名由审批卡片单独渲染）</summary>
         public string BuildApprovalSummary(string functionName, JObject arguments)
         {
             if (!_tools.TryGetValue(functionName, out var tool))
                 return $"未知工具: {functionName}";
 
-            var sb = new StringBuilder();
-            sb.AppendLine($"AI 助手请求执行以下高风险操作：");
-            sb.AppendLine();
-            sb.AppendLine($"工具: {tool.DisplayName} ({tool.Name})");
+            if (arguments == null || arguments.Count == 0)
+                return "";
 
-            if (arguments != null && arguments.Count > 0)
+            var sb = new StringBuilder();
+            foreach (var prop in arguments.Properties())
             {
-                sb.AppendLine("参数:");
-                foreach (var prop in arguments.Properties())
-                {
-                    string val = prop.Value?.ToString() ?? "";
-                    // 截断过长的参数值（如代码片段）
-                    if (val.Length > 300)
-                        val = val.Substring(0, 300) + "... (已截断)";
-                    sb.AppendLine($"  {prop.Name}: {val}");
-                }
+                string val = prop.Value?.ToString() ?? "";
+                // 截断过长的参数值（如代码片段）
+                if (val.Length > 300)
+                    val = val.Substring(0, 300) + "... (已截断)";
+                sb.AppendLine($"{prop.Name}: {val}");
             }
 
-            return sb.ToString();
+            return sb.ToString().TrimEnd();
         }
     }
 }

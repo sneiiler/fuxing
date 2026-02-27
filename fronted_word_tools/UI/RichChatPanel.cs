@@ -453,6 +453,8 @@ namespace FuXing.UI
         public string StatusText { get; set; }
         public ToolCallStatus Status { get; set; }
         public List<string> Details { get; set; } = new List<string>();
+        /// <summary>展开后显示的代码片段（如 execute_word_script 传入的 C# 代码）</summary>
+        public string CodeSnippet { get; set; }
         public bool IsExpanded { get; set; }
         internal event Action ToggleRequested;
 
@@ -465,6 +467,7 @@ namespace FuXing.UI
         private static readonly Font NameFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         private static readonly Font StatusFont = new Font("Microsoft YaHei UI", 8.5F);
         private static readonly Font DetailFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font CodeFont = new Font("Cascadia Code", 8.5F);
 
         // 颜色与 ThinkBlock 一致
         private static readonly Color CardBg = Color.FromArgb(243, 244, 246);
@@ -474,6 +477,10 @@ namespace FuXing.UI
         private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
         private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
         private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
+
+        // 代码块颜色
+        private static readonly Color CodeBg = Color.FromArgb(229, 231, 235);
+        private static readonly Color CodeFg = Color.FromArgb(55, 65, 81);
 
         // 工具英文函数名 → 中文显示名：从 ToolRegistry 动态获取
         /// <summary>将函数名翻译为中文显示名</summary>
@@ -505,10 +512,21 @@ namespace FuXing.UI
         {
             if (!IsExpanded) return HeaderH;
             int h = HeaderH;
+            int contentW = width - 24;
+            var canvas = g.High();
+
+            // 代码块
+            if (!string.IsNullOrEmpty(CodeSnippet))
+            {
+                h += 4; // 间距
+                var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16);
+                h += codeSize.Height + 16; // 上下各 8px 内边距
+            }
+
+            // 状态文本
             if (!string.IsNullOrEmpty(StatusText))
             {
-                var canvas = g.High();
-                var size = canvas.MeasureText(StatusText, StatusFont, width - 24);
+                var size = canvas.MeasureText(StatusText, StatusFont, contentW);
                 h += Math.Max(DetailLineH, size.Height) + 4;
             }
             if (Details.Count > 0)
@@ -562,6 +580,27 @@ namespace FuXing.UI
                 int sepY = textY;
                 using (var pen = new Pen(CardBorder))
                     g.DrawLine(pen, textX, sepY, bounds.Right - 12, sepY);
+
+                // 代码块
+                if (!string.IsNullOrEmpty(CodeSnippet))
+                {
+                    textY += 4;
+                    int contentW = bounds.Width - 24;
+
+                    // 代码背景区域
+                    var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16);
+                    int codeBlockH = codeSize.Height + 16;
+                    var codeRect = new Rectangle(textX, textY, contentW, codeBlockH);
+                    using (var codePath = RoundedRect(codeRect, 6))
+                    using (var codeBrush = new SolidBrush(CodeBg))
+                        g.FillPath(codeBrush, codePath);
+
+                    // 代码文本
+                    canvas.DrawText(CodeSnippet, CodeFont, CodeFg,
+                        new Rectangle(textX + 8, textY + 8, contentW - 16, codeSize.Height),
+                        FormatFlags.Top | FormatFlags.Left);
+                    textY += codeBlockH;
+                }
 
                 // 状态文本
                 if (!string.IsNullOrEmpty(StatusText))
@@ -906,6 +945,7 @@ namespace FuXing.UI
     internal class ApprovalCard : IContentBlock
     {
         public string ToolDisplayName { get; }
+        public string FunctionName { get; }
         public string Summary { get; }
 
         private bool? _result;
@@ -928,6 +968,10 @@ namespace FuXing.UI
         private const int ButtonTopGap = 12;
         private const int BottomPad = 14;
         private const int ResultH = 26;
+        private const int ToolBadgeH = 26; // 工具名称徽章行高
+        private const int LabelLineH = 22; // "参数:" 标签行高
+        private const int CodeBlockPadX = 10; // 代码块水平内边距
+        private const int CodeBlockPadY = 8;  // 代码块垂直内边距
 
         // 缓存按钮 Y 偏移（相对于块顶部），由 MeasureHeight 计算
         private int _cachedBtnYOffset;
@@ -935,7 +979,8 @@ namespace FuXing.UI
         // 字体
         private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
         private static readonly Font DescFont = new Font("Microsoft YaHei UI", 8.5F);
-        private static readonly Font SummaryFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font LabelFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        private static readonly Font CodeFont = new Font("Consolas", 8.5F);
         private static readonly Font ButtonFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         private static readonly Font ResultFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
 
@@ -944,13 +989,22 @@ namespace FuXing.UI
         private static readonly Color PendingBorder = Color.FromArgb(234, 213, 160);   // 柔和琥珀边框
         private static readonly Color HeaderFg = Color.FromArgb(120, 80, 20);          // 深棕标题
         private static readonly Color DescFg = Color.FromArgb(140, 110, 60);           // 柔和描述文本
-        private static readonly Color SummaryFg = Color.FromArgb(75, 85, 99);          // 摘要文本
         private static readonly Color SepColor = Color.FromArgb(230, 218, 185);        // 分隔线
 
-        // 按钮 — 柔和描边风格
-        private static readonly Color ApproveBtnBg = Color.FromArgb(236, 253, 245);     // 极浅绿
-        private static readonly Color ApproveBtnBorder = Color.FromArgb(134, 239, 172); // 柔和绿边框
-        private static readonly Color ApproveBtnText = Color.FromArgb(22, 101, 52);     // 深绿文字
+        // 工具名称徽章
+        private static readonly Color ToolBadgeBg = Color.FromArgb(254, 243, 199);     // 暖黄徽章背景
+        private static readonly Color ToolBadgeBorder = Color.FromArgb(234, 213, 160); // 徽章边框
+        private static readonly Color ToolBadgeFg = Color.FromArgb(120, 80, 20);       // 徽章文字
+
+        // 代码块
+        private static readonly Color CodeBlockBg = Color.FromArgb(245, 243, 235);     // 暖色代码块背景
+        private static readonly Color CodeBlockBorder = Color.FromArgb(230, 218, 185); // 代码块边框
+        private static readonly Color CodeFg = Color.FromArgb(55, 65, 81);             // 代码文字
+
+        // 允许按钮 — 红色警告风格
+        private static readonly Color ApproveBtnBg = Color.FromArgb(254, 242, 242);     // 极浅红
+        private static readonly Color ApproveBtnBorder = Color.FromArgb(252, 165, 165); // 柔和红边框
+        private static readonly Color ApproveBtnText = Color.FromArgb(153, 27, 27);     // 深红文字
         private static readonly Color RejectBtnBg = Color.FromArgb(243, 244, 246);      // 极浅灰
         private static readonly Color RejectBtnBorder = Color.FromArgb(209, 213, 219);  // 灰边框
         private static readonly Color RejectBtnText = Color.FromArgb(55, 65, 81);       // 深灰文字
@@ -963,9 +1017,10 @@ namespace FuXing.UI
         private static readonly Color RejectedBorder = Color.FromArgb(252, 165, 165);
         private static readonly Color RejectedFg = Color.FromArgb(153, 27, 27);
 
-        public ApprovalCard(string toolDisplayName, string summary)
+        public ApprovalCard(string toolDisplayName, string functionName, string summary)
         {
             ToolDisplayName = toolDisplayName;
+            FunctionName = functionName;
             Summary = summary;
         }
 
@@ -981,14 +1036,23 @@ namespace FuXing.UI
             h += ContentGap;       // 分隔线→正文间距
 
             // 描述提示语
-            var descSize = canvas.MeasureText("AI 助手请求执行以下操作，请确认是否允许：", DescFont, textW);
-            h += descSize.Height + 8;
+            var descSize = canvas.MeasureText("AI 助手请求执行以下高风险操作，请确认是否允许：", DescFont, textW);
+            h += descSize.Height + 12;
 
-            // 摘要文本
+            // 工具名称行（徽章）
+            h += ToolBadgeH + 10;
+
+            // 参数代码块
             if (!string.IsNullOrEmpty(Summary))
             {
-                var summarySize = canvas.MeasureText(Summary, SummaryFont, textW);
-                h += summarySize.Height + ButtonTopGap;
+                h += LabelLineH; // "参数:" 标签
+                int codeW = textW - CodeBlockPadX * 2;
+                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW);
+                h += codeSize.Height + CodeBlockPadY * 2 + ButtonTopGap;
+            }
+            else
+            {
+                h += 4;
             }
 
             _cachedBtnYOffset = h; // 缓存按钮起始位置
@@ -1019,10 +1083,6 @@ namespace FuXing.UI
                     g.DrawPath(pen, path);
             }
 
-            // 左侧装饰线
-            using (var pen = new Pen(accentColor, 2.5f))
-                g.DrawLine(pen, bounds.X + 4, bounds.Y + 10, bounds.X + 4, bounds.Bottom - 10);
-
             var canvas = g.High();
             int textX = bounds.X + SidePad;
             int textW = bounds.Width - SidePad * 2;
@@ -1040,21 +1100,64 @@ namespace FuXing.UI
             y += 1 + ContentGap;
 
             // 描述提示
-            string desc = "AI 助手请求执行以下操作，请确认是否允许：";
+            string desc = "AI 助手请求执行以下高风险操作，请确认是否允许：";
             var descSize = canvas.MeasureText(desc, DescFont, textW);
             canvas.DrawText(desc, DescFont, DescFg,
                 new Rectangle(textX, y, textW, descSize.Height),
                 FormatFlags.Top | FormatFlags.Left);
-            y += descSize.Height + 8;
+            y += descSize.Height + 12;
 
-            // 摘要文本
+            // 工具名称徽章
+            string toolLabel = "工具: ";
+            var toolLabelSize = canvas.MeasureText(toolLabel, LabelFont, textW);
+            canvas.DrawText(toolLabel, LabelFont, HeaderFg,
+                new Rectangle(textX, y, toolLabelSize.Width + 2, ToolBadgeH),
+                FormatFlags.VerticalCenter | FormatFlags.Left);
+
+            string toolName = $"{ToolDisplayName} ({FunctionName})";
+            int badgeX = textX + toolLabelSize.Width + 6;
+            var toolNameSize = canvas.MeasureText(toolName, DescFont, textW);
+            int badgeW = Math.Min(toolNameSize.Width + 16, bounds.Right - SidePad - badgeX);
+            var badgeRect = new Rectangle(badgeX, y + (ToolBadgeH - 20) / 2, badgeW, 20);
+            using (var path = RoundedRect(badgeRect, 4))
+            {
+                using (var brush = new SolidBrush(ToolBadgeBg))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(ToolBadgeBorder))
+                    g.DrawPath(pen, path);
+            }
+            canvas.DrawText(toolName, DescFont, ToolBadgeFg, badgeRect, FormatFlags.Center);
+            y += ToolBadgeH + 10;
+
+            // 参数代码块
             if (!string.IsNullOrEmpty(Summary))
             {
-                var summarySize = canvas.MeasureText(Summary, SummaryFont, textW);
-                canvas.DrawText(Summary, SummaryFont, SummaryFg,
-                    new Rectangle(textX, y, textW, summarySize.Height),
+                // "参数:" 标签
+                canvas.DrawText("参数:", LabelFont, HeaderFg,
+                    new Rectangle(textX, y, textW, LabelLineH),
+                    FormatFlags.VerticalCenter | FormatFlags.Left);
+                y += LabelLineH;
+
+                // 代码块背景
+                int codeW = textW - CodeBlockPadX * 2;
+                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW);
+                int codeBlockH = codeSize.Height + CodeBlockPadY * 2;
+                var codeRect = new Rectangle(textX, y, textW, codeBlockH);
+                using (var path = RoundedRect(codeRect, 6))
+                {
+                    using (var brush = new SolidBrush(CodeBlockBg))
+                        g.FillPath(brush, path);
+                    using (var pen = new Pen(CodeBlockBorder))
+                        g.DrawPath(pen, path);
+                }
+                canvas.DrawText(Summary, CodeFont, CodeFg,
+                    new Rectangle(textX + CodeBlockPadX, y + CodeBlockPadY, codeW, codeSize.Height),
                     FormatFlags.Top | FormatFlags.Left);
-                y += summarySize.Height + ButtonTopGap;
+                y += codeBlockH + ButtonTopGap;
+            }
+            else
+            {
+                y += 4;
             }
 
             if (_result == null)
@@ -1744,9 +1847,9 @@ namespace FuXing.UI
         }
 
         /// <summary>添加危险操作审批卡片，返回卡片实例（通过 ResultTask 等待用户决策）</summary>
-        internal ApprovalCard AddApprovalCard(string toolDisplayName, string summary)
+        internal ApprovalCard AddApprovalCard(string toolDisplayName, string functionName, string summary)
         {
-            var card = new ApprovalCard(toolDisplayName, summary);
+            var card = new ApprovalCard(toolDisplayName, functionName, summary);
             card.ToggleRequested += () => RequestLayout();
             _blocks.Add(card);
             RequestLayout();

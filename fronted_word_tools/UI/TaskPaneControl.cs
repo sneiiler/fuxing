@@ -1003,9 +1003,9 @@ namespace FuXing
 
                             UI.ApprovalCard approvalCard = null;
                             if (this.InvokeRequired)
-                                this.Invoke((MethodInvoker)delegate { approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), summary); });
+                                this.Invoke((MethodInvoker)delegate { approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), tc.FunctionName, summary); });
                             else
-                                approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), summary);
+                                approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), tc.FunctionName, summary);
 
                             // 滚动到底部，确保审批卡片可见
                             if (this.InvokeRequired)
@@ -1122,6 +1122,14 @@ namespace FuXing
                         }
                         else
                         {
+                            // execute_word_script：将原始代码附加到卡片
+                            if (tc.FunctionName == "execute_word_script" && toolCard != null)
+                            {
+                                string codeSnippet = tc.Arguments?["code"]?.ToString();
+                                if (!string.IsNullOrEmpty(codeSnippet))
+                                    toolCard.CodeSnippet = codeSnippet;
+                            }
+
                             if (this.InvokeRequired)
                                 this.Invoke((MethodInvoker)delegate { toolCard?.Update(status, toolResult.Output); aiMsg.NotifyContentChanged(); });
                             else

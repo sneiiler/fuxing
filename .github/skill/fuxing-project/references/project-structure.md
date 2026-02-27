@@ -63,7 +63,7 @@ fronted_word_tools/
 | 类名 | 职责 |
 |---|---|
 | `FuXing` | 插件主入口，实现 `IWordAddin`，挂载 Ribbon 和上下文菜单事件 |
-| `ConfigLoader` | 读写 `office_tools_config.json`，管理服务器地址等配置 |
+| `ConfigLoader` | 读写 `fuxing_config.json`，管理服务器地址等配置 |
 | `NetWorkHelper` | 封装 `HttpClient`，向后端发起同步/异步 POST 请求 |
 | `TaskPaneControl` | 主任务面板 UI，包含 AI 功能入口按钮 |
 | `SettingForm` | 配置界面，使用 AntdUI 组件 |

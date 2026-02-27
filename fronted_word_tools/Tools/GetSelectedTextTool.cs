@@ -4,16 +4,18 @@ using System.Threading.Tasks;
 namespace FuXing
 {
     /// <summary>获取用户选中的文本内容</summary>
-    public class GetSelectedTextTool : ITool
+    public class GetSelectedTextTool : ToolBase
     {
-        public string Name => "get_selected_text";
+        public override string Name => "get_selected_text";
+        public override string DisplayName => "获取选中文本";
+        public override ToolCategory Category => ToolCategory.Query;
 
-        public string Description =>
-            "获取用户在 Word 文档中当前选中的文本内容。";
+        public override string Description =>
+            "Get the currently selected text content in the Word document.";
 
-        public JObject Parameters => null;
+        public override JObject Parameters => null;
 
-        public Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
+        public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
             var app = connect.WordApplication;
             var selection = app.Selection;

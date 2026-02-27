@@ -250,6 +250,10 @@ namespace FuXing
             public string Content { get; set; }
             public List<ToolCallRequest> ToolCalls { get; set; }
             public bool HasToolCalls => ToolCalls != null && ToolCalls.Count > 0;
+            /// <summary>最终的 finish_reason（"stop", "tool_calls", "length" 等）</summary>
+            public string FinishReason { get; set; }
+            /// <summary>响应是否因 max_tokens 被截断</summary>
+            public bool IsTruncated => FinishReason == "length";
         }
 
         /// <summary>
@@ -282,8 +286,7 @@ namespace FuXing
                     ["model"] = _modelName,
                     ["messages"] = memory.BuildMessagesJson(),
                     ["stream"] = true,
-                    ["temperature"] = 0.7,
-                    ["max_tokens"] = 4096
+                    ["temperature"] = 0.7
                 };
 
                 if (tools != null && tools.Count > 0)
@@ -362,9 +365,14 @@ namespace FuXing
                                 }
 
                                 // 检测结束原因
-                                if (chunk.choices[0].finish_reason == "tool_calls")
+                                var finishReason = chunk.choices[0].finish_reason;
+                                if (!string.IsNullOrEmpty(finishReason))
                                 {
-                                    BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
+                                    result.FinishReason = finishReason;
+                                    if (finishReason == "tool_calls")
+                                    {
+                                        BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
+                                    }
                                 }
                             }
                             catch (Exception ex)

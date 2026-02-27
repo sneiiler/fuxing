@@ -2,6 +2,47 @@
 	<ribbon>
 		<tabs>
 			<tab id='AIAssistantTab' label='福星'>
+				<group id='AIGroup' label='AI功能'>
+					<button id='toggle_taskpane_btn'
+                            label='AI助手'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='toggle_taskpane_btn_Click'
+                            screentip='显示/隐藏AI助手'
+                            supertip='打开或关闭AI助手对话窗口'/>
+					<splitButton id='TextCorrectionSplitButton' size='large'>
+						<button id='ai_text_correction_btn'
+                                label='文本纠错'
+                                getImage='GetButtonImage'
+                                onAction='ai_text_correction_btn_Click'
+                                screentip='AI文本纠错'
+                                supertip='智能检测：选中文本则纠错选中部分，未选中则纠错全文（需确认）'/>
+						<menu id='TextCorrectionMenu'>
+							<toggleButton id='mode_typo_btn'
+                                           label='只检查错别字'
+                                           screentip='仅检查汉字错别字、同音字混淆等基础错误'
+                                           onAction='CorrectionMode_Click'
+                                           getPressed='CorrectionMode_GetPressed'/>
+							<toggleButton id='mode_semantic_btn'
+                                           label='检查语义级别错误'
+                                           screentip='检查语法、用词、搭配等语义层面的错误'
+                                           onAction='CorrectionMode_Click'
+                                           getPressed='CorrectionMode_GetPressed'/>
+							<toggleButton id='mode_consistency_btn'
+                                           label='检查前后表述一致性'
+                                           screentip='检查文档中前后术语、表述是否一致'
+                                           onAction='CorrectionMode_Click'
+                                           getPressed='CorrectionMode_GetPressed'/>
+						</menu>
+					</splitButton>
+					<button id='CheckStandardValidityButton'
+                            label='校验引用标准'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='CheckStandardValidityButton_Click'
+                            screentip='校验选中文本的标准引用'
+                            supertip='选中文本后点击按钮，将校验文本中引用的标准是否正确'/>
+				</group>
 				<group id='TextProcessingGroup' label='文本处理'>
 					<button id='LearnFormatButton'
                             label='学习格式'
@@ -17,56 +58,6 @@
                             onAction='LoadDefaultStylesButton_Click'
                             screentip='载入AI默认样式库'
                             supertip='加载包含AI正文、AI一级到六级标题等预设样式'/>
-				</group>
-				<group id='StandardCheckGroup' label='标准校验'>
-					<button id='CheckStandardValidityButton'
-                            label='校验引用标准'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='CheckStandardValidityButton_Click'
-                            screentip='校验选中文本的标准引用'
-                            supertip='选中文本后点击按钮，将校验文本中引用的标准是否正确'/>
-				</group>
-				<group id='AIToolsGroup' label='AI工具'>
-					<button id='ai_text_correction_btn'
-                            label='选中文本纠错'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='ai_text_correction_btn_Click'
-                            screentip='AI文本纠错'
-                            supertip='使用AI对选中的文本进行纠错和优化'/>
-					<button id='ai_text_correction_all_btn'
-                            label='全文文本纠错'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='ai_text_correction_all_btn_Click'
-                            screentip='全文AI纠错'
-                            supertip='使用AI对整个文档的文本进行纠错和优化'/>
-				</group>
-				<group id='TableToolsGroup' label='表格工具'>
-					<button id='FormatTableStyleButton'
-                            label='格式化选中表格'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='FormatTableStyleButton_Click'
-                            screentip='格式化表格'
-                            supertip='格式化当前选中的表格样式'/>
-					<button id='table_all_style_format_btn'
-                            label='格式化全部表格'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='table_all_style_format_btn_Click'
-                            screentip='格式化所有表格'
-                            supertip='格式化文档中的所有表格样式'/>
-				</group>
-				<group id='AIAssistantGroup' label='AI助手'>
-					<button id='toggle_taskpane_btn'
-                            label='AI助手'
-                            size='large'
-                            getImage='GetButtonImage'
-                            onAction='toggle_taskpane_btn_Click'
-                            screentip='显示/隐藏AI助手'
-                            supertip='打开或关闭AI助手对话窗口'/>
 				</group>
 				<group id='SettingsGroup' label='设置'>
 					<button id='setting_btn'

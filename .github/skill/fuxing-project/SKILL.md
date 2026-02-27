@@ -46,7 +46,7 @@ fronted_word_tools/
 ### 开发约定
 
 - 所有 AI 功能通过 `NetWorkHelper` 调用后端 HTTP 接口，**不在前端实现任何 AI 逻辑**
-- 配置文件保存为文档目录下的 `office_tools_config.json`
+- 配置文件保存为文档目录下的 `fuxing_config.json`
 - UI 组件优先使用 AntdUI 库中的控件
 - COM 注册脚本：`RegisterPlugin.bat` / `UnregisterPlugin.bat`
 - 编译后自动注册：`PostBuild.bat`

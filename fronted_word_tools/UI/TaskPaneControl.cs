@@ -11,11 +11,14 @@ using System.Threading.Tasks;
 using System.Text;
 using System.Text.RegularExpressions;
 using FuXing.UI;
+using FuXing.SubAgents;
 
 
 namespace FuXing
 {
     [ComVisible(true)]
+    [Guid("03326A51-B257-3623-917E-25A086B271B0")]
+    [ProgId("FuXing.TaskPaneControl")]
     public partial class TaskPaneControl : UserControl, NetOffice.WordApi.Tools.ITaskPane
     {
         private NetOffice.WordApi.Application _application;
@@ -35,11 +38,16 @@ namespace FuXing
         // 缓存的AI头像（从logo.png加载）
         private System.Drawing.Image _cachedAIAvatar;
 
-        // ── 选中文本附件功能 ──
-        private System.Windows.Forms.Timer _selectionPollTimer;
-        private string _attachedSelectionText;   // 当前附加的选中文本
-        private string _lastDetectedSelection;   // 上次检测到的选中文本（用于去重）
-        private AntdUI.Panel _selectionTagPanel;  // 选中文本标签栏
+        // ── 状态栏相关 ──
+        private System.Windows.Forms.Panel _statusBar;
+        private System.Windows.Forms.Label _statusRunning;
+        private System.Windows.Forms.Label _statusServerLoad;
+        private System.Windows.Forms.Label _statusContext;
+        private AntdUI.Button _sendButton;
+        private bool _isAssistantRunning;
+
+        /// <summary>每个窗口独立的会话记忆</summary>
+        public ChatMemory Memory { get; } = new ChatMemory();
 
         /// <summary>当前实例引用，供外部（如 FuXing.Connect）访问聊天面板</summary>
         public static TaskPaneControl CurrentInstance { get; private set; }
@@ -98,12 +106,12 @@ namespace FuXing
                 {
                     this.Invoke((MethodInvoker)delegate
                     {
-                        this.Refresh();
+                        this.Invalidate();
                     });
                 }
                 else
                 {
-                    this.Refresh();
+                    this.Invalidate();
                 }
             }
             catch (Exception ex)
@@ -116,14 +124,6 @@ namespace FuXing
         {
             try
             {
-                // 停止选中文本轮询
-                if (_selectionPollTimer != null)
-                {
-                    _selectionPollTimer.Stop();
-                    _selectionPollTimer.Dispose();
-                    _selectionPollTimer = null;
-                }
-
                 if (_application != null)
                 {
                     _application = null;
@@ -158,7 +158,9 @@ namespace FuXing
             try
             {
                 System.Diagnostics.Debug.WriteLine($"TaskPane visibility changed to: {visible}");
-                // Handle visibility changes if needed
+                // 当 TaskPane 变为可见时，更新 CurrentInstance 指向当前活动窗口的 TaskPaneControl
+                if (visible)
+                    CurrentInstance = this;
             }
             catch (Exception ex)
             {
@@ -188,6 +190,26 @@ namespace FuXing
 
             var aiAvatar = GetAIAvatar();
             panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, markdownText);
+        }
+
+        /// <summary>
+        /// 以编程方式注入一条用户消息并触发 AI 响应。
+        /// 等价于用户在输入框中输入消息并点击发送。
+        /// 由 Ribbon 按钮等外部入口调用，将操作委托给 AI 处理。
+        /// </summary>
+        public void InjectUserMessage(string message)
+        {
+            if (InvokeRequired) { Invoke((MethodInvoker)delegate { InjectUserMessage(message); }); return; }
+
+            if (_isAssistantRunning || string.IsNullOrWhiteSpace(message)) return;
+
+            var panel = GetChatPanel();
+            if (panel == null) return;
+
+            var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
+            panel.AddMessage("用户", userAvatar, ChatRole.User, message);
+
+            ProcessAssistantMessage(message, panel);
         }
 
         /// <summary>更新最后一条 AI 消息文本（用于实时进度更新）</summary>
@@ -258,7 +280,7 @@ namespace FuXing
         {
             var panel = GetChatPanel();
             if (panel == null) return;
-            panel.Invalidate(true);
+            panel.Invalidate();
             panel.ScrollToEnd();
         }
 
@@ -301,7 +323,14 @@ namespace FuXing
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None
             };
 
-            // 设置行的大小类型：固定-自适应-固定
+            // 开启 TableLayoutPanel 的双缓冲，极大减少拖动时的闪烁和卡顿
+            typeof(TableLayoutPanel).GetProperty("DoubleBuffered", 
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?.SetValue(mainContainer, true, null);
+
+            // 设置行的大小类型：状态栏-功能区-聊天-输入
+            mainContainer.RowCount = 4;
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));  // 状态栏固定高度
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));  // 顶部功能区固定高度
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // 聊天区域自适应
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // 底部输入区（可自适应）
@@ -309,26 +338,169 @@ namespace FuXing
             // 设置列宽为100%
             mainContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            // 创建三个区域
+            // 创建四个区域
+            var statusBar = CreateStatusBar();
             var topPanel = CreateTopControlsPanel();
             var chatPanel = CreateRichChatPanel();
             var bottomPanel = CreateBottomInputPanel();
 
             // 设置每个面板的停靠方式
+            statusBar.Dock = DockStyle.Fill;
             topPanel.Dock = DockStyle.Fill;
             chatPanel.Dock = DockStyle.Fill;
             bottomPanel.Dock = DockStyle.Fill;
 
             // 按顺序添加到表格布局中
-            mainContainer.Controls.Add(topPanel, 0, 0);       // 第1行：功能区
-            mainContainer.Controls.Add(chatPanel, 0, 1);      // 第2行：聊天区
-            mainContainer.Controls.Add(bottomPanel, 0, 2);    // 第3行：输入区
+            mainContainer.Controls.Add(statusBar, 0, 0);      // 第1行：状态栏
+            mainContainer.Controls.Add(topPanel, 0, 1);       // 第2行：功能区
+            mainContainer.Controls.Add(chatPanel, 0, 2);      // 第3行：聊天区
+            mainContainer.Controls.Add(bottomPanel, 0, 3);    // 第4行：输入区
 
             _mainContainer = mainContainer;
             Controls.Add(mainContainer);
         }
 
 
+
+        // 创建顶部状态栏
+        private System.Windows.Forms.Panel CreateStatusBar()
+        {
+            _statusBar = new System.Windows.Forms.Panel
+            {
+                BackColor = Color.FromArgb(241, 243, 245),
+                Name = "StatusBar",
+                Height = 28,
+                Padding = new Padding(0)
+            };
+
+            var statusFont = new Font("Microsoft YaHei UI", 8F);
+            var statusFg = Color.FromArgb(107, 114, 128);
+
+            _statusRunning = new System.Windows.Forms.Label
+            {
+                Text = "● 就绪",
+                Font = statusFont,
+                ForeColor = Color.FromArgb(34, 197, 94),
+                AutoSize = true,
+                Location = new Point(8, 6),
+                BackColor = Color.Transparent
+            };
+
+            _statusServerLoad = new System.Windows.Forms.Label
+            {
+                Text = "负载 70%",
+                Font = statusFont,
+                ForeColor = statusFg,
+                AutoSize = true,
+                Location = new Point(80, 6),
+                BackColor = Color.Transparent
+            };
+
+            _statusContext = new System.Windows.Forms.Label
+            {
+                Text = "上下文 0/128K",
+                Font = statusFont,
+                ForeColor = statusFg,
+                AutoSize = true,
+                Location = new Point(160, 6),
+                BackColor = Color.Transparent
+            };
+
+            // 底部描线
+            _statusBar.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(229, 231, 235)))
+                    e.Graphics.DrawLine(pen, 0, _statusBar.Height - 1, _statusBar.Width, _statusBar.Height - 1);
+            };
+
+            // 响应式布局：各元素间距自适应
+            _statusBar.Resize += (s, e) =>
+            {
+                int pw = _statusBar.ClientSize.Width;
+                // 均匀分布三个状态指示
+                _statusRunning.Left = 8;
+                _statusServerLoad.Left = Math.Max(80, pw / 3);
+                _statusContext.Left = Math.Max(160, pw * 2 / 3);
+            };
+
+            _statusBar.Controls.AddRange(new Control[] { _statusRunning, _statusServerLoad, _statusContext });
+
+            // 初始刷新上下文窗口显示
+            RefreshContextStatus();
+
+            return _statusBar;
+        }
+
+        // ── 状态栏更新方法 ──
+
+        /// <summary>设置助手运行状态并同步更新发送按钮、状态栏指示</summary>
+        private void SetAssistantRunning(bool running)
+        {
+            if (InvokeRequired) { Invoke((MethodInvoker)delegate { SetAssistantRunning(running); }); return; }
+
+            _isAssistantRunning = running;
+
+            // 更新状态栏
+            if (_statusRunning != null)
+            {
+                _statusRunning.Text = running ? "● 运行中" : "● 就绪";
+                _statusRunning.ForeColor = running
+                    ? Color.FromArgb(239, 68, 68)   // 红色
+                    : Color.FromArgb(34, 197, 94);   // 绿色
+            }
+
+            // 禁用/启用发送按钮
+            if (_sendButton != null)
+            {
+                _sendButton.Enabled = !running;
+            }
+
+            // 运行结束时刷新上下文
+            if (!running)
+            {
+                RefreshContextStatus();
+            }
+        }
+
+        /// <summary>刷新上下文窗口 token 用量显示</summary>
+        private void RefreshContextStatus()
+        {
+            if (_statusContext == null) return;
+            if (InvokeRequired) { Invoke((MethodInvoker)RefreshContextStatus); return; }
+
+            int currentTokens = Memory.EstimateTotalTokens();
+            int limit = Memory.ContextWindow;
+
+            // 加载配置中的上下文窗口限制
+            var config = new ConfigLoader().LoadConfig();
+            if (config.ContextWindowLimit > 0)
+            {
+                limit = config.ContextWindowLimit;
+                Memory.ContextWindow = limit;
+                Memory.MaxAllowedTokens = (int)(limit * 0.76);
+            }
+
+            string currentStr = FormatTokenCount(currentTokens);
+            string limitStr = FormatTokenCount(limit);
+            _statusContext.Text = $"上下文 {currentStr}/{limitStr}";
+
+            // 接近上限变色
+            double ratio = limit > 0 ? (double)currentTokens / limit : 0;
+            if (ratio > 0.8)
+                _statusContext.ForeColor = Color.FromArgb(239, 68, 68);   // 红色
+            else if (ratio > 0.5)
+                _statusContext.ForeColor = Color.FromArgb(245, 158, 11);  // 橙色
+            else
+                _statusContext.ForeColor = Color.FromArgb(107, 114, 128); // 灰色
+        }
+
+        /// <summary>格式化 token 数显示（如 1.2K、128K）</summary>
+        private static string FormatTokenCount(int tokens)
+        {
+            if (tokens >= 1000)
+                return $"{tokens / 1000.0:0.#}K";
+            return tokens.ToString();
+        }
 
         // 创建顶部功能控制面板
         private AntdUI.Panel CreateTopControlsPanel()
@@ -454,59 +626,6 @@ namespace FuXing
 
             int sendW = 56;
             int gap = 4;
-            int tagBarH = 0; // 选中文本标签栏高度（隐藏时为0）
-
-            // ── 选中文本附件标签栏 ──
-            _selectionTagPanel = new AntdUI.Panel
-            {
-                Name = "SelectionTagPanel",
-                Back = Color.FromArgb(248, 249, 250),
-                Visible = false,
-                Height = 32,
-                Padding = new Padding(0)
-            };
-
-            // 标签容器（圆角蓝底标签）
-            var tagContainer = new Panel
-            {
-                Name = "SelectionTagContainer",
-                BackColor = Color.FromArgb(219, 234, 254),
-                Location = new Point(gap, 4),
-                Height = 24,
-                Width = 200
-            };
-
-            var tagLabel = new Label
-            {
-                Name = "SelectionTagLabel",
-                Text = "",
-                Font = new Font("Microsoft YaHei UI", 8.5F),
-                ForeColor = Color.FromArgb(37, 99, 235),
-                BackColor = Color.Transparent,
-                AutoSize = false,
-                Location = new Point(4, 0),
-                Height = 24,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            var tagCloseBtn = new Label
-            {
-                Name = "SelectionTagClose",
-                Text = "✕",
-                Font = new Font("Microsoft YaHei UI", 8F),
-                ForeColor = Color.FromArgb(96, 165, 250),
-                BackColor = Color.Transparent,
-                Size = new Size(20, 24),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            tagCloseBtn.Click += (s, e) => DetachSelection();
-            tagCloseBtn.MouseEnter += (s, e) => tagCloseBtn.ForeColor = Color.FromArgb(220, 38, 38);
-            tagCloseBtn.MouseLeave += (s, e) => tagCloseBtn.ForeColor = Color.FromArgb(96, 165, 250);
-
-            tagContainer.Controls.Add(tagCloseBtn);
-            tagContainer.Controls.Add(tagLabel);
-            _selectionTagPanel.Controls.Add(tagContainer);
 
             var inputTextBox = new AntdUI.Input
             {
@@ -530,6 +649,7 @@ namespace FuXing
                 Name = "SendButton",
                 Radius = 6
             };
+            _sendButton = sendBtn;
 
             sendBtn.Click += SendBtn_Click;
 
@@ -555,10 +675,9 @@ namespace FuXing
                         var textSize = g.MeasureString(text, inputTextBox.Font, Math.Max(1, inputTextBox.Width - 16));
                         int lineCount = Math.Max(1, (int)Math.Ceiling(textSize.Height / inputTextBox.Font.GetHeight(g)));
                         int desiredPanelH = Math.Max(68, Math.Min(160, lineCount * 24 + 28));
-                        int totalH = desiredPanelH + (_selectionTagPanel.Visible ? _selectionTagPanel.Height : 0);
-                        if (Math.Abs(_mainContainer.RowStyles[2].Height - totalH) > 2)
+                        if (Math.Abs(_mainContainer.RowStyles[3].Height - desiredPanelH) > 2)
                         {
-                            _mainContainer.RowStyles[2].Height = totalH;
+                            _mainContainer.RowStyles[3].Height = desiredPanelH;
                             _mainContainer.PerformLayout();
                         }
                     }
@@ -573,135 +692,14 @@ namespace FuXing
                 int ph = bottomPanel.ClientSize.Height;
                 if (pw < 50 || ph < 20) return;
 
-                tagBarH = _selectionTagPanel.Visible ? _selectionTagPanel.Height : 0;
-                _selectionTagPanel.SetBounds(0, 0, pw, tagBarH);
-
-                // 调整标签容器宽度自适应
-                var container = _selectionTagPanel.Controls["SelectionTagContainer"] as Panel;
-                if (container != null)
-                {
-                    var lbl = container.Controls["SelectionTagLabel"] as Label;
-                    var closeBtn = container.Controls["SelectionTagClose"] as Label;
-                    if (lbl != null && closeBtn != null)
-                    {
-                        using (var gfx = lbl.CreateGraphics())
-                        {
-                            int textW = (int)gfx.MeasureString(lbl.Text, lbl.Font).Width + 12;
-                            int containerW = Math.Min(pw - gap * 2, textW + closeBtn.Width + 8);
-                            container.Width = containerW;
-                            lbl.Width = containerW - closeBtn.Width - 4;
-                            closeBtn.Left = lbl.Right;
-                        }
-                    }
-                }
-
-                int inputY = tagBarH + gap;
                 int inputW = pw - sendW - gap * 3;
-                int inputH = ph - tagBarH - gap * 2;
-                inputTextBox.SetBounds(gap, inputY, inputW, inputH);
+                int inputH = ph - gap * 2;
+                inputTextBox.SetBounds(gap, gap, inputW, inputH);
                 sendBtn.SetBounds(pw - sendW - gap, ph - sendBtn.Height - gap, sendW, sendBtn.Height);
             };
 
-            bottomPanel.Controls.AddRange(new Control[] { _selectionTagPanel, inputTextBox, sendBtn });
-
-            // ── 启动 Word 选中文本轮询 ──
-            StartSelectionPolling();
-
+            bottomPanel.Controls.AddRange(new Control[] { inputTextBox, sendBtn });
             return bottomPanel;
-        }
-
-        // ── 选中文本附件管理 ──
-
-        /// <summary>启动定时轮询 Word 选中文本</summary>
-        private void StartSelectionPolling()
-        {
-            _selectionPollTimer = new System.Windows.Forms.Timer { Interval = 500 };
-            _selectionPollTimer.Tick += SelectionPollTimer_Tick;
-            _selectionPollTimer.Start();
-        }
-
-        /// <summary>轮询检测 Word 选中文本变化</summary>
-        private void SelectionPollTimer_Tick(object sender, EventArgs e)
-        {
-            try
-            {
-                var connect = Connect.CurrentInstance;
-                if (connect?.WordApplication == null) return;
-
-                var selection = connect.WordApplication.Selection;
-                if (selection == null) return;
-
-                // 只有真正选中了文本（非光标位置）才视为有效选中
-                string text = null;
-                if (selection.Type != NetOffice.WordApi.Enums.WdSelectionType.wdSelectionIP)
-                    text = selection.Text?.Trim();
-
-                // 空文本或仅空白字符视为无选中
-                if (string.IsNullOrWhiteSpace(text) || text.Length <= 1)
-                    text = null;
-
-                // 与上次检测结果相同则跳过
-                if (text == _lastDetectedSelection) return;
-                _lastDetectedSelection = text;
-
-                if (text != null)
-                    AttachSelection(text);
-                else if (_attachedSelectionText != null)
-                    DetachSelection();
-            }
-            catch
-            {
-                // COM 调用可能在 Word 忙时失败，静默忽略
-            }
-        }
-
-        /// <summary>附加选中文本到输入区域</summary>
-        private void AttachSelection(string text)
-        {
-            _attachedSelectionText = text;
-
-            string preview = text.Length > 30 ? text.Substring(0, 30) + "..." : text;
-            // 移除换行符使预览保持单行
-            preview = preview.Replace("\r", "").Replace("\n", " ");
-            string tagText = $"\U0001f4ce 选中文本({text.Length}字): {preview}";
-
-            var container = _selectionTagPanel?.Controls["SelectionTagContainer"] as Panel;
-            var lbl = container?.Controls["SelectionTagLabel"] as Label;
-            if (lbl != null)
-                lbl.Text = tagText;
-
-            if (_selectionTagPanel != null && !_selectionTagPanel.Visible)
-            {
-                _selectionTagPanel.Visible = true;
-                RecalcBottomPanelHeight();
-            }
-        }
-
-        /// <summary>移除附加的选中文本</summary>
-        private void DetachSelection()
-        {
-            _attachedSelectionText = null;
-            _lastDetectedSelection = null;
-
-            if (_selectionTagPanel != null && _selectionTagPanel.Visible)
-            {
-                _selectionTagPanel.Visible = false;
-                RecalcBottomPanelHeight();
-            }
-        }
-
-        /// <summary>重新计算底部面板高度（标签栏显隐变化时调用）</summary>
-        private void RecalcBottomPanelHeight()
-        {
-            if (_mainContainer == null) return;
-            int tagH = _selectionTagPanel?.Visible == true ? _selectionTagPanel.Height : 0;
-            int baseH = 68; // 最小输入区高度
-            _mainContainer.RowStyles[2].Height = baseH + tagH;
-            _mainContainer.PerformLayout();
-
-            // 触发底部面板重新布局
-            var bottomPanel = _mainContainer.GetControlFromPosition(0, 2);
-            bottomPanel?.PerformLayout();
         }
 
         // 旧的控制面板方法已删除，现在使用简化的FlowLayoutPanel布局
@@ -854,6 +852,9 @@ namespace FuXing
 
         private void SendBtn_Click(object sender, EventArgs e)
         {
+            // 助手运行中禁止发送
+            if (_isAssistantRunning) return;
+
             var inputTextBox = this.Controls.Find("MainChatContainer", true).FirstOrDefault()
                 ?.Controls.Find("InputTextBox", true).FirstOrDefault() as AntdUI.Input;
             var panel = GetChatPanel();
@@ -862,73 +863,66 @@ namespace FuXing
             {
                 var userMessage = inputTextBox.Text.Trim();
 
-                // 捕获当前附加的选中文本，然后清除附件
-                string attachedText = _attachedSelectionText;
-                DetachSelection();
-
-                // 在 UI 上显示用户消息（不含附件原文，仅显示标记）
-                string displayMessage = userMessage;
-                if (!string.IsNullOrEmpty(attachedText))
-                {
-                    string preview = attachedText.Length > 50
-                        ? attachedText.Substring(0, 50) + "..."
-                        : attachedText;
-                    preview = preview.Replace("\r", "").Replace("\n", " ");
-                    displayMessage = $"\U0001f4ce [选中文本({attachedText.Length}字): {preview}]\n{userMessage}";
-                }
-
+                // 添加用户消息
                 var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
-                panel.AddMessage("用户", userAvatar, ChatRole.User, displayMessage);
+                panel.AddMessage("用户", userAvatar, ChatRole.User, userMessage);
 
                 // 清空输入框
                 inputTextBox.Text = "";
 
-                // 处理消息并添加助手回复（传入附件文本）
-                ProcessAssistantMessage(userMessage, panel, attachedText);
+                // 处理消息并添加助手回复
+                ProcessAssistantMessage(userMessage, panel);
 
                 System.Diagnostics.Debug.WriteLine($"User message added. Message count: {panel.MessageCount}");
             }
         }
 
-        private async void ProcessAssistantMessage(string userMessage, RichChatPanel panel, string attachedSelection = null)
+        private async void ProcessAssistantMessage(string userMessage, RichChatPanel panel)
         {
-            var connect = Connect.CurrentInstance;
-            var memory = connect?.Memory;
-            var toolRegistry = connect?.ToolRegistry;
-
-            if (memory == null || toolRegistry == null)
+            SetAssistantRunning(true);
+            try
             {
-                System.Diagnostics.Debug.WriteLine("Connect 实例不可用，使用旧接口");
-                await ProcessAssistantMessageLegacy(userMessage, panel);
-                return;
-            }
+                var connect = Connect.CurrentInstance;
+                var memory = this.Memory;
+                var toolRegistry = connect?.ToolRegistry;
+                var skillManager = connect?.SkillManager;
 
-            // 确保系统 Prompt 已设置
-            if (string.IsNullOrEmpty(memory.GetSystemPrompt()))
-            {
-                string currentMode = SelectedMode;
-                string currentKnowledgeBase = SelectedKnowledgeBase;
-                memory.SetSystemPrompt(BuildSystemPrompt(currentMode, currentKnowledgeBase));
-            }
+                if (connect == null || toolRegistry == null)
+                    throw new InvalidOperationException("Connect instance unavailable: ToolRegistry is null");
 
-            // 构建完整的用户消息（附加选中文本上下文）
-            string fullUserMessage = userMessage;
-            if (!string.IsNullOrEmpty(attachedSelection))
+            // 发现 skills（基于当前活动文档所在目录）
+            string documentDir = "";
+            try
             {
-                fullUserMessage = $"[用户附加了当前选中的文本作为上下文({attachedSelection.Length}字符):\n{attachedSelection}]\n\n{userMessage}";
+                var doc = connect.WordApplication?.ActiveDocument;
+                if (doc != null && !string.IsNullOrEmpty(doc.Path))
+                    documentDir = doc.Path;
             }
+            catch { /* 无活动文档时忽略 */ }
+            skillManager.LoadFromDocumentDir(documentDir);
+
+            // 构建系统 Prompt（每次都重建，确保包含最新的 skill 状态）
+            string currentMode = SelectedMode;
+            memory.SetSystemPrompt(BuildSystemPrompt(currentMode, toolRegistry, skillManager));
+
+            // 设置工具定义的 token 预留量，用于精确裁剪判断
+            memory.ToolTokenReserve = EstimateToolDefinitionTokens(toolRegistry);
 
             // 记录用户消息到上下文
-            memory.AddUserMessage(fullUserMessage);
+            memory.AddUserMessage(userMessage);
+            DebugLogger.Instance.LogUserMessage(userMessage);
 
             // 先添加一个"正在思考"的占位消息
             var aiAvatar = GetAIAvatar();
             var aiMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
 
-            // 工具调用循环（最多 10 轮，防止无限循环）
-            const int maxToolRounds = 10;
-            for (int round = 0; round < maxToolRounds; round++)
+            // 工具调用循环（从配置读取最大轮次，防止无限循环）
+            int maxToolRounds = new ConfigLoader().LoadConfig().MaxToolRounds;
+            if (maxToolRounds <= 0) maxToolRounds = 10;
+            int round;
+            for (round = 0; round < maxToolRounds; round++)
             {
+                DebugLogger.Instance.LogRoundStart(round, maxToolRounds);
                 string accumulatedResponse = "";
                 bool hasError = false;
 
@@ -971,6 +965,7 @@ namespace FuXing
 
                 if (hasError || result == null)
                 {
+                    DebugLogger.Instance.LogError("SendStreamChat", "请求失败，result=" + (result == null ? "null" : "hasError"));
                     memory.AddAssistantMessage("(请求失败)");
                     break;
                 }
@@ -981,23 +976,122 @@ namespace FuXing
                     // 记录 assistant 消息（含 tool_calls）到上下文
                     memory.AddAssistantMessage(result.Content, result.ToolCalls);
 
+                    // 单轮最大工具调用数量限制，防止 LLM 一次返回几十个调用导致 UI 卡死
+                    const int maxToolCallsPerRound = 8;
+                    int toolCallIndex = 0;
+
                     // 逐一执行工具调用
                     foreach (var tc in result.ToolCalls)
                     {
-                        System.Diagnostics.Debug.WriteLine($"执行工具调用: {tc.FunctionName} (id={tc.Id})");
-
-                        // 在 UI 上显示工具调用卡片
-                        UI.ToolCallCard toolCard = null;
-                        if (this.InvokeRequired)
+                        // 超过单轮上限则跳过剩余调用，将截断信息记入上下文
+                        if (toolCallIndex >= maxToolCallsPerRound)
                         {
-                            this.Invoke((MethodInvoker)delegate
+                            string skipMsg = $"已跳过（单轮工具调用数超过 {maxToolCallsPerRound} 上限，请减少每轮调用量）";
+                            memory.AddToolResult(tc.Id, tc.FunctionName, skipMsg);
+                            System.Diagnostics.Debug.WriteLine($"跳过工具调用: {tc.FunctionName} (id={tc.Id})，超出单轮上限");
+                            continue;
+                        }
+                        toolCallIndex++;
+
+                        System.Diagnostics.Debug.WriteLine($"执行工具调用: {tc.FunctionName} (id={tc.Id})");
+                        DebugLogger.Instance.LogToolCall(tc.FunctionName, tc.Id, tc.Arguments);
+
+                        // ── 危险操作审批拦截（嵌入聊天面板，非弹窗）──
+                        if (toolRegistry.RequiresApproval(tc.FunctionName))
+                        {
+                            string summary = toolRegistry.BuildApprovalSummary(tc.FunctionName, tc.Arguments);
+
+                            UI.ApprovalCard approvalCard = null;
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), summary); });
+                            else
+                                approvalCard = aiMsg.AddApprovalCard(toolRegistry.GetDisplayName(tc.FunctionName), summary);
+
+                            // 滚动到底部，确保审批卡片可见
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { panel.ScrollToEnd(); });
+                            else
+                                panel.ScrollToEnd();
+
+                            bool approved = await approvalCard.ResultTask;
+
+                            if (!approved)
                             {
-                                toolCard = aiMsg.AddToolCall(tc.FunctionName, "正在执行...");
-                            });
+                                string rejectionMsg = "用户拒绝了此操作";
+                                DebugLogger.Instance.LogToolResult(tc.FunctionName, tc.Id, false, rejectionMsg);
+                                memory.AddToolResult(tc.Id, tc.FunctionName, rejectionMsg);
+                                continue;
+                            }
+                        }
+
+                        // ── ask_user 工具：嵌入问答卡片，等待用户回答 ──
+                        if (tc.FunctionName == "ask_user")
+                        {
+                            string question = tc.Arguments?["question"]?.ToString() ?? "";
+                            bool allowFreeInput = (bool)(tc.Arguments?["allow_free_input"] ?? true);
+
+                            var options = new List<UI.AskUserOption>();
+                            var optionsArr = tc.Arguments?["options"] as Newtonsoft.Json.Linq.JArray;
+                            if (optionsArr != null)
+                            {
+                                foreach (var optItem in optionsArr)
+                                {
+                                    options.Add(new UI.AskUserOption
+                                    {
+                                        Label = optItem["label"]?.ToString() ?? "",
+                                        Description = optItem["description"]?.ToString()
+                                    });
+                                }
+                            }
+
+                            UI.AskUserCard askCard = null;
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { askCard = aiMsg.AddAskUserCard(question, options, allowFreeInput); });
+                            else
+                                askCard = aiMsg.AddAskUserCard(question, options, allowFreeInput);
+
+                            // 滚动到底部，确保问答卡片可见
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { panel.ScrollToEnd(); });
+                            else
+                                panel.ScrollToEnd();
+
+                            string userAnswer = await askCard.ResultTask;
+
+                            DebugLogger.Instance.LogToolResult(tc.FunctionName, tc.Id, true, userAnswer);
+                            memory.AddToolResult(tc.Id, tc.FunctionName, $"User answered: {userAnswer}");
+                            System.Windows.Forms.Application.DoEvents();
+                            continue;
+                        }
+
+                        bool isSubAgent = tc.FunctionName == "run_sub_agent";
+                        UI.ToolCallCard toolCard = null;
+                        UI.SubAgentBlock subAgentBlock = null;
+
+                        // 在 UI 上显示卡片（子智能体使用专用块）
+                        if (isSubAgent)
+                        {
+                            string taskType = tc.Arguments?["task"]?.ToString() ?? "custom";
+                            string taskLabel;
+                            switch (taskType)
+                            {
+                                case "analyze_structure": taskLabel = "分析文档结构"; break;
+                                case "extract_key_info": taskLabel = "提取关键信息"; break;
+                                default: taskLabel = "自定义分析"; break;
+                            }
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { subAgentBlock = aiMsg.AddSubAgent(taskLabel); });
+                            else
+                                subAgentBlock = aiMsg.AddSubAgent(taskLabel);
+
+                            RunSubAgentTool.ProgressSink = new SubAgentUiProgress(subAgentBlock, this);
                         }
                         else
                         {
-                            toolCard = aiMsg.AddToolCall(tc.FunctionName, "正在执行...");
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { toolCard = aiMsg.AddToolCall(tc.FunctionName, "正在执行..."); });
+                            else
+                                toolCard = aiMsg.AddToolCall(tc.FunctionName, "正在执行...");
                         }
 
                         // 执行工具（需在 UI 线程，因为涉及 Word COM）
@@ -1013,37 +1107,52 @@ namespace FuXing
                             toolResult = await toolRegistry.ExecuteAsync(tc.FunctionName, tc.Arguments);
                         }
 
-                        // 更新工具卡片状态
+                        // 更新卡片状态
                         var status = toolResult.Success ? UI.ToolCallStatus.Success : UI.ToolCallStatus.Error;
-                        if (this.InvokeRequired)
+                        if (isSubAgent)
                         {
-                            this.Invoke((MethodInvoker)delegate
+                            RunSubAgentTool.ProgressSink = null;
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { subAgentBlock?.SetComplete(status); aiMsg.NotifyContentChanged(); });
+                            else
                             {
-                                toolCard?.Update(status, toolResult.Output);
+                                subAgentBlock?.SetComplete(status);
                                 aiMsg.NotifyContentChanged();
-                            });
+                            }
                         }
                         else
                         {
-                            toolCard?.Update(status, toolResult.Output);
-                            aiMsg.NotifyContentChanged();
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { toolCard?.Update(status, toolResult.Output); aiMsg.NotifyContentChanged(); });
+                            else
+                            {
+                                toolCard?.Update(status, toolResult.Output);
+                                aiMsg.NotifyContentChanged();
+                            }
                         }
 
                         // 记录工具结果到上下文
+                        DebugLogger.Instance.LogToolResult(tc.FunctionName, tc.Id, toolResult.Success, toolResult.Output);
                         memory.AddToolResult(tc.Id, tc.FunctionName, toolResult.Output);
+
+                        // 让出 UI 线程，防止连续多次工具调用导致界面卡死
+                        System.Windows.Forms.Application.DoEvents();
                     }
 
-                    // 工具执行完毕，创建新的 AI 消息用于下一轮回复
+                    // Skill 可能在工具调用中被激活，刷新 system prompt
+                    memory.SetSystemPrompt(BuildSystemPrompt(currentMode, toolRegistry, skillManager));
+
+                    // 工具执行完毕，在同一消息中开始新的文本段落
                     if (this.InvokeRequired)
                     {
                         this.Invoke((MethodInvoker)delegate
                         {
-                            aiMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
+                            aiMsg.PrepareNewStreamSection("🤔 正在思考中...");
                         });
                     }
                     else
                     {
-                        aiMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
+                        aiMsg.PrepareNewStreamSection("🤔 正在思考中...");
                     }
 
                     // 继续循环，让大模型看到工具结果后再次回复
@@ -1051,7 +1160,27 @@ namespace FuXing
                 }
 
                 // 大模型返回了纯文本回复，会话本轮结束
+                DebugLogger.Instance.LogAssistantMessage(accumulatedResponse);
                 memory.AddAssistantMessage(accumulatedResponse);
+
+                // 响应被 max_tokens 截断 → 插入续写指令后自动续传
+                if (result.IsTruncated)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Agent] Round {round}: 响应被截断 (finish_reason=length)，自动续传");
+                    memory.AddUserMessage("Your previous response was truncated. Please continue exactly where you left off.");
+                    if (this.InvokeRequired)
+                    {
+                        this.Invoke((MethodInvoker)delegate
+                        {
+                            aiMsg.PrepareNewStreamSection("🤔 正在思考中...");
+                        });
+                    }
+                    else
+                    {
+                        aiMsg.PrepareNewStreamSection("🤔 正在思考中...");
+                    }
+                    continue;
+                }
 
                 // 最终更新 UI
                 if (this.InvokeRequired)
@@ -1068,105 +1197,106 @@ namespace FuXing
 
                 break;  // 正常结束
             }
-        }
 
-        /// <summary>旧版消息处理（不使用记忆系统，作为后备）</summary>
-        private async Task ProcessAssistantMessageLegacy(string userMessage, RichChatPanel panel)
-        {
-            string currentMode = SelectedMode;
-            string currentKnowledgeBase = SelectedKnowledgeBase;
-            var aiAvatar = GetAIAvatar();
-            var aiMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
-            string accumulatedResponse = "";
-
-            try
+            // 循环因轮次耗尽退出 → 通知用户
+            if (round >= maxToolRounds)
             {
-                await _networkHelper.SendStreamChatRequestAsync(
-                    userMessage, currentMode, currentKnowledgeBase,
-                    (chunk) =>
+                string exhaustionMsg = $"\n\n⚠️ 已达到最大执行轮次 ({maxToolRounds})，操作自动终止。如果任务未完成，请缩小指令范围后重试。";
+                memory.AddAssistantMessage(exhaustionMsg);
+                if (this.InvokeRequired)
+                {
+                    this.Invoke((MethodInvoker)delegate
                     {
-                        accumulatedResponse += chunk;
-                        if (this.InvokeRequired)
-                            this.Invoke((MethodInvoker)delegate { aiMsg.SetText(accumulatedResponse); });
-                        else
-                            aiMsg.SetText(accumulatedResponse);
-                    },
-                    () =>
-                    {
-                        if (this.InvokeRequired)
-                            this.Invoke((MethodInvoker)delegate { aiMsg.SetText(accumulatedResponse); });
-                        else
-                            aiMsg.SetText(accumulatedResponse);
-                    },
-                    (error) =>
-                    {
-                        if (this.InvokeRequired)
-                            this.Invoke((MethodInvoker)delegate { aiMsg.SetText($"抱歉，发生了错误: {error}"); });
-                        else
-                            aiMsg.SetText($"抱歉，发生了错误: {error}");
-                    }
-                );
+                        aiMsg.PrepareNewStreamSection(exhaustionMsg);
+                    });
+                }
+                else
+                {
+                    aiMsg.PrepareNewStreamSection(exhaustionMsg);
+                }
             }
-            catch (Exception ex)
+            }
+            finally
             {
-                aiMsg.SetText($"无法连接到AI服务: {ex.Message}");
+                SetAssistantRunning(false);
             }
         }
 
-        /// <summary>构建系统 Prompt，包含角色定义和可用工具说明</summary>
-        private string BuildSystemPrompt(string mode, string knowledgeBase)
+        /// <summary>构建系统 Prompt，包含角色定义和行为规则</summary>
+        private string BuildSystemPrompt(string mode, ToolRegistry toolRegistry, SkillManager skillManager)
         {
             var sb = new StringBuilder();
 
-            sb.AppendLine("你是「福星」Word 文档智能助手，深度集成在 Microsoft Word 插件中。");
-            sb.AppendLine("你拥有以下能力，可以通过工具调用直接操作用户的 Word 文档：");
+            sb.AppendLine("You are 'FuXing', an intelligent document assistant deeply integrated into a Microsoft Word plugin.");
+            sb.AppendLine("You can directly manipulate the user's Word document through tool calls.");
             sb.AppendLine();
-            sb.AppendLine("可用工具：");
-            sb.AppendLine("- correct_selected_text: 对选中文本执行 AI 纠错");
-            sb.AppendLine("- correct_all_text: 对全文执行 AI 纠错");
-            sb.AppendLine("- format_selected_table: 格式化光标所在表格");
-            sb.AppendLine("- format_all_tables: 格式化文档中所有表格");
-            sb.AppendLine("- check_standard: 校验选中文本是否符合标准规范");
-            sb.AppendLine("- get_selected_text: 获取当前选中的文本");
-            sb.AppendLine("- get_document_info: 获取文档基本信息");
-            sb.AppendLine("- load_default_styles: 载入默认 AI 样式库");
-            sb.AppendLine("- insert_text: 在光标位置插入文本");
-            sb.AppendLine("- replace_selected_text: 替换选中的文本");
+
+            // ── 注入当前活动文档信息，防止跨文档操作时上下文混淆 ──
+            try
+            {
+                var app = Connect.CurrentInstance?.WordApplication;
+                if (app != null && app.Documents.Count > 0)
+                {
+                    var doc = app.ActiveDocument;
+                    string docName = doc.Name ?? "(未知)";
+                    sb.AppendLine($"[Active Document: {docName}]");
+                    sb.AppendLine("IMPORTANT: All document operations MUST target the active document shown above. Ignore any other file paths or document names that appeared in previous tool results (e.g. source files from merge operations). Always operate on the current active document.");
+                    sb.AppendLine();
+                }
+            }
+            catch { /* 无活动文档时跳过 */ }
+
+            sb.AppendLine("Rules:");
+            sb.AppendLine("1. When the user asks for document operations, call the appropriate tool directly instead of just giving advice.");
+            sb.AppendLine("2. You retain memory of all operations performed in this conversation.");
+            sb.AppendLine("3. If the user asks what you did before, answer truthfully based on conversation history.");
+            sb.AppendLine("4. Be concise and professional. Always respond in Chinese.");
+            sb.AppendLine("5. If the user message starts with '[User attached selected text as context...]', the user selected text in Word that was auto-appended. You may directly analyze, correct, or rewrite it without calling get_selected_text.");
+            sb.AppendLine("6. When a tool call fails, analyze the error message. If it is a parameter issue, fix the parameters and retry once. If it is a system error, inform the user clearly instead of retrying blindly.");
             sb.AppendLine();
-            sb.AppendLine("规则：");
-            sb.AppendLine("1. 当用户要求你做文档操作时，直接调用对应工具，不要只给建议");
-            sb.AppendLine("2. 你可以记住整个对话中发生的所有操作");
-            sb.AppendLine("3. 如果用户问你之前做了什么，根据对话历史如实回答");
-            sb.AppendLine("4. 回答要简洁专业，使用中文");
-            sb.AppendLine("5. 如果用户消息开头包含 [用户附加了当前选中的文本作为上下文...]，说明用户在 Word 中选中了文本并自动附加到对话中。你可以直接基于这段文本进行分析、纠错、改写等操作，无需再调用 get_selected_text 工具获取");
+            sb.AppendLine("Tool Safety Rules:");
+            sb.AppendLine("- Prefer read-only tools (get_document_info, get_document_map, get_selected_text, get_node_detail, read_section_text, list_files) for information gathering. Do NOT modify the document just to inspect it.");
+            sb.AppendLine("- execute_word_script is a DANGEROUS tool that runs arbitrary code. Only use it as a LAST RESORT when no other specialized tool can accomplish the task. Never call it for tasks that existing tools already support (e.g. formatting, inserting text/tables, page setup).");
+            sb.AppendLine("- batch_operations and delete_section are destructive. Confirm the user's intent before using them, especially when the scope of changes is large.");
+            sb.AppendLine("- Always prefer the least destructive approach: use replace_selected_text over execute_word_script, use format_content over batch script rewriting.");
 
             switch (mode)
             {
                 case "编辑":
-                    sb.AppendLine("5. 当前处于编辑模式，重点帮助用户改进文本质量");
+                    sb.AppendLine("7. Current mode: EDITING. Focus on improving text quality.");
                     break;
                 case "审核":
-                    sb.AppendLine("5. 当前处于审核模式，重点检查文档规范性和准确性");
+                    sb.AppendLine("7. Current mode: REVIEW. Focus on checking document standards and accuracy.");
                     break;
                 default:
-                    sb.AppendLine("5. 当前处于问答模式，回答用户的各种问题");
+                    sb.AppendLine("7. Current mode: Q&A. Answer the user's questions.");
                     break;
             }
 
-            switch (knowledgeBase)
+            // ── Skills 注入 ──
+            string catalog = skillManager.BuildCatalogSummary();
+            if (!string.IsNullOrEmpty(catalog))
             {
-                case "遥感通用知识库":
-                    sb.AppendLine("6. 你具备遥感技术相关的专业知识");
-                    break;
-                case "质量库":
-                    sb.AppendLine("6. 你熟悉质量管理和质量控制的相关标准");
-                    break;
-                case "型号库":
-                    sb.AppendLine("6. 你了解各种产品型号和技术规格");
-                    break;
+                sb.AppendLine();
+                sb.AppendLine(catalog);
+            }
+
+            string activatedContent = skillManager.BuildActivatedSkillsContent();
+            if (!string.IsNullOrEmpty(activatedContent))
+            {
+                sb.AppendLine();
+                sb.AppendLine(activatedContent);
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>估算工具定义的 token 占用（JSON Schema 主要是英文，约 4 字符/token）</summary>
+        private static int EstimateToolDefinitionTokens(ToolRegistry toolRegistry)
+        {
+            var defs = toolRegistry.GetToolDefinitions();
+            int totalChars = defs.ToString(Newtonsoft.Json.Formatting.None).Length;
+            return (int)(totalChars / 4.0);
         }
 
         private void TriggerWordFunction(string functionName)
@@ -1185,18 +1315,7 @@ namespace FuXing
                     case "ai_text_correction_btn":
                         connectInstance.ai_text_correction_btn_Click(null);
                         break;
-                    case "ai_text_correction_all_btn":
-                        connectInstance.ai_text_correction_all_btn_Click(null);
-                        break;
-                    case "CheckStandardValidityButton":
-                        connectInstance.CheckStandardValidityButton_Click(null);
-                        break;
-                    case "FormatTableStyleButton":
-                        connectInstance.FormatTableStyleButton_Click(null);
-                        break;
-                    case "table_all_style_format_btn":
-                        connectInstance.table_all_style_format_btn_Click(null);
-                        break;
+                    // CheckStandardValidityButton 已迁移到 AI 对话流程，不再通过 TriggerWordFunction 调用
                     case "setting_btn":
                         connectInstance.setting_btn_Click(null);
                         break;
@@ -1346,6 +1465,60 @@ namespace FuXing
                 len = len / 1024;
             }
             return $"{len:0.##} {sizes[order]}";
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  子智能体 UI 进度桥接
+        // ════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 将 ISubAgentProgress 回调桥接到 SubAgentBlock UI 更新。
+        /// 自动处理 UI 线程调度。
+        /// </summary>
+        private class SubAgentUiProgress : ISubAgentProgress
+        {
+            private readonly UI.SubAgentBlock _block;
+            private readonly Control _control;
+
+            public SubAgentUiProgress(UI.SubAgentBlock block, Control control)
+            {
+                _block = block;
+                _control = control;
+            }
+
+            private void OnUiThread(Action action)
+            {
+                if (_control.InvokeRequired)
+                    _control.Invoke((MethodInvoker)delegate { action(); });
+                else
+                    action();
+            }
+
+            public void OnRoundStart(int round, int maxRounds)
+            {
+                OnUiThread(() => _block.AddRound(round, maxRounds));
+            }
+
+            public void OnThinking(string content)
+            {
+                if (string.IsNullOrEmpty(content)) return;
+                OnUiThread(() => _block.AddThinking(content));
+            }
+
+            public void OnToolCallStart(string toolName)
+            {
+                OnUiThread(() => _block.AddToolCallStep(toolName));
+            }
+
+            public void OnToolCallEnd(string toolName, bool success, string output)
+            {
+                OnUiThread(() => _block.UpdateLastToolCallStep(success));
+            }
+
+            public void OnComplete(bool success, string output)
+            {
+                OnUiThread(() => _block.AddOutput(output, success));
+            }
         }
     }
 }

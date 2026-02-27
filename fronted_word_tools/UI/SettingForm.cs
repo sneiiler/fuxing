@@ -14,6 +14,9 @@ namespace FuXing
         private AntdUI.Input modelNameInput;
         private AntdUI.Button fetchModelsBtn;
         private AntdUI.Switch devModeSwitch;
+        private AntdUI.Switch approvalSwitch;
+        private AntdUI.Select contextWindowSelect;
+        private AntdUI.Select maxToolRoundsSelect;
         private System.Windows.Forms.ContextMenuStrip modelMenu;
         private static readonly HttpClient _httpClient = new HttpClient();
 
@@ -39,8 +42,8 @@ namespace FuXing
         private void InitializeComponent()
         {
             Text = "插件设置";
-            Size = new Size(560, 420);
-            MinimumSize = new Size(460, 320);
+            Size = new Size(560, 700);
+            MinimumSize = new Size(460, 600);
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             BackColor = BG;
@@ -115,7 +118,7 @@ namespace FuXing
             {
                 BackColor = Color.White,
                 Location = new Point(0, 0),
-                Size = new Size(520, 420),
+                Size = new Size(520, 700),
                 Margin = new Padding(0)
             };
 
@@ -167,6 +170,86 @@ namespace FuXing
                 BackColor = BORDER
             };
 
+            // ── 上下文窗口设置 ──
+            var lblContext = new System.Windows.Forms.Label
+            {
+                Text = "上下文窗口",
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
+                ForeColor = SUBTITLE_FG,
+                AutoSize = false,
+                Size = new Size(120, 22),
+                Location = new Point(28, 322),
+                BackColor = Color.Transparent
+            };
+
+            var lblContextDesc = new System.Windows.Forms.Label
+            {
+                Text = "越大越智能但更慢更贵，越小越快越省",
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                ForeColor = LABEL_FG,
+                AutoSize = false,
+                Size = new Size(280, 18),
+                Location = new Point(28, 346),
+                BackColor = Color.Transparent
+            };
+
+            contextWindowSelect = new AntdUI.Select
+            {
+                Size = new Size(120, 32),
+                Location = new Point(420, 322),
+                Font = new Font("Microsoft YaHei UI", 9F),
+                Name = "ContextWindowSelect"
+            };
+            contextWindowSelect.Items.AddRange(new object[] { "32K", "64K", "128K" });
+            contextWindowSelect.SelectedIndex = 2; // 默认 128K
+
+            var divider2 = new System.Windows.Forms.Panel
+            {
+                Location = new Point(28, 382),
+                Size = new Size(460, 1),
+                BackColor = BORDER
+            };
+
+            // ── 最大迭代轮次设置 ──
+            var lblMaxRounds = new System.Windows.Forms.Label
+            {
+                Text = "最大迭代轮次",
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
+                ForeColor = SUBTITLE_FG,
+                AutoSize = false,
+                Size = new Size(120, 22),
+                Location = new Point(28, 402),
+                BackColor = Color.Transparent
+            };
+
+            var lblMaxRoundsDesc = new System.Windows.Forms.Label
+            {
+                Text = "智能体工具调用循环上限，越大则越复杂任务可完成",
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                ForeColor = LABEL_FG,
+                AutoSize = false,
+                Size = new Size(300, 18),
+                Location = new Point(28, 426),
+                BackColor = Color.Transparent
+            };
+
+            maxToolRoundsSelect = new AntdUI.Select
+            {
+                Size = new Size(120, 32),
+                Location = new Point(420, 402),
+                Font = new Font("Microsoft YaHei UI", 9F),
+                Name = "MaxToolRoundsSelect"
+            };
+            maxToolRoundsSelect.Items.AddRange(new object[] { "5", "10", "20", "30" });
+            maxToolRoundsSelect.SelectedIndex = 1; // 默认 10
+
+            var divider4 = new System.Windows.Forms.Panel
+            {
+                Location = new Point(28, 462),
+                Size = new Size(460, 1),
+                BackColor = BORDER
+            };
+
             var lblDev = new System.Windows.Forms.Label
             {
                 Text = "开发者模式",
@@ -174,7 +257,7 @@ namespace FuXing
                 ForeColor = SUBTITLE_FG,
                 AutoSize = false,
                 Size = new Size(120, 22),
-                Location = new Point(28, 322),
+                Location = new Point(28, 482),
                 BackColor = Color.Transparent
             };
 
@@ -185,20 +268,57 @@ namespace FuXing
                 ForeColor = LABEL_FG,
                 AutoSize = false,
                 Size = new Size(280, 18),
-                Location = new Point(28, 346),
+                Location = new Point(28, 506),
                 BackColor = Color.Transparent
             };
 
             devModeSwitch = new AntdUI.Switch
             {
-                Location = new Point(442, 322),
+                Location = new Point(442, 482),
                 Size = new Size(50, 28),
                 Checked = false
             };
 
+            var divider5 = new System.Windows.Forms.Panel
+            {
+                Location = new Point(28, 542),
+                Size = new Size(460, 1),
+                BackColor = BORDER
+            };
+
+            // ── 危险操作审批 ──
+            var lblApproval = new System.Windows.Forms.Label
+            {
+                Text = "危险操作审批",
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
+                ForeColor = SUBTITLE_FG,
+                AutoSize = false,
+                Size = new Size(140, 22),
+                Location = new Point(28, 562),
+                BackColor = Color.Transparent
+            };
+
+            var lblApprovalDesc = new System.Windows.Forms.Label
+            {
+                Text = "执行脚本、批量操作、删除章节等高风险工具前弹窗确认",
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                ForeColor = LABEL_FG,
+                AutoSize = false,
+                Size = new Size(340, 18),
+                Location = new Point(28, 586),
+                BackColor = Color.Transparent
+            };
+
+            approvalSwitch = new AntdUI.Switch
+            {
+                Location = new Point(442, 562),
+                Size = new Size(50, 28),
+                Checked = true
+            };
+
             var spacer = new System.Windows.Forms.Panel
             {
-                Location = new Point(0, 420),
+                Location = new Point(0, 640),
                 Size = new Size(10, 40),
                 BackColor = Color.Transparent
             };
@@ -208,7 +328,14 @@ namespace FuXing
                 sectionTitle, lblUrl, baseUrlInput,
                 lblKey, apiKeyInput,
                 lblModel, modelNameInput, fetchModelsBtn,
-                divider, lblDev, lblDevDesc, devModeSwitch,
+                divider,
+                lblContext, lblContextDesc, contextWindowSelect,
+                divider2,
+                lblMaxRounds, lblMaxRoundsDesc, maxToolRoundsSelect,
+                divider4,
+                lblDev, lblDevDesc, devModeSwitch,
+                divider5,
+                lblApproval, lblApprovalDesc, approvalSwitch,
                 spacer
             });
 
@@ -226,7 +353,13 @@ namespace FuXing
                 modelNameInput.Width = modelInputW;
                 fetchModelsBtn.Location = new Point(modelNameInput.Right + 8, fetchModelsBtn.Location.Y);
                 divider.Width = inputWidth;
+                divider2.Width = inputWidth;
+                divider4.Width = inputWidth;
+                divider5.Width = inputWidth;
+                contextWindowSelect.Location = new Point(content.Width - 28 - contextWindowSelect.Width, contextWindowSelect.Location.Y);
+                maxToolRoundsSelect.Location = new Point(content.Width - 28 - maxToolRoundsSelect.Width, maxToolRoundsSelect.Location.Y);
                 devModeSwitch.Location = new Point(content.Width - 28 - devModeSwitch.Width, devModeSwitch.Location.Y);
+                approvalSwitch.Location = new Point(content.Width - 28 - approvalSwitch.Width, approvalSwitch.Location.Y);
             };
 
             // ═══════════════════════════════════
@@ -292,6 +425,9 @@ namespace FuXing
             apiKeyInput.Text = "";
             modelNameInput.Text = "";
             devModeSwitch.Checked = false;
+            contextWindowSelect.SelectedIndex = 2; // 128K
+            maxToolRoundsSelect.SelectedIndex = 1; // 10
+            approvalSwitch.Checked = true;
             AntdUI.Notification.info(this, "提示", "已重置为默认设置", autoClose: 2);
         }
 
@@ -303,6 +439,24 @@ namespace FuXing
             apiKeyInput.Text = config.ApiKey ?? "";
             modelNameInput.Text = config.ModelName ?? "";
             devModeSwitch.Checked = config.DeveloperMode;
+            approvalSwitch.Checked = config.RequireApprovalForDangerousTools;
+
+            // 上下文窗口档位
+            switch (config.ContextWindowLimit)
+            {
+                case 32000: contextWindowSelect.SelectedIndex = 0; break;
+                case 64000: contextWindowSelect.SelectedIndex = 1; break;
+                default: contextWindowSelect.SelectedIndex = 2; break; // 128K
+            }
+
+            // 最大迭代轮次
+            switch (config.MaxToolRounds)
+            {
+                case 5: maxToolRoundsSelect.SelectedIndex = 0; break;
+                case 20: maxToolRoundsSelect.SelectedIndex = 2; break;
+                case 30: maxToolRoundsSelect.SelectedIndex = 3; break;
+                default: maxToolRoundsSelect.SelectedIndex = 1; break; // 10
+            }
         }
 
         private async void FetchModelsBtn_Click(object sender, EventArgs e)
@@ -373,12 +527,34 @@ namespace FuXing
 
         private void setting_confirm_btn_Click(object sender, EventArgs e)
         {
+            // 解析上下文窗口档位
+            int contextLimit = 128000;
+            switch (contextWindowSelect.SelectedIndex)
+            {
+                case 0: contextLimit = 32000; break;
+                case 1: contextLimit = 64000; break;
+                case 2: contextLimit = 128000; break;
+            }
+
+            // 解析最大迭代轮次
+            int maxToolRounds = 10;
+            switch (maxToolRoundsSelect.SelectedIndex)
+            {
+                case 0: maxToolRounds = 5; break;
+                case 1: maxToolRounds = 10; break;
+                case 2: maxToolRounds = 20; break;
+                case 3: maxToolRounds = 30; break;
+            }
+
             var config = new ConfigLoader.Config
             {
                 BaseURL = baseUrlInput.Text.TrimEnd('/'),
                 ApiKey = apiKeyInput.Text,
                 ModelName = (modelNameInput.Text ?? string.Empty).Trim(),
-                DeveloperMode = devModeSwitch.Checked
+                DeveloperMode = devModeSwitch.Checked,
+                ContextWindowLimit = contextLimit,
+                MaxToolRounds = maxToolRounds,
+                RequireApprovalForDangerousTools = approvalSwitch.Checked
             };
 
             var configLoader = new ConfigLoader();

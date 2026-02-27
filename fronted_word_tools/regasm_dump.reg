@@ -1,0 +1,1089 @@
+REGEDIT4
+
+[HKEY_CLASSES_ROOT\Record\{E2D7D8A1-7DAC-3C5E-9E27-15F510CAA184}\1.0.0.0]
+"Class"="FuXing.ChatMessageRole"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\FuXing.ToolCallRequest]
+@="FuXing.ToolCallRequest"
+
+[HKEY_CLASSES_ROOT\FuXing.ToolCallRequest\CLSID]
+@="{8EE7602E-5E19-3F86-A716-537878EC8D4B}"
+
+[HKEY_CLASSES_ROOT\CLSID\{8EE7602E-5E19-3F86-A716-537878EC8D4B}]
+@="FuXing.ToolCallRequest"
+
+[HKEY_CLASSES_ROOT\CLSID\{8EE7602E-5E19-3F86-A716-537878EC8D4B}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ToolCallRequest"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{8EE7602E-5E19-3F86-A716-537878EC8D4B}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ToolCallRequest"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{8EE7602E-5E19-3F86-A716-537878EC8D4B}\ProgId]
+@="FuXing.ToolCallRequest"
+
+[HKEY_CLASSES_ROOT\CLSID\{8EE7602E-5E19-3F86-A716-537878EC8D4B}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.MemoryMessage]
+@="FuXing.MemoryMessage"
+
+[HKEY_CLASSES_ROOT\FuXing.MemoryMessage\CLSID]
+@="{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}"
+
+[HKEY_CLASSES_ROOT\CLSID\{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}]
+@="FuXing.MemoryMessage"
+
+[HKEY_CLASSES_ROOT\CLSID\{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.MemoryMessage"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}\InprocServer32\1.0.0.0]
+"Class"="FuXing.MemoryMessage"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}\ProgId]
+@="FuXing.MemoryMessage"
+
+[HKEY_CLASSES_ROOT\CLSID\{8CCD22D8-F14C-311E-B028-1033DE2F0A6D}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ChatMemory]
+@="FuXing.ChatMemory"
+
+[HKEY_CLASSES_ROOT\FuXing.ChatMemory\CLSID]
+@="{3635E070-C93F-3261-AB45-25E5C0455E03}"
+
+[HKEY_CLASSES_ROOT\CLSID\{3635E070-C93F-3261-AB45-25E5C0455E03}]
+@="FuXing.ChatMemory"
+
+[HKEY_CLASSES_ROOT\CLSID\{3635E070-C93F-3261-AB45-25E5C0455E03}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ChatMemory"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{3635E070-C93F-3261-AB45-25E5C0455E03}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ChatMemory"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{3635E070-C93F-3261-AB45-25E5C0455E03}\ProgId]
+@="FuXing.ChatMemory"
+
+[HKEY_CLASSES_ROOT\CLSID\{3635E070-C93F-3261-AB45-25E5C0455E03}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ConfigLoader]
+@="FuXing.ConfigLoader"
+
+[HKEY_CLASSES_ROOT\FuXing.ConfigLoader\CLSID]
+@="{EE940F27-A27A-3D41-9854-D5D38103C8C3}"
+
+[HKEY_CLASSES_ROOT\CLSID\{EE940F27-A27A-3D41-9854-D5D38103C8C3}]
+@="FuXing.ConfigLoader"
+
+[HKEY_CLASSES_ROOT\CLSID\{EE940F27-A27A-3D41-9854-D5D38103C8C3}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ConfigLoader"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{EE940F27-A27A-3D41-9854-D5D38103C8C3}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ConfigLoader"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{EE940F27-A27A-3D41-9854-D5D38103C8C3}\ProgId]
+@="FuXing.ConfigLoader"
+
+[HKEY_CLASSES_ROOT\CLSID\{EE940F27-A27A-3D41-9854-D5D38103C8C3}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper]
+@="FuXing.NetWorkHelper"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper\CLSID]
+@="{CC86A137-79A9-3783-8162-E046FDCD8CB3}"
+
+[HKEY_CLASSES_ROOT\CLSID\{CC86A137-79A9-3783-8162-E046FDCD8CB3}]
+@="FuXing.NetWorkHelper"
+
+[HKEY_CLASSES_ROOT\CLSID\{CC86A137-79A9-3783-8162-E046FDCD8CB3}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CC86A137-79A9-3783-8162-E046FDCD8CB3}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CC86A137-79A9-3783-8162-E046FDCD8CB3}\ProgId]
+@="FuXing.NetWorkHelper"
+
+[HKEY_CLASSES_ROOT\CLSID\{CC86A137-79A9-3783-8162-E046FDCD8CB3}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ToolExecutionResult]
+@="FuXing.ToolExecutionResult"
+
+[HKEY_CLASSES_ROOT\FuXing.ToolExecutionResult\CLSID]
+@="{539F2227-B581-396C-9601-25F2C1F696DC}"
+
+[HKEY_CLASSES_ROOT\CLSID\{539F2227-B581-396C-9601-25F2C1F696DC}]
+@="FuXing.ToolExecutionResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{539F2227-B581-396C-9601-25F2C1F696DC}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ToolExecutionResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{539F2227-B581-396C-9601-25F2C1F696DC}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ToolExecutionResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{539F2227-B581-396C-9601-25F2C1F696DC}\ProgId]
+@="FuXing.ToolExecutionResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{539F2227-B581-396C-9601-25F2C1F696DC}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ToolRegistry]
+@="FuXing.ToolRegistry"
+
+[HKEY_CLASSES_ROOT\FuXing.ToolRegistry\CLSID]
+@="{04998DB4-329F-3932-945A-82E8B3965104}"
+
+[HKEY_CLASSES_ROOT\CLSID\{04998DB4-329F-3932-945A-82E8B3965104}]
+@="FuXing.ToolRegistry"
+
+[HKEY_CLASSES_ROOT\CLSID\{04998DB4-329F-3932-945A-82E8B3965104}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ToolRegistry"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{04998DB4-329F-3932-945A-82E8B3965104}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ToolRegistry"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{04998DB4-329F-3932-945A-82E8B3965104}\ProgId]
+@="FuXing.ToolRegistry"
+
+[HKEY_CLASSES_ROOT\CLSID\{04998DB4-329F-3932-945A-82E8B3965104}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.AboutDialog]
+@="FuXing.AboutDialog"
+
+[HKEY_CLASSES_ROOT\FuXing.AboutDialog\CLSID]
+@="{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}"
+
+[HKEY_CLASSES_ROOT\CLSID\{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}]
+@="FuXing.AboutDialog"
+
+[HKEY_CLASSES_ROOT\CLSID\{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.AboutDialog"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}\InprocServer32\1.0.0.0]
+"Class"="FuXing.AboutDialog"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}\ProgId]
+@="FuXing.AboutDialog"
+
+[HKEY_CLASSES_ROOT\CLSID\{0A0E55EF-E67B-3E1D-A4F3-76071D9D53AF}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.SettingForm]
+@="FuXing.SettingForm"
+
+[HKEY_CLASSES_ROOT\FuXing.SettingForm\CLSID]
+@="{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}"
+
+[HKEY_CLASSES_ROOT\CLSID\{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}]
+@="FuXing.SettingForm"
+
+[HKEY_CLASSES_ROOT\CLSID\{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.SettingForm"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}\InprocServer32\1.0.0.0]
+"Class"="FuXing.SettingForm"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}\ProgId]
+@="FuXing.SettingForm"
+
+[HKEY_CLASSES_ROOT\CLSID\{F0C44DD6-E3E5-31E6-8B2D-34519425E0EA}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.TaskPaneControl]
+@="FuXing.TaskPaneControl"
+
+[HKEY_CLASSES_ROOT\FuXing.TaskPaneControl\CLSID]
+@="{03326A51-B257-3623-917E-25A086B271B0}"
+
+[HKEY_CLASSES_ROOT\CLSID\{03326A51-B257-3623-917E-25A086B271B0}]
+@="FuXing.TaskPaneControl"
+
+[HKEY_CLASSES_ROOT\CLSID\{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.TaskPaneControl"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0]
+"Class"="FuXing.TaskPaneControl"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{03326A51-B257-3623-917E-25A086B271B0}\ProgId]
+@="FuXing.TaskPaneControl"
+
+[HKEY_CLASSES_ROOT\CLSID\{03326A51-B257-3623-917E-25A086B271B0}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectionItem]
+@="FuXing.CorrectionItem"
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectionItem\CLSID]
+@="{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}"
+
+[HKEY_CLASSES_ROOT\CLSID\{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}]
+@="FuXing.CorrectionItem"
+
+[HKEY_CLASSES_ROOT\CLSID\{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.CorrectionItem"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}\InprocServer32\1.0.0.0]
+"Class"="FuXing.CorrectionItem"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}\ProgId]
+@="FuXing.CorrectionItem"
+
+[HKEY_CLASSES_ROOT\CLSID\{DCC2E2D2-94BF-38B8-8081-971C5DDB178D}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\Record\{CA65A4BE-96FF-3059-B42C-6FBDE500F344}\1.0.0.0]
+"Class"="FuXing.CorrectionMode"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectionResult]
+@="FuXing.CorrectionResult"
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectionResult\CLSID]
+@="{20667018-9918-31F0-BF15-088DA451B94D}"
+
+[HKEY_CLASSES_ROOT\CLSID\{20667018-9918-31F0-BF15-088DA451B94D}]
+@="FuXing.CorrectionResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{20667018-9918-31F0-BF15-088DA451B94D}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.CorrectionResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{20667018-9918-31F0-BF15-088DA451B94D}\InprocServer32\1.0.0.0]
+"Class"="FuXing.CorrectionResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{20667018-9918-31F0-BF15-088DA451B94D}\ProgId]
+@="FuXing.CorrectionResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{20667018-9918-31F0-BF15-088DA451B94D}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectTextTool]
+@="FuXing.CorrectTextTool"
+
+[HKEY_CLASSES_ROOT\FuXing.CorrectTextTool\CLSID]
+@="{492F602A-87EB-3738-AFFD-FDC2F0FA2671}"
+
+[HKEY_CLASSES_ROOT\CLSID\{492F602A-87EB-3738-AFFD-FDC2F0FA2671}]
+@="FuXing.CorrectTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{492F602A-87EB-3738-AFFD-FDC2F0FA2671}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.CorrectTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{492F602A-87EB-3738-AFFD-FDC2F0FA2671}\InprocServer32\1.0.0.0]
+"Class"="FuXing.CorrectTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{492F602A-87EB-3738-AFFD-FDC2F0FA2671}\ProgId]
+@="FuXing.CorrectTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{492F602A-87EB-3738-AFFD-FDC2F0FA2671}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.FormatSelectedTableTool]
+@="FuXing.FormatSelectedTableTool"
+
+[HKEY_CLASSES_ROOT\FuXing.FormatSelectedTableTool\CLSID]
+@="{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}"
+
+[HKEY_CLASSES_ROOT\CLSID\{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}]
+@="FuXing.FormatSelectedTableTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.FormatSelectedTableTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}\InprocServer32\1.0.0.0]
+"Class"="FuXing.FormatSelectedTableTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}\ProgId]
+@="FuXing.FormatSelectedTableTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{63C8DD28-F366-3D19-95FA-EE87EB5BCE57}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.FormatAllTablesTool]
+@="FuXing.FormatAllTablesTool"
+
+[HKEY_CLASSES_ROOT\FuXing.FormatAllTablesTool\CLSID]
+@="{7BD4AD10-2103-353C-8D3C-9984CC620749}"
+
+[HKEY_CLASSES_ROOT\CLSID\{7BD4AD10-2103-353C-8D3C-9984CC620749}]
+@="FuXing.FormatAllTablesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{7BD4AD10-2103-353C-8D3C-9984CC620749}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.FormatAllTablesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{7BD4AD10-2103-353C-8D3C-9984CC620749}\InprocServer32\1.0.0.0]
+"Class"="FuXing.FormatAllTablesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{7BD4AD10-2103-353C-8D3C-9984CC620749}\ProgId]
+@="FuXing.FormatAllTablesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{7BD4AD10-2103-353C-8D3C-9984CC620749}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.CheckStandardTool]
+@="FuXing.CheckStandardTool"
+
+[HKEY_CLASSES_ROOT\FuXing.CheckStandardTool\CLSID]
+@="{BFAB9585-903C-3C2F-B43F-B43072543A20}"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFAB9585-903C-3C2F-B43F-B43072543A20}]
+@="FuXing.CheckStandardTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFAB9585-903C-3C2F-B43F-B43072543A20}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.CheckStandardTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFAB9585-903C-3C2F-B43F-B43072543A20}\InprocServer32\1.0.0.0]
+"Class"="FuXing.CheckStandardTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFAB9585-903C-3C2F-B43F-B43072543A20}\ProgId]
+@="FuXing.CheckStandardTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFAB9585-903C-3C2F-B43F-B43072543A20}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.GetSelectedTextTool]
+@="FuXing.GetSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\FuXing.GetSelectedTextTool\CLSID]
+@="{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}"
+
+[HKEY_CLASSES_ROOT\CLSID\{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}]
+@="FuXing.GetSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.GetSelectedTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}\InprocServer32\1.0.0.0]
+"Class"="FuXing.GetSelectedTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}\ProgId]
+@="FuXing.GetSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{143E5E8C-A6EC-37DD-9A1D-C62D20645ACE}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.GetDocumentInfoTool]
+@="FuXing.GetDocumentInfoTool"
+
+[HKEY_CLASSES_ROOT\FuXing.GetDocumentInfoTool\CLSID]
+@="{E54188B3-6227-33CB-B842-50CF240FA90E}"
+
+[HKEY_CLASSES_ROOT\CLSID\{E54188B3-6227-33CB-B842-50CF240FA90E}]
+@="FuXing.GetDocumentInfoTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{E54188B3-6227-33CB-B842-50CF240FA90E}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.GetDocumentInfoTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{E54188B3-6227-33CB-B842-50CF240FA90E}\InprocServer32\1.0.0.0]
+"Class"="FuXing.GetDocumentInfoTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{E54188B3-6227-33CB-B842-50CF240FA90E}\ProgId]
+@="FuXing.GetDocumentInfoTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{E54188B3-6227-33CB-B842-50CF240FA90E}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.LoadDefaultStylesTool]
+@="FuXing.LoadDefaultStylesTool"
+
+[HKEY_CLASSES_ROOT\FuXing.LoadDefaultStylesTool\CLSID]
+@="{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}"
+
+[HKEY_CLASSES_ROOT\CLSID\{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}]
+@="FuXing.LoadDefaultStylesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.LoadDefaultStylesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}\InprocServer32\1.0.0.0]
+"Class"="FuXing.LoadDefaultStylesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}\ProgId]
+@="FuXing.LoadDefaultStylesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{6DB6B551-BB79-3448-9EEA-8F19FFB647EE}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.InsertTextTool]
+@="FuXing.InsertTextTool"
+
+[HKEY_CLASSES_ROOT\FuXing.InsertTextTool\CLSID]
+@="{D07E03BB-1D70-342A-8447-300976EA5476}"
+
+[HKEY_CLASSES_ROOT\CLSID\{D07E03BB-1D70-342A-8447-300976EA5476}]
+@="FuXing.InsertTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{D07E03BB-1D70-342A-8447-300976EA5476}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.InsertTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{D07E03BB-1D70-342A-8447-300976EA5476}\InprocServer32\1.0.0.0]
+"Class"="FuXing.InsertTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{D07E03BB-1D70-342A-8447-300976EA5476}\ProgId]
+@="FuXing.InsertTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{D07E03BB-1D70-342A-8447-300976EA5476}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ReplaceSelectedTextTool]
+@="FuXing.ReplaceSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\FuXing.ReplaceSelectedTextTool\CLSID]
+@="{78731C6D-DA62-35AE-9D57-FA954674A674}"
+
+[HKEY_CLASSES_ROOT\CLSID\{78731C6D-DA62-35AE-9D57-FA954674A674}]
+@="FuXing.ReplaceSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{78731C6D-DA62-35AE-9D57-FA954674A674}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ReplaceSelectedTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{78731C6D-DA62-35AE-9D57-FA954674A674}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ReplaceSelectedTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{78731C6D-DA62-35AE-9D57-FA954674A674}\ProgId]
+@="FuXing.ReplaceSelectedTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{78731C6D-DA62-35AE-9D57-FA954674A674}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ListFilesTool]
+@="FuXing.ListFilesTool"
+
+[HKEY_CLASSES_ROOT\FuXing.ListFilesTool\CLSID]
+@="{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}"
+
+[HKEY_CLASSES_ROOT\CLSID\{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}]
+@="FuXing.ListFilesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ListFilesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ListFilesTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}\ProgId]
+@="FuXing.ListFilesTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{6F5308F2-1EC7-3CC5-A744-5E6AD96C34DD}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.GetDocumentOutlineTool]
+@="FuXing.GetDocumentOutlineTool"
+
+[HKEY_CLASSES_ROOT\FuXing.GetDocumentOutlineTool\CLSID]
+@="{2BB831A9-2215-340C-ABAF-B5323485336F}"
+
+[HKEY_CLASSES_ROOT\CLSID\{2BB831A9-2215-340C-ABAF-B5323485336F}]
+@="FuXing.GetDocumentOutlineTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{2BB831A9-2215-340C-ABAF-B5323485336F}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.GetDocumentOutlineTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{2BB831A9-2215-340C-ABAF-B5323485336F}\InprocServer32\1.0.0.0]
+"Class"="FuXing.GetDocumentOutlineTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{2BB831A9-2215-340C-ABAF-B5323485336F}\ProgId]
+@="FuXing.GetDocumentOutlineTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{2BB831A9-2215-340C-ABAF-B5323485336F}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ReadSectionTextTool]
+@="FuXing.ReadSectionTextTool"
+
+[HKEY_CLASSES_ROOT\FuXing.ReadSectionTextTool\CLSID]
+@="{CEFC699D-CC65-3E7A-B66B-C0876488E038}"
+
+[HKEY_CLASSES_ROOT\CLSID\{CEFC699D-CC65-3E7A-B66B-C0876488E038}]
+@="FuXing.ReadSectionTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{CEFC699D-CC65-3E7A-B66B-C0876488E038}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ReadSectionTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CEFC699D-CC65-3E7A-B66B-C0876488E038}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ReadSectionTextTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CEFC699D-CC65-3E7A-B66B-C0876488E038}\ProgId]
+@="FuXing.ReadSectionTextTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{CEFC699D-CC65-3E7A-B66B-C0876488E038}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NavigateToHeadingTool]
+@="FuXing.NavigateToHeadingTool"
+
+[HKEY_CLASSES_ROOT\FuXing.NavigateToHeadingTool\CLSID]
+@="{03A140F2-E469-3BFE-9752-830898CBBD1C}"
+
+[HKEY_CLASSES_ROOT\CLSID\{03A140F2-E469-3BFE-9752-830898CBBD1C}]
+@="FuXing.NavigateToHeadingTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{03A140F2-E469-3BFE-9752-830898CBBD1C}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NavigateToHeadingTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{03A140F2-E469-3BFE-9752-830898CBBD1C}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NavigateToHeadingTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{03A140F2-E469-3BFE-9752-830898CBBD1C}\ProgId]
+@="FuXing.NavigateToHeadingTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{03A140F2-E469-3BFE-9752-830898CBBD1C}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.MergeDocumentSectionTool]
+@="FuXing.MergeDocumentSectionTool"
+
+[HKEY_CLASSES_ROOT\FuXing.MergeDocumentSectionTool\CLSID]
+@="{81A59C7B-8CE9-377D-98FF-C045B20EEB88}"
+
+[HKEY_CLASSES_ROOT\CLSID\{81A59C7B-8CE9-377D-98FF-C045B20EEB88}]
+@="FuXing.MergeDocumentSectionTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{81A59C7B-8CE9-377D-98FF-C045B20EEB88}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.MergeDocumentSectionTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{81A59C7B-8CE9-377D-98FF-C045B20EEB88}\InprocServer32\1.0.0.0]
+"Class"="FuXing.MergeDocumentSectionTool"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{81A59C7B-8CE9-377D-98FF-C045B20EEB88}\ProgId]
+@="FuXing.MergeDocumentSectionTool"
+
+[HKEY_CLASSES_ROOT\CLSID\{81A59C7B-8CE9-377D-98FF-C045B20EEB88}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.Connect]
+@="FuXing.Connect"
+
+[HKEY_CLASSES_ROOT\FuXing.Connect\CLSID]
+@="{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}"
+
+[HKEY_CLASSES_ROOT\CLSID\{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}]
+@="FuXing.Connect"
+
+[HKEY_CLASSES_ROOT\CLSID\{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.Connect"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0]
+"Class"="FuXing.Connect"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\ProgId]
+@="FuXing.Connect"
+
+[HKEY_CLASSES_ROOT\CLSID\{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\Record\{13F67411-0E50-31E2-8CE3-67E0126086C5}\1.0.0.0]
+"Class"="FuXing.UI.ChatRole"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\Record\{A65F143F-CF9C-3DED-A677-20636F549174}\1.0.0.0]
+"Class"="FuXing.UI.ToolCallStatus"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\FuXing.UI.RichChatPanel]
+@="FuXing.UI.RichChatPanel"
+
+[HKEY_CLASSES_ROOT\FuXing.UI.RichChatPanel\CLSID]
+@="{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}"
+
+[HKEY_CLASSES_ROOT\CLSID\{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}]
+@="FuXing.UI.RichChatPanel"
+
+[HKEY_CLASSES_ROOT\CLSID\{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.UI.RichChatPanel"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}\InprocServer32\1.0.0.0]
+"Class"="FuXing.UI.RichChatPanel"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}\ProgId]
+@="FuXing.UI.RichChatPanel"
+
+[HKEY_CLASSES_ROOT\CLSID\{C8D6D378-CAB2-35A8-A78B-D1B1360DF95C}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.ConfigLoader+Config]
+@="FuXing.ConfigLoader+Config"
+
+[HKEY_CLASSES_ROOT\FuXing.ConfigLoader+Config\CLSID]
+@="{A26CEF2B-2410-3A1C-B43A-83651222CA90}"
+
+[HKEY_CLASSES_ROOT\CLSID\{A26CEF2B-2410-3A1C-B43A-83651222CA90}]
+@="FuXing.ConfigLoader+Config"
+
+[HKEY_CLASSES_ROOT\CLSID\{A26CEF2B-2410-3A1C-B43A-83651222CA90}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.ConfigLoader+Config"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{A26CEF2B-2410-3A1C-B43A-83651222CA90}\InprocServer32\1.0.0.0]
+"Class"="FuXing.ConfigLoader+Config"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{A26CEF2B-2410-3A1C-B43A-83651222CA90}\ProgId]
+@="FuXing.ConfigLoader+Config"
+
+[HKEY_CLASSES_ROOT\CLSID\{A26CEF2B-2410-3A1C-B43A-83651222CA90}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatMessage]
+@="FuXing.NetWorkHelper+ChatMessage"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatMessage\CLSID]
+@="{439E5890-0F87-37BA-BB49-A62F67BA5B2E}"
+
+[HKEY_CLASSES_ROOT\CLSID\{439E5890-0F87-37BA-BB49-A62F67BA5B2E}]
+@="FuXing.NetWorkHelper+ChatMessage"
+
+[HKEY_CLASSES_ROOT\CLSID\{439E5890-0F87-37BA-BB49-A62F67BA5B2E}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+ChatMessage"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{439E5890-0F87-37BA-BB49-A62F67BA5B2E}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+ChatMessage"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{439E5890-0F87-37BA-BB49-A62F67BA5B2E}\ProgId]
+@="FuXing.NetWorkHelper+ChatMessage"
+
+[HKEY_CLASSES_ROOT\CLSID\{439E5890-0F87-37BA-BB49-A62F67BA5B2E}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatCompletionRequest]
+@="FuXing.NetWorkHelper+ChatCompletionRequest"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatCompletionRequest\CLSID]
+@="{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}"
+
+[HKEY_CLASSES_ROOT\CLSID\{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}]
+@="FuXing.NetWorkHelper+ChatCompletionRequest"
+
+[HKEY_CLASSES_ROOT\CLSID\{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+ChatCompletionRequest"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+ChatCompletionRequest"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}\ProgId]
+@="FuXing.NetWorkHelper+ChatCompletionRequest"
+
+[HKEY_CLASSES_ROOT\CLSID\{7EA0288B-0DE0-3651-95B4-C93E0B9E293E}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatCompletionChunk]
+@="FuXing.NetWorkHelper+ChatCompletionChunk"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ChatCompletionChunk\CLSID]
+@="{037D01BC-DE56-3897-A917-1974D8E00B70}"
+
+[HKEY_CLASSES_ROOT\CLSID\{037D01BC-DE56-3897-A917-1974D8E00B70}]
+@="FuXing.NetWorkHelper+ChatCompletionChunk"
+
+[HKEY_CLASSES_ROOT\CLSID\{037D01BC-DE56-3897-A917-1974D8E00B70}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+ChatCompletionChunk"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{037D01BC-DE56-3897-A917-1974D8E00B70}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+ChatCompletionChunk"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{037D01BC-DE56-3897-A917-1974D8E00B70}\ProgId]
+@="FuXing.NetWorkHelper+ChatCompletionChunk"
+
+[HKEY_CLASSES_ROOT\CLSID\{037D01BC-DE56-3897-A917-1974D8E00B70}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+Choice]
+@="FuXing.NetWorkHelper+Choice"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+Choice\CLSID]
+@="{41CB9176-D842-3783-81EE-44A503AFF082}"
+
+[HKEY_CLASSES_ROOT\CLSID\{41CB9176-D842-3783-81EE-44A503AFF082}]
+@="FuXing.NetWorkHelper+Choice"
+
+[HKEY_CLASSES_ROOT\CLSID\{41CB9176-D842-3783-81EE-44A503AFF082}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+Choice"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{41CB9176-D842-3783-81EE-44A503AFF082}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+Choice"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{41CB9176-D842-3783-81EE-44A503AFF082}\ProgId]
+@="FuXing.NetWorkHelper+Choice"
+
+[HKEY_CLASSES_ROOT\CLSID\{41CB9176-D842-3783-81EE-44A503AFF082}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+Delta]
+@="FuXing.NetWorkHelper+Delta"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+Delta\CLSID]
+@="{CD735417-1822-39B4-B2DA-D1488AC23960}"
+
+[HKEY_CLASSES_ROOT\CLSID\{CD735417-1822-39B4-B2DA-D1488AC23960}]
+@="FuXing.NetWorkHelper+Delta"
+
+[HKEY_CLASSES_ROOT\CLSID\{CD735417-1822-39B4-B2DA-D1488AC23960}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+Delta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CD735417-1822-39B4-B2DA-D1488AC23960}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+Delta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{CD735417-1822-39B4-B2DA-D1488AC23960}\ProgId]
+@="FuXing.NetWorkHelper+Delta"
+
+[HKEY_CLASSES_ROOT\CLSID\{CD735417-1822-39B4-B2DA-D1488AC23960}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ToolCallDelta]
+@="FuXing.NetWorkHelper+ToolCallDelta"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+ToolCallDelta\CLSID]
+@="{663820AD-B72C-30CF-84B3-96DFB14EEE14}"
+
+[HKEY_CLASSES_ROOT\CLSID\{663820AD-B72C-30CF-84B3-96DFB14EEE14}]
+@="FuXing.NetWorkHelper+ToolCallDelta"
+
+[HKEY_CLASSES_ROOT\CLSID\{663820AD-B72C-30CF-84B3-96DFB14EEE14}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+ToolCallDelta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{663820AD-B72C-30CF-84B3-96DFB14EEE14}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+ToolCallDelta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{663820AD-B72C-30CF-84B3-96DFB14EEE14}\ProgId]
+@="FuXing.NetWorkHelper+ToolCallDelta"
+
+[HKEY_CLASSES_ROOT\CLSID\{663820AD-B72C-30CF-84B3-96DFB14EEE14}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+FunctionCallDelta]
+@="FuXing.NetWorkHelper+FunctionCallDelta"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+FunctionCallDelta\CLSID]
+@="{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}"
+
+[HKEY_CLASSES_ROOT\CLSID\{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}]
+@="FuXing.NetWorkHelper+FunctionCallDelta"
+
+[HKEY_CLASSES_ROOT\CLSID\{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+FunctionCallDelta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+FunctionCallDelta"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}\ProgId]
+@="FuXing.NetWorkHelper+FunctionCallDelta"
+
+[HKEY_CLASSES_ROOT\CLSID\{2CBEC12B-CD5B-3C8D-909F-0C2AEA125FD8}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+StreamChatResult]
+@="FuXing.NetWorkHelper+StreamChatResult"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+StreamChatResult\CLSID]
+@="{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}]
+@="FuXing.NetWorkHelper+StreamChatResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+StreamChatResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+StreamChatResult"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}\ProgId]
+@="FuXing.NetWorkHelper+StreamChatResult"
+
+[HKEY_CLASSES_ROOT\CLSID\{BFC965CA-2ABF-30A6-830F-F9205AD2BABE}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+FileUploadResponse]
+@="FuXing.NetWorkHelper+FileUploadResponse"
+
+[HKEY_CLASSES_ROOT\FuXing.NetWorkHelper+FileUploadResponse\CLSID]
+@="{4E3BAD99-586D-382F-AD04-39B9A0D0B685}"
+
+[HKEY_CLASSES_ROOT\CLSID\{4E3BAD99-586D-382F-AD04-39B9A0D0B685}]
+@="FuXing.NetWorkHelper+FileUploadResponse"
+
+[HKEY_CLASSES_ROOT\CLSID\{4E3BAD99-586D-382F-AD04-39B9A0D0B685}\InprocServer32]
+@="mscoree.dll"
+"ThreadingModel"="Both"
+"Class"="FuXing.NetWorkHelper+FileUploadResponse"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{4E3BAD99-586D-382F-AD04-39B9A0D0B685}\InprocServer32\1.0.0.0]
+"Class"="FuXing.NetWorkHelper+FileUploadResponse"
+"Assembly"="FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///d:/code/fuxing/fronted_word_tools/bin/Debug/FuXing.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{4E3BAD99-586D-382F-AD04-39B9A0D0B685}\ProgId]
+@="FuXing.NetWorkHelper+FileUploadResponse"
+
+[HKEY_CLASSES_ROOT\CLSID\{4E3BAD99-586D-382F-AD04-39B9A0D0B685}\Implemented Categories\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}]

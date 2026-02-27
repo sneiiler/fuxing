@@ -21,4 +21,22 @@ Write-Host "Configuration: $Configuration"
 Write-Host ""
 
 & $msbuild "$PSScriptRoot\FuXing.csproj" /p:Configuration=$Configuration /p:Platform=AnyCPU /m /nologo /verbosity:minimal
-exit $LASTEXITCODE
+$buildExit = $LASTEXITCODE
+
+if ($buildExit -ne 0) {
+    exit $buildExit
+}
+
+# Debug 模式自动进行用户级 COM 注册（无需管理员权限）
+if ($Configuration -eq "Debug") {
+    $dllPath = "$PSScriptRoot\bin\Debug\FuXing.dll"
+    if (Test-Path $dllPath) {
+        Write-Host ""
+        Write-Host "========================================"
+        Write-Host "用户级 COM 注册（无需管理员）"
+        Write-Host "========================================"
+        & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\Register-UserCOM.ps1" -DllPath $dllPath
+    }
+}
+
+exit 0

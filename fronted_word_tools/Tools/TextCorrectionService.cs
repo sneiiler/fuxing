@@ -22,6 +22,21 @@ namespace FuXing
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  纠错模式
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>纠错检查级别</summary>
+    public enum CorrectionMode
+    {
+        /// <summary>只检查错别字</summary>
+        Typo,
+        /// <summary>检查语义级别错误</summary>
+        Semantic,
+        /// <summary>检查文档前后表述一致性错误</summary>
+        Consistency
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  纠错服务（纯文本补丁格式，不依赖 Tool Calling / JSON）
     // ═══════════════════════════════════════════════════════════════
 
@@ -62,58 +77,49 @@ namespace FuXing
             return new TextCorrectionService(cfg.BaseURL, cfg.ApiKey, cfg.ModelName);
         }
 
-        // ── 系统 Prompt（纯文本补丁格式） ──
+        // ── 系统 Prompt（按纠错模式动态生成） ──
 
-        private const string SYSTEM_PROMPT =
-@"你是一个专业的中文文本校对专家。请仔细检查用户提供的文本，找出其中的错误并提出修改建议。
+        private static readonly string OUTPUT_FORMAT =
+@"【Output Format — Strictly follow. Do not output anything else.】
 
-检查以下类型的错误：
-1. 错别字：汉字写错、混淆（如 的/地/得 用法错误）
-2. 语法错误：句子结构不当、成分残缺或多余
-3. 标点符号：标点使用不当、中英文标点混用
-4. 用词不当：词语搭配不恰当、语义重复或矛盾
-5. 格式问题：多余空格、缺失空格等
-
-【输出格式 — 严格遵守，不要输出任何其他内容】
-
-对每一处错误，输出如下格式的一条纠错：
+For each error found, output one correction entry in the following format:
 
 >>>>ORIGINAL
-（原文中需要修改的最小连续片段，必须与原文完全一致）
+(The minimal contiguous snippet from the original text that needs correction. Must match the source text exactly.)
 >>>>REPLACEMENT
-（修改后的文本，即 ORIGINAL 片段的纠正版本）
+(The corrected version of the ORIGINAL snippet — only fix the erroneous part, keep all correct characters intact.)
 >>>>REASON
-（简短修改理由）
+(Brief reason for the correction.)
 ====
 
-最后输出总结：
+At the end, output a summary:
 
 >>>>SUMMARY
-（纠错总结说明）
+(Overall correction summary.)
 ====
 
-【核心规则 — 务必遵守】
-- ORIGINAL 必须是原文中可精确匹配到的连续文本片段，不要编造不存在的原文
-- REPLACEMENT 是 ORIGINAL 的原位修正：仅替换其中的错误部分，保留所有正确的字词不变
-- 禁止在修正时删除、增添或重组 ORIGINAL 中本身正确的内容
-- 每条修改精准定位到最小错误片段，不要把整句话作为一条修改
-- 如果文本完全正确，只输出 SUMMARY 段即可
-- 不要输出 markdown、代码块或其他额外格式
+【Core Rules — Must follow】
+- ORIGINAL must be a contiguous text snippet that can be precisely matched in the source text. Never fabricate non-existent original text.
+- REPLACEMENT is an in-place fix of ORIGINAL: only replace the erroneous part, preserving all correct words unchanged.
+- Never delete, add, or reorganize parts of ORIGINAL that are already correct.
+- Each correction must pinpoint the minimal error snippet. Do not use an entire sentence as one correction.
+- If the text is entirely correct, only output the SUMMARY section.
+- Do not output markdown, code blocks, or any other extra formatting.
 
-【示例】
+【Example】
 
-原文：进一步彰显了高分辨率遥感在综合国士治理中的核心地位。
+Original text: 进一步彰显了高分辨率遥感在综合国士治理中的核心地位。
 
-正确的纠错输出：
+Correct output:
 >>>>ORIGINAL
 国士
 >>>>REPLACEMENT
 国土
 >>>>REASON
-""国士""应为""国土""，指国家的领土，此处为形近字错误
+""国士"" should be ""国土"" (national territory). This is a visually similar character error.
 ====
 
-错误示范（禁止）：
+Incorrect example (FORBIDDEN):
 >>>>ORIGINAL
 综合国士治理
 >>>>REPLACEMENT
@@ -121,7 +127,73 @@ namespace FuXing
 >>>>REASON
 ...
 ====
-以上是错误的，因为修正时删除了原文中正确的""国土""一词";
+The above is wrong because the correction deleted the correct word ""国土"" from the original.";
+
+        private static readonly string PROMPT_TYPO =
+@"You are a professional Chinese typo detection expert. Your task is to **strictly and only check for typos** — do not check any other type of issue.
+
+Only check the following types of errors:
+1. Wrong characters: An incorrect Chinese character (e.g., ""国士"" should be ""国土"").
+2. Homophone confusion: Wrong character due to identical pronunciation (e.g., ""以经"" should be ""已经"").
+3. Visually similar character errors: Wrong character due to similar appearance (e.g., ""未"" written as ""末"").
+
+【Strictly forbidden to check — violations are considered incorrect output】
+- Do NOT check grammar errors.
+- Do NOT check punctuation usage.
+- Do NOT check whether word choice is appropriate.
+- Do NOT check sentence structure.
+- Do NOT check semantic fluency.
+- Do NOT check consistency of expressions.
+- Do NOT make any polishing or optimization suggestions.
+
+Only output a correction entry when you are certain a character is written incorrectly. When in doubt, do not report.";
+
+        private static readonly string PROMPT_SEMANTIC =
+@"You are a professional Chinese text proofreading expert. Carefully examine the user-provided text and identify all semantic-level errors with correction suggestions.
+
+Check the following types of errors:
+1. Typos: Wrong characters, homophone and visually similar character confusion.
+2. Grammar errors: Improper sentence structure, missing or redundant components.
+3. Punctuation: Incorrect punctuation usage, mixed Chinese/English punctuation.
+4. Word choice: Inappropriate collocations, semantic redundancy or contradiction.
+5. Logic errors: Incoherent context, incorrect cause-effect relationships.
+6. Formatting issues: Extra or missing spaces.
+
+【Strictly forbidden to check】
+- Do NOT check document-level cross-reference terminology consistency (that belongs to the consistency check mode).
+- Do NOT perform style polishing — only focus on clear errors.";
+
+        private static readonly string PROMPT_CONSISTENCY =
+@"You are a professional document consistency reviewer. Carefully read through all the user-provided text and identify inconsistencies between different parts of the document.
+
+Focus on the following types of consistency issues:
+1. Terminology consistency: The same concept uses different terms or names in different places (e.g., ""server"" in one place and ""host"" in another referring to the same thing).
+2. Data consistency: The same data point shows different values in different places.
+3. Expression consistency: The same meaning is expressed differently in different places, potentially confusing readers.
+4. Logic consistency: Earlier and later statements contradict each other.
+5. Format consistency: Similar content uses inconsistent numbering, naming, or formatting conventions.
+
+【Strictly forbidden to check】
+- Do NOT check pure typos (unless the typo causes cross-reference inconsistency).
+- Do NOT check single-sentence grammar errors.
+- Do NOT check punctuation.
+- Only focus on ""cross-reference inconsistency"" type issues.
+
+Note: You must read the entire text and compare earlier and later sections to discover consistency issues. A single sentence may look fine in isolation, but comparing it against context reveals inconsistencies. Carefully compare all terms, data, and expressions throughout the text.";
+
+        /// <summary>根据纠错模式获取完整的系统提示词</summary>
+        private static string GetSystemPrompt(CorrectionMode mode)
+        {
+            string modePrompt;
+            switch (mode)
+            {
+                case CorrectionMode.Typo: modePrompt = PROMPT_TYPO; break;
+                case CorrectionMode.Semantic: modePrompt = PROMPT_SEMANTIC; break;
+                case CorrectionMode.Consistency: modePrompt = PROMPT_CONSISTENCY; break;
+                default: throw new ArgumentOutOfRangeException(nameof(mode));
+            }
+            return modePrompt + "\n\n" + OUTPUT_FORMAT;
+        }
 
         // ── 核心方法 ──
 
@@ -130,6 +202,7 @@ namespace FuXing
         /// </summary>
         public async Task<CorrectionResult> CorrectTextAsync(
             string text,
+            CorrectionMode mode = CorrectionMode.Typo,
             Action<string> onProgress = null,
             CancellationToken cancellationToken = default)
         {
@@ -146,7 +219,8 @@ namespace FuXing
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 onProgress?.Invoke("AI 正在分析文本...");
-                string responseText = await CallChatAsync(text, cancellationToken);
+                string systemPrompt = GetSystemPrompt(mode);
+                string responseText = await CallChatAsync(text, systemPrompt, cancellationToken);
 
                 onProgress?.Invoke("正在解析纠错结果...");
                 return ParsePatchResponse(responseText, text);
@@ -253,7 +327,7 @@ namespace FuXing
 
         // ── HTTP 调用（普通 Chat Completion，不使用 tools） ──
 
-        private async Task<string> CallChatAsync(string text, CancellationToken cancellationToken = default)
+        private async Task<string> CallChatAsync(string text, string systemPrompt, CancellationToken cancellationToken = default)
         {
             string url = $"{_baseUrl}/chat/completions";
 
@@ -262,8 +336,8 @@ namespace FuXing
                 model = _modelName,
                 messages = new[]
                 {
-                    new { role = "system", content = SYSTEM_PROMPT },
-                    new { role = "user", content = $"请检查以下文本并纠错：\n\n{text}" }
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = $"Please check and correct the following text:\n\n{text}" }
                 },
                 temperature = 0.1,
                 max_tokens = 4096

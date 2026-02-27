@@ -185,18 +185,16 @@ namespace FuXing
         /// </summary>
         public void RecordPluginAction(string actionName, string input, string output)
         {
-            // 以用户消息形式记录操作意图
             _history.Add(new MemoryMessage
             {
                 Role = ChatMessageRole.User,
-                Content = "[用户通过插件按钮执行了「" + actionName + "」操作]\n输入: " + Truncate(input, 500)
+                Content = "[User triggered '" + actionName + "' via plugin button]\nInput: " + Truncate(input, 500)
             });
 
-            // 以助手消息形式记录操作结果
             _history.Add(new MemoryMessage
             {
                 Role = ChatMessageRole.Assistant,
-                Content = "[「" + actionName + "」操作完成]\n结果: " + Truncate(output, 1000)
+                Content = "['" + actionName + "' completed]\nResult: " + Truncate(output, 1000)
             });
         }
 
@@ -266,42 +264,79 @@ namespace FuXing
             return (int)(totalChars / 2.5);
         }
 
-        /// <summary>是否需要裁剪</summary>
+        /// <summary>工具定义占用的预留 token 数（由外部设置，用于精确计算裁剪阈值）</summary>
+        public int ToolTokenReserve { get; set; }
+
+        /// <summary>是否需要裁剪（基于 system prompt + history + 工具定义的总量）</summary>
         public bool NeedsCompaction()
         {
-            return EstimateTokens(_history) > MaxAllowedTokens * 0.8;
+            return EstimateTotalTokens() > MaxAllowedTokens * 0.8;
+        }
+
+        /// <summary>估算当前完整请求的 token 数（system prompt + history + 工具定义预留）</summary>
+        public int EstimateTotalTokens()
+        {
+            var all = new List<MemoryMessage>();
+            if (!string.IsNullOrEmpty(_systemPrompt))
+            {
+                all.Add(new MemoryMessage { Role = ChatMessageRole.System, Content = _systemPrompt });
+            }
+            all.AddRange(_history);
+            return EstimateTokens(all) + ToolTokenReserve;
         }
 
         /// <summary>
-        /// 滑动窗口裁剪：保留最早 2 条 + 最新一半消息。
-        /// 裁剪后在衔接处插入截断提示。
+        /// 滑动窗口裁剪：保留最早的完整对话轮次 + 最新一半消息。
+        /// 裁剪时确保 tool_calls → tool result 配对完整性。
         /// </summary>
         private List<MemoryMessage> TruncateHistory()
         {
-            if (_history.Count <= 4)
+            if (_history.Count <= 6)
                 return new List<MemoryMessage>(_history);
 
-            // 保留第一轮对话（前 2 条）+ 后一半
+            // ── 计算头部保留边界：找到第一个完整对话轮次的结尾 ──
+            int headEnd = FindFirstCompleteRoundEnd();
+
+            // ── 计算尾部保留起点 ──
             int keepFromEnd = _history.Count / 2;
-            // 确保不会切断工具调用对
             int cutEnd = _history.Count - keepFromEnd;
 
-            // 向后调整，避免切在 Tool 消息上
+            // 向后调整，跳过孤立的 Tool 消息
             while (cutEnd < _history.Count && _history[cutEnd].Role == ChatMessageRole.Tool)
                 cutEnd++;
 
+            // 向后调整，如果 cutEnd 指向一个带 tool_calls 的 assistant 消息，
+            // 需要包含其后续所有 Tool 结果消息
+            if (cutEnd > 0 && cutEnd < _history.Count)
+            {
+                var prev = _history[cutEnd - 1];
+                if (prev.Role == ChatMessageRole.Assistant && prev.ToolCalls != null && prev.ToolCalls.Count > 0)
+                {
+                    // 回退到这个 assistant 消息开始
+                    cutEnd--;
+                }
+            }
+
+            // 确保 cutEnd 不会跑到 headEnd 之前
+            if (cutEnd <= headEnd)
+                cutEnd = headEnd + 1;
+
             var result = new List<MemoryMessage>();
 
-            // 保留最早的上下文
-            result.Add(_history[0]);
-            if (_history.Count > 1)
-                result.Add(_history[1]);
+            // 保留头部完整轮次
+            for (int i = 0; i <= headEnd && i < _history.Count; i++)
+                result.Add(_history[i]);
 
-            // 插入截断提示
+            // 插入截断提示（作为 user 消息，避免多 system 消息的兼容性问题）
             result.Add(new MemoryMessage
             {
-                Role = ChatMessageRole.System,
-                Content = "[注意：为节省上下文空间，中间部分对话历史已被省略。请基于剩余的上下文继续对话。]"
+                Role = ChatMessageRole.User,
+                Content = "[Note: Earlier conversation history has been trimmed to save context space. Continue based on the remaining context.]"
+            });
+            result.Add(new MemoryMessage
+            {
+                Role = ChatMessageRole.Assistant,
+                Content = "Understood. I will continue based on the available context."
             });
 
             // 保留后半部分
@@ -309,6 +344,39 @@ namespace FuXing
                 result.Add(_history[i]);
 
             return result;
+        }
+
+        /// <summary>
+        /// 找到第一个完整对话轮次的结束索引。
+        /// 一个完整轮次 = user + assistant（+ 可能的 tool_calls 与 tool results）。
+        /// </summary>
+        private int FindFirstCompleteRoundEnd()
+        {
+            int i = 0;
+            // 跳过开头的 user 消息
+            if (i < _history.Count && _history[i].Role == ChatMessageRole.User)
+                i++;
+            else
+                return 0;
+
+            // 找 assistant 消息
+            if (i < _history.Count && _history[i].Role == ChatMessageRole.Assistant)
+            {
+                // 如果 assistant 有 tool_calls，需要继续包含后续的 tool result 消息
+                if (_history[i].ToolCalls != null && _history[i].ToolCalls.Count > 0)
+                {
+                    i++;
+                    while (i < _history.Count && _history[i].Role == ChatMessageRole.Tool)
+                        i++;
+                    // 如果工具结果后还有一个纯文本 assistant 回复，也保留
+                    if (i < _history.Count && _history[i].Role == ChatMessageRole.Assistant)
+                        return i;
+                    return i - 1;
+                }
+                return i;
+            }
+
+            return 0;
         }
 
         // ── 辅助 ──

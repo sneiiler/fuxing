@@ -21,7 +21,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <RegisterForComInterop>true</RegisterForComInterop>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -85,6 +84,19 @@
     <Compile Include="Core\NetWorkHelper.cs" />
     <Compile Include="Core\ResourceManager.cs" />
     <Compile Include="Core\ToolRegistry.cs" />
+    <Compile Include="Core\SkillManager.cs" />
+    <Compile Include="Core\DocumentHelper.cs" />
+    <Compile Include="Core\DebugLogger.cs" />
+    <Compile Include="Core\ToolCategory.cs" />
+    <!-- SubAgents: 子智能体 -->
+    <Compile Include="SubAgents\SubAgent.cs" />
+    <Compile Include="SubAgents\SubAgentModels.cs" />
+    <Compile Include="SubAgents\DocumentStructureExtractor.cs" />
+    <Compile Include="SubAgents\RunSubAgentTool.cs" />
+    <Compile Include="SubAgents\DocumentAst.cs" />
+    <Compile Include="SubAgents\DocumentAstBuilder.cs" />
+    <Compile Include="SubAgents\DocumentMapCache.cs" />
+    <Compile Include="Core\WordHelper.cs" />
     <!-- UI: 窗体 & 界面 -->
     <Compile Include="UI\AboutDialog.cs">
       <SubType>Form</SubType>
@@ -98,17 +110,33 @@
     </Compile>
     <!-- Tools: AI 工具服务 -->
     <Compile Include="Tools\ITool.cs" />
+    <Compile Include="Tools\ToolBase.cs" />
     <Compile Include="Tools\TextCorrectionService.cs" />
-    <Compile Include="Tools\CorrectSelectedTextTool.cs" />
-    <Compile Include="Tools\CorrectAllTextTool.cs" />
-    <Compile Include="Tools\FormatSelectedTableTool.cs" />
-    <Compile Include="Tools\FormatAllTablesTool.cs" />
+    <Compile Include="Tools\CorrectTextTool.cs" />
+    <Compile Include="Tools\FormatTableTool.cs" />
     <Compile Include="Tools\CheckStandardTool.cs" />
     <Compile Include="Tools\GetSelectedTextTool.cs" />
     <Compile Include="Tools\GetDocumentInfoTool.cs" />
-    <Compile Include="Tools\LoadDefaultStylesTool.cs" />
     <Compile Include="Tools\InsertTextTool.cs" />
     <Compile Include="Tools\ReplaceSelectedTextTool.cs" />
+    <Compile Include="Tools\ListFilesTool.cs" />
+    <Compile Include="Tools\GetDocumentMapTool.cs" />
+    <Compile Include="Tools\GetNodeDetailTool.cs" />
+    <Compile Include="Tools\ReadSectionTextTool.cs" />
+    <Compile Include="Tools\NavigateToHeadingTool.cs" />
+    <Compile Include="Tools\MergeDocumentSectionTool.cs" />
+    <Compile Include="Tools\DeleteSectionTool.cs" />
+    <Compile Include="Tools\ExecuteWordScriptTool.cs" />
+    <Compile Include="Tools\FormatContentTool.cs" />
+    <Compile Include="Tools\SearchAndReplaceTool.cs" />
+    <Compile Include="Tools\InsertTableTool.cs" />
+    <Compile Include="Tools\InsertCaptionTool.cs" />
+    <Compile Include="Tools\InsertTocTool.cs" />
+    <Compile Include="Tools\InsertImageTool.cs" />
+    <Compile Include="Tools\SetPageSetupTool.cs" />
+    <Compile Include="Tools\SetHeaderFooterTool.cs" />
+    <Compile Include="Tools\BatchOperationsTool.cs" />
+    <Compile Include="Tools\LoadSkillTool.cs" />
     <!-- 插件入口 -->
     <Compile Include="FuXing.cs">
       <SubType>UserControl</SubType>

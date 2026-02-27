@@ -19,7 +19,7 @@
         "panel": "shared"
       },
       "problemMatcher": "$msCompile",
-      "detail": "编译 Debug 版本，PostBuild.bat 会自动调用 RegAsm 注册 COM（需管理员权限运行 VS Code）"
+      "detail": "编译 Debug 版本并自动注册 COM（用户级，无需管理员）"
     },
     {
       "label": "插件：编译 Release",
@@ -39,7 +39,7 @@
       "detail": "编译 Release 版本（不自动注册 COM）"
     },
     {
-      "label": "插件：手动注册 COM（管理员）",
+      "label": "插件：手动注册 COM",
       "type": "shell",
       "command": "${workspaceFolder}\\fronted_word_tools\\RegisterPlugin.bat",
       "group": "none",
@@ -48,7 +48,7 @@
         "panel": "shared"
       },
       "problemMatcher": [],
-      "detail": "注册 COM 到 Windows 注册表，需以管理员身份运行 VS Code"
+      "detail": "注册 COM 到 Windows 注册表（用户级，无需管理员）"
     },
     {
       "label": "插件：注销 COM",
@@ -60,7 +60,7 @@
         "panel": "shared"
       },
       "problemMatcher": [],
-      "detail": "从注册表中移除插件注册"
+      "detail": "从注册表中移除插件注册（用户级，无需管理员）"
     },
     {
       "label": "插件：快速重新注册 COM",

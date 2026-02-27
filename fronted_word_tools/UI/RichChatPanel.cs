@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AntdUI;
 
@@ -44,6 +45,9 @@ namespace FuXing.UI
         public string Text { get; set; }
         private readonly ChatRole _role;
 
+        private List<TextSegment> _cachedSegments;
+        private string _cachedSegmentsText;
+
         private static readonly Font NormalFont = new Font("Microsoft YaHei UI", 9.5F);
         private static readonly Font BoldFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
         private static readonly Font H1Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold);
@@ -56,12 +60,22 @@ namespace FuXing.UI
             _role = role;
         }
 
+        private List<TextSegment> GetSegments()
+        {
+            if (_cachedSegments == null || _cachedSegmentsText != Text)
+            {
+                _cachedSegments = ParseSegments(Text);
+                _cachedSegmentsText = Text;
+            }
+            return _cachedSegments;
+        }
+
         public int MeasureHeight(Graphics g, int width)
         {
             if (string.IsNullOrEmpty(Text)) return 0;
             int totalH = 0;
             var canvas = g.High();
-            foreach (var seg in ParseSegments(Text))
+            foreach (var seg in GetSegments())
             {
                 var size = canvas.MeasureText(seg.Text, seg.Font, width);
                 totalH += size.Height + seg.ExtraSpacing;
@@ -75,7 +89,7 @@ namespace FuXing.UI
             var fgColor = isUser ? Color.White : Color.FromArgb(31, 41, 55);
             int y = bounds.Y;
             var canvas = g.High();
-            foreach (var seg in ParseSegments(Text))
+            foreach (var seg in GetSegments())
             {
                 var color = seg.IsSecondary ? Color.FromArgb(107, 114, 128) : fgColor;
                 var size = canvas.MeasureText(seg.Text, seg.Font, bounds.Width);
@@ -155,6 +169,168 @@ namespace FuXing.UI
             }
             return segments;
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  表格块 — 渲染 Markdown 表格
+    // ════════════════════════════════════════════════════════════════
+
+    internal class TableBlock : IContentBlock
+    {
+        private readonly string[][] _rows; // 第一行为表头
+        private readonly string _rawText;  // 原始文本，用于复制
+        private readonly ChatRole _role;
+
+        private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+        private static readonly Font CellFont = new Font("Microsoft YaHei UI", 9F);
+        private const int CellPadH = 8;
+        private const int CellPadV = 5;
+        private static readonly Color HeaderBg = Color.FromArgb(243, 244, 246);
+        private static readonly Color GridColor = Color.FromArgb(220, 223, 228);
+        private static readonly Color AltRowBg = Color.FromArgb(249, 250, 251);
+
+        public TableBlock(List<string> tableLines, ChatRole role)
+        {
+            _role = role;
+            _rawText = string.Join("\n", tableLines);
+            var rows = new List<string[]>();
+            foreach (var line in tableLines)
+            {
+                var trimmed = line.Trim();
+                // 跳过分隔行 |---|---|
+                if (Regex.IsMatch(trimmed, @"^\|[\s\-:\|]+\|$"))
+                    continue;
+                var cells = ParseRow(trimmed);
+                if (cells.Length > 0)
+                    rows.Add(cells);
+            }
+            _rows = rows.ToArray();
+        }
+
+        public string GetPlainText() => _rawText;
+
+        private static string[] ParseRow(string line)
+        {
+            line = line.Trim();
+            if (line.StartsWith("|")) line = line.Substring(1);
+            if (line.EndsWith("|")) line = line.Substring(0, line.Length - 1);
+            return line.Split('|').Select(c => c.Trim()).ToArray();
+        }
+
+        private int ColumnCount => _rows.Length > 0 ? _rows.Max(r => r.Length) : 0;
+
+        private int[] CalcColumnWidths(Graphics g, int availableWidth)
+        {
+            int cols = ColumnCount;
+            if (cols == 0) return new int[0];
+            var canvas = g.High();
+            var idealWidths = new int[cols];
+            for (int r = 0; r < _rows.Length; r++)
+            {
+                var font = (r == 0) ? HeaderFont : CellFont;
+                for (int c = 0; c < cols && c < _rows[r].Length; c++)
+                {
+                    var size = canvas.MeasureText(_rows[r][c], font, 9999);
+                    idealWidths[c] = Math.Max(idealWidths[c], size.Width + CellPadH * 2);
+                }
+            }
+            for (int c = 0; c < cols; c++)
+                idealWidths[c] = Math.Max(idealWidths[c], 40);
+
+            int totalIdeal = idealWidths.Sum();
+            if (totalIdeal <= availableWidth)
+                return idealWidths;
+
+            // 超宽时按比例缩放
+            var widths = new int[cols];
+            for (int c = 0; c < cols; c++)
+                widths[c] = Math.Max(30, (int)(idealWidths[c] * (double)availableWidth / totalIdeal));
+            return widths;
+        }
+
+        private int RowHeight(Graphics g, int[] colWidths, int rowIdx)
+        {
+            if (rowIdx >= _rows.Length) return 0;
+            var canvas = g.High();
+            var row = _rows[rowIdx];
+            int maxH = 0;
+            for (int c = 0; c < colWidths.Length && c < row.Length; c++)
+            {
+                var font = (rowIdx == 0) ? HeaderFont : CellFont;
+                int textW = Math.Max(10, colWidths[c] - CellPadH * 2);
+                var size = canvas.MeasureText(row[c], font, textW);
+                maxH = Math.Max(maxH, size.Height);
+            }
+            return maxH + CellPadV * 2;
+        }
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            if (_rows.Length == 0) return 0;
+            var colWidths = CalcColumnWidths(g, width);
+            int totalH = 0;
+            for (int r = 0; r < _rows.Length; r++)
+                totalH += RowHeight(g, colWidths, r);
+            return totalH + 1;
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            if (_rows.Length == 0) return;
+            var colWidths = CalcColumnWidths(g, bounds.Width);
+            var canvas = g.High();
+            var fgColor = isUser ? Color.White : Color.FromArgb(31, 41, 55);
+            int tableWidth = colWidths.Sum();
+
+            using (var gridPen = new Pen(isUser ? Color.FromArgb(80, 255, 255, 255) : GridColor))
+            {
+                var headerBg = isUser ? Color.FromArgb(30, 255, 255, 255) : HeaderBg;
+                var altBg = isUser ? Color.FromArgb(15, 255, 255, 255) : AltRowBg;
+
+                int y = bounds.Y;
+                for (int r = 0; r < _rows.Length; r++)
+                {
+                    int rowH = RowHeight(g, colWidths, r);
+                    int x = bounds.X;
+
+                    // 行背景
+                    if (r == 0)
+                        using (var brush = new SolidBrush(headerBg))
+                            g.FillRectangle(brush, x, y, tableWidth, rowH);
+                    else if (r % 2 == 0)
+                        using (var brush = new SolidBrush(altBg))
+                            g.FillRectangle(brush, x, y, tableWidth, rowH);
+
+                    // 绘制单元格文本
+                    var row = _rows[r];
+                    for (int c = 0; c < colWidths.Length; c++)
+                    {
+                        int textW = Math.Max(10, colWidths[c] - CellPadH * 2);
+                        var cellRect = new Rectangle(x + CellPadH, y + CellPadV, textW, rowH - CellPadV * 2);
+                        var font = (r == 0) ? HeaderFont : CellFont;
+                        string text = (c < row.Length) ? row[c] : "";
+                        canvas.DrawText(text, font, fgColor, cellRect,
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        // 右侧竖线
+                        g.DrawLine(gridPen, x + colWidths[c], y, x + colWidths[c], y + rowH);
+                        x += colWidths[c];
+                    }
+
+                    // 左侧竖线
+                    g.DrawLine(gridPen, bounds.X, y, bounds.X, y + rowH);
+                    // 行底部横线
+                    g.DrawLine(gridPen, bounds.X, y + rowH, bounds.X + tableWidth, y + rowH);
+                    // 首行顶部横线
+                    if (r == 0)
+                        g.DrawLine(gridPen, bounds.X, y, bounds.X + tableWidth, y);
+
+                    y += rowH;
+                }
+            }
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds) => false;
+        public void OnClick(Point pt, Rectangle bounds) { }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -277,26 +453,44 @@ namespace FuXing.UI
         public string StatusText { get; set; }
         public ToolCallStatus Status { get; set; }
         public List<string> Details { get; set; } = new List<string>();
+        public bool IsExpanded { get; set; }
+        internal event Action ToggleRequested;
 
-        private const int HeaderH = 30;
+        // 与 ThinkBlock 保持一致的布局常量
+        private const int HeaderH = 28;
         private const int DetailLineH = 22;
         private const int Pad = 10;
 
-        private static readonly Font NameFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
+        // 字体与 ThinkBlock 一致
+        private static readonly Font NameFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         private static readonly Font StatusFont = new Font("Microsoft YaHei UI", 8.5F);
         private static readonly Font DetailFont = new Font("Microsoft YaHei UI", 8.5F);
 
-        private static readonly Color CardBg = Color.FromArgb(250, 251, 252);
-        private static readonly Color CardBorder = Color.FromArgb(216, 222, 228);
+        // 颜色与 ThinkBlock 一致
+        private static readonly Color CardBg = Color.FromArgb(243, 244, 246);
+        private static readonly Color CardBorder = Color.FromArgb(229, 231, 235);
+        private static readonly Color HeaderFg = Color.FromArgb(107, 114, 128);
+        private static readonly Color ContentFg = Color.FromArgb(75, 85, 99);
         private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
         private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
         private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
 
+        // 工具英文函数名 → 中文显示名：从 ToolRegistry 动态获取
+        /// <summary>将函数名翻译为中文显示名</summary>
+        private static string TranslateToolName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            var registry = Connect.CurrentInstance?.ToolRegistry;
+            if (registry != null) return registry.GetDisplayName(name);
+            return name;
+        }
+
         public ToolCallCard(string toolName, string statusText, ToolCallStatus status)
         {
-            ToolName = toolName;
+            ToolName = TranslateToolName(toolName);
             StatusText = statusText;
             Status = status;
+            IsExpanded = false;
         }
 
         /// <summary>更新卡片状态</summary>
@@ -309,12 +503,13 @@ namespace FuXing.UI
 
         public int MeasureHeight(Graphics g, int width)
         {
-            int h = HeaderH + Pad * 2;
+            if (!IsExpanded) return HeaderH;
+            int h = HeaderH;
             if (!string.IsNullOrEmpty(StatusText))
             {
                 var canvas = g.High();
-                var size = canvas.MeasureText(StatusText, StatusFont, width - Pad * 2 - 30);
-                h += Math.Max(DetailLineH, size.Height);
+                var size = canvas.MeasureText(StatusText, StatusFont, width - 24);
+                h += Math.Max(DetailLineH, size.Height) + 4;
             }
             if (Details.Count > 0)
                 h += Details.Count * DetailLineH + 4;
@@ -327,7 +522,7 @@ namespace FuXing.UI
                             : Status == ToolCallStatus.Error ? ErrorColor
                             : RunningColor;
 
-            // 卡片背景 + 边框
+            // 圆角背景（与 ThinkBlock 一致）
             using (var path = RoundedRect(bounds, 8))
             {
                 using (var brush = new SolidBrush(CardBg))
@@ -336,53 +531,70 @@ namespace FuXing.UI
                     g.DrawPath(pen, path);
             }
 
-            // 左侧强调色条
-            var accentRect = new Rectangle(bounds.X + 1, bounds.Y + 8, 3, bounds.Height - 16);
-            using (var brush = new SolidBrush(accentColor))
-                g.FillRectangle(brush, accentRect);
+            // 左侧装饰线（与 ThinkBlock 一致）
+            using (var pen = new Pen(Color.FromArgb(156, 163, 175), 2))
+                g.DrawLine(pen, bounds.X + 4, bounds.Y + 8, bounds.X + 4, bounds.Bottom - 8);
 
             var canvas = g.High();
             {
-                // 状态 emoji 图标 + 工具名称
+                // 折叠/展开指示符 + 状态 emoji + 工具中文名
+                string chevron = IsExpanded ? "▾" : "▸";
                 string icon = Status == ToolCallStatus.Success ? "✅"
                             : Status == ToolCallStatus.Error ? "❌" : "⏳";
 
-                int textX = bounds.X + Pad + 6;
-                int textY = bounds.Y + Pad;
-                canvas.DrawText($"{icon}  {ToolName}", NameFont, Color.FromArgb(31, 41, 55),
-                    new Rectangle(textX, textY, bounds.Width - Pad * 2 - 6, HeaderH),
+                int textX = bounds.X + 12;
+                int textY = bounds.Y;
+                canvas.DrawText($"{chevron}  {icon} {ToolName}", NameFont, HeaderFg,
+                    new Rectangle(textX, textY, bounds.Width - 24, HeaderH),
                     FormatFlags.VerticalCenter | FormatFlags.Left);
+
+                // 折叠/展开提示
+                using (var hintFont = new Font("Microsoft YaHei UI", 7.5F))
+                    canvas.DrawText(IsExpanded ? "点击收起" : "点击展开", hintFont, Color.FromArgb(156, 163, 175),
+                        new Rectangle(textX, textY, bounds.Width - 24, HeaderH),
+                        FormatFlags.VerticalCenter | FormatFlags.Right);
+
+                if (!IsExpanded) return;
 
                 textY += HeaderH;
 
                 // 分隔线
-                using (var pen = new Pen(Color.FromArgb(229, 231, 235)))
-                    g.DrawLine(pen, textX, textY - 2, bounds.Right - Pad, textY - 2);
+                int sepY = textY;
+                using (var pen = new Pen(CardBorder))
+                    g.DrawLine(pen, textX, sepY, bounds.Right - 12, sepY);
 
                 // 状态文本
                 if (!string.IsNullOrEmpty(StatusText))
                 {
-                    var statusSize = canvas.MeasureText(StatusText, StatusFont, bounds.Width - Pad * 2 - 30);
+                    var statusSize = canvas.MeasureText(StatusText, StatusFont, bounds.Width - 24);
                     int statusH = Math.Max(DetailLineH, statusSize.Height);
                     canvas.DrawText(StatusText, StatusFont, accentColor,
-                        new Rectangle(textX + 20, textY, bounds.Width - Pad * 2 - 26, statusH),
+                        new Rectangle(textX, textY + 4, bounds.Width - 24, statusH),
                         FormatFlags.Top | FormatFlags.Left);
-                    textY += statusH;
+                    textY += statusH + 4;
                 }
 
                 // 详细信息列表
                 foreach (var detail in Details)
                 {
-                    canvas.DrawText($"  ▪  {detail}", DetailFont, Color.FromArgb(75, 85, 99),
-                        new Rectangle(textX + 20, textY, bounds.Width - Pad * 2 - 26, DetailLineH),
+                    canvas.DrawText($"  ▪  {detail}", DetailFont, ContentFg,
+                        new Rectangle(textX, textY, bounds.Width - 24, DetailLineH),
                         FormatFlags.VerticalCenter | FormatFlags.Left);
                     textY += DetailLineH;
                 }
             }
         }
 
-        public bool HitTest(Point pt, Rectangle bounds) => false;
-        public void OnClick(Point pt, Rectangle bounds) { }
+        public bool HitTest(Point pt, Rectangle bounds) => pt.Y <= bounds.Y + HeaderH;
+
+        public void OnClick(Point pt, Rectangle bounds)
+        {
+            if (pt.Y <= bounds.Y + HeaderH)
+            {
+                IsExpanded = !IsExpanded;
+                ToggleRequested?.Invoke();
+            }
+        }
 
         private GraphicsPath RoundedRect(Rectangle r, int radius)
         {
@@ -398,6 +610,874 @@ namespace FuXing.UI
             p.CloseFigure();
             return p;
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  子智能体块 — 展示子智能体的完整执行过程
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>子智能体执行步骤类型</summary>
+    internal enum SubAgentStepType { Round, Thinking, ToolCall, Output }
+
+    /// <summary>子智能体内部执行步骤记录</summary>
+    internal class SubAgentStep
+    {
+        public SubAgentStepType Type;
+        public string Text;
+        public ToolCallStatus Status; // 用于 ToolCall 类型
+    }
+
+    /// <summary>
+    /// 子智能体专用内容块。展示子智能体的轮次、思考、工具调用和最终输出，
+    /// 比普通 ToolCallCard 提供更丰富的执行过程可视化。
+    /// </summary>
+    public class SubAgentBlock : IContentBlock
+    {
+        public string TaskName { get; set; }
+        public ToolCallStatus Status { get; set; }
+        public bool IsExpanded { get; set; }
+        internal event Action ToggleRequested;
+
+        private readonly List<SubAgentStep> _steps = new List<SubAgentStep>();
+
+        // 布局常量（与 ToolCallCard / ThinkBlock 一致）
+        private const int HeaderH = 28;
+        private const int StepLineH = 20;
+        private const int Pad = 10;
+        private const int MaxThinkPreviewLen = 100;
+        private const int MaxOutputPreviewLen = 120;
+
+        // 字体
+        private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        private static readonly Font StepFont = new Font("Microsoft YaHei UI", 8F);
+        private static readonly Font RoundFont = new Font("Microsoft YaHei UI", 7.5F, FontStyle.Bold);
+
+        // 颜色（与 ToolCallCard / ThinkBlock 一致）
+        private static readonly Color CardBg = Color.FromArgb(243, 244, 246);
+        private static readonly Color CardBorder = Color.FromArgb(229, 231, 235);
+        private static readonly Color HeaderFg = Color.FromArgb(107, 114, 128);
+        private static readonly Color ContentFg = Color.FromArgb(75, 85, 99);
+        private static readonly Color ThinkFg = Color.FromArgb(130, 140, 155);
+        private static readonly Color RoundFg = Color.FromArgb(156, 163, 175);
+        private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
+        private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
+        private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
+        private static readonly Color AccentLine = Color.FromArgb(99, 102, 241); // 靛蓝装饰线，区别于普通工具
+
+        /// <summary>将函数名翻译为中文显示名</summary>
+        private static string TranslateToolName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            var registry = Connect.CurrentInstance?.ToolRegistry;
+            if (registry != null) return registry.GetDisplayName(name);
+            return name;
+        }
+
+        public SubAgentBlock(string taskName)
+        {
+            TaskName = taskName;
+            Status = ToolCallStatus.Running;
+            IsExpanded = true; // 默认展开，让用户看到执行过程
+        }
+
+        // ── 步骤操作 API（由 ISubAgentProgress 实现调用）──
+
+        /// <summary>添加轮次开始步骤</summary>
+        public void AddRound(int round, int maxRounds)
+        {
+            _steps.Add(new SubAgentStep
+            {
+                Type = SubAgentStepType.Round,
+                Text = $"轮次 {round}/{maxRounds}"
+            });
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>添加思考内容步骤</summary>
+        public void AddThinking(string content)
+        {
+            string preview = Abbreviate(content, MaxThinkPreviewLen);
+            _steps.Add(new SubAgentStep
+            {
+                Type = SubAgentStepType.Thinking,
+                Text = preview
+            });
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>添加工具调用步骤（初始为运行中状态）</summary>
+        public void AddToolCallStep(string toolName)
+        {
+            _steps.Add(new SubAgentStep
+            {
+                Type = SubAgentStepType.ToolCall,
+                Text = TranslateToolName(toolName),
+                Status = ToolCallStatus.Running
+            });
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>更新最后一个工具调用步骤的状态</summary>
+        public void UpdateLastToolCallStep(bool success)
+        {
+            for (int i = _steps.Count - 1; i >= 0; i--)
+            {
+                if (_steps[i].Type == SubAgentStepType.ToolCall)
+                {
+                    _steps[i].Status = success ? ToolCallStatus.Success : ToolCallStatus.Error;
+                    break;
+                }
+            }
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>添加最终输出步骤</summary>
+        public void AddOutput(string text, bool success)
+        {
+            if (!string.IsNullOrEmpty(text))
+            {
+                string preview = Abbreviate(text, MaxOutputPreviewLen);
+                _steps.Add(new SubAgentStep
+                {
+                    Type = SubAgentStepType.Output,
+                    Text = preview,
+                    Status = success ? ToolCallStatus.Success : ToolCallStatus.Error
+                });
+            }
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>标记整体完成状态</summary>
+        public void SetComplete(ToolCallStatus status)
+        {
+            Status = status;
+            ToggleRequested?.Invoke();
+        }
+
+        // ── IContentBlock 实现 ──
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            if (!IsExpanded) return HeaderH;
+            int h = HeaderH + 4; // 4px padding after header separator
+            foreach (var step in _steps)
+                h += StepLineH;
+            return Math.Max(HeaderH, h);
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            // 圆角背景
+            using (var path = RoundedRect(bounds, 8))
+            {
+                using (var brush = new SolidBrush(CardBg))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(CardBorder))
+                    g.DrawPath(pen, path);
+            }
+
+            // 左侧装饰线（靛蓝色，区别于普通工具的灰色）
+            using (var pen = new Pen(AccentLine, 2))
+                g.DrawLine(pen, bounds.X + 4, bounds.Y + 8, bounds.X + 4, bounds.Bottom - 8);
+
+            var canvas = g.High();
+
+            // ── 头部 ──
+            string chevron = IsExpanded ? "▾" : "▸";
+            string statusIcon = Status == ToolCallStatus.Success ? "✅"
+                              : Status == ToolCallStatus.Error ? "❌" : "⏳";
+            string statusLabel = Status == ToolCallStatus.Success ? "完成"
+                               : Status == ToolCallStatus.Error ? "失败" : "执行中";
+
+            canvas.DrawText($"{chevron}  🤖 子智能体：{TaskName}", HeaderFont, HeaderFg,
+                new Rectangle(bounds.X + 12, bounds.Y, bounds.Width - 24, HeaderH),
+                FormatFlags.VerticalCenter | FormatFlags.Left);
+
+            canvas.DrawText($"{statusIcon} {statusLabel}", HeaderFont,
+                Status == ToolCallStatus.Success ? SuccessColor
+                : Status == ToolCallStatus.Error ? ErrorColor : RunningColor,
+                new Rectangle(bounds.X + 12, bounds.Y, bounds.Width - 24, HeaderH),
+                FormatFlags.VerticalCenter | FormatFlags.Right);
+
+            if (!IsExpanded) return;
+
+            // ── 分隔线 ──
+            int sepY = bounds.Y + HeaderH;
+            using (var pen = new Pen(CardBorder))
+                g.DrawLine(pen, bounds.X + 12, sepY, bounds.Right - 12, sepY);
+
+            // ── 步骤列表 ──
+            int y = sepY + 4;
+            foreach (var step in _steps)
+            {
+                var rect = new Rectangle(bounds.X + 16, y, bounds.Width - 32, StepLineH);
+
+                switch (step.Type)
+                {
+                    case SubAgentStepType.Round:
+                        canvas.DrawText($"─── {step.Text} ───", RoundFont, RoundFg, rect,
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        break;
+
+                    case SubAgentStepType.Thinking:
+                        canvas.DrawText($"💭 {step.Text}", StepFont, ThinkFg, rect,
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        break;
+
+                    case SubAgentStepType.ToolCall:
+                        string toolIcon = step.Status == ToolCallStatus.Success ? "✅"
+                                        : step.Status == ToolCallStatus.Error ? "❌" : "⏳";
+                        var toolColor = step.Status == ToolCallStatus.Success ? SuccessColor
+                                      : step.Status == ToolCallStatus.Error ? ErrorColor : RunningColor;
+                        canvas.DrawText($"🔧 {step.Text}", StepFont, ContentFg, rect,
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        canvas.DrawText(toolIcon, StepFont, toolColor, rect,
+                            FormatFlags.VerticalCenter | FormatFlags.Right);
+                        break;
+
+                    case SubAgentStepType.Output:
+                        var outputColor = step.Status == ToolCallStatus.Success ? SuccessColor : ErrorColor;
+                        canvas.DrawText($"📋 {step.Text}", StepFont, outputColor, rect,
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        break;
+                }
+
+                y += StepLineH;
+            }
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds) => pt.Y <= bounds.Y + HeaderH;
+
+        public void OnClick(Point pt, Rectangle bounds)
+        {
+            if (pt.Y <= bounds.Y + HeaderH)
+            {
+                IsExpanded = !IsExpanded;
+                ToggleRequested?.Invoke();
+            }
+        }
+
+        // ── 工具方法 ──
+
+        private static string Abbreviate(string text, int maxLen)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            // 取第一个有效行（跳过空行）
+            string firstLine = null;
+            foreach (var line in text.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (!string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("#"))
+                {
+                    firstLine = trimmed;
+                    break;
+                }
+            }
+            if (firstLine == null) firstLine = text.Replace('\n', ' ').Trim();
+            if (firstLine.Length > maxLen)
+                firstLine = firstLine.Substring(0, maxLen) + "…";
+            return firstLine;
+        }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  审批卡片 — 危险操作嵌入式确认（替代弹窗 MessageBox）
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 危险操作审批卡片 — 嵌入聊天面板，用户通过点击按钮完成审批。
+    /// 使用 <see cref="ResultTask"/> 异步等待用户决策。
+    /// </summary>
+    internal class ApprovalCard : IContentBlock
+    {
+        public string ToolDisplayName { get; }
+        public string Summary { get; }
+
+        private bool? _result;
+        private readonly TaskCompletionSource<bool> _tcs = new TaskCompletionSource<bool>();
+
+        /// <summary>等待用户审批结果（true=允许，false=拒绝）</summary>
+        public Task<bool> ResultTask => _tcs.Task;
+
+        internal event Action ToggleRequested;
+
+        // 布局常量
+        private const int HeaderH = 30;
+        private const int TopPad = 14;
+        private const int SidePad = 14;
+        private const int SepGap = 10;     // 标题与分隔线间距
+        private const int ContentGap = 12; // 分隔线与正文间距
+        private const int ButtonH = 32;
+        private const int ButtonW = 88;
+        private const int ButtonGap = 12;
+        private const int ButtonTopGap = 12;
+        private const int BottomPad = 14;
+        private const int ResultH = 26;
+
+        // 缓存按钮 Y 偏移（相对于块顶部），由 MeasureHeight 计算
+        private int _cachedBtnYOffset;
+
+        // 字体
+        private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
+        private static readonly Font DescFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font SummaryFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font ButtonFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        private static readonly Font ResultFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+
+        // 颜色 — 低饱和度柔和风格
+        private static readonly Color PendingBg = Color.FromArgb(254, 252, 243);       // 极浅暖黄
+        private static readonly Color PendingBorder = Color.FromArgb(234, 213, 160);   // 柔和琥珀边框
+        private static readonly Color HeaderFg = Color.FromArgb(120, 80, 20);          // 深棕标题
+        private static readonly Color DescFg = Color.FromArgb(140, 110, 60);           // 柔和描述文本
+        private static readonly Color SummaryFg = Color.FromArgb(75, 85, 99);          // 摘要文本
+        private static readonly Color SepColor = Color.FromArgb(230, 218, 185);        // 分隔线
+
+        // 按钮 — 柔和描边风格
+        private static readonly Color ApproveBtnBg = Color.FromArgb(236, 253, 245);     // 极浅绿
+        private static readonly Color ApproveBtnBorder = Color.FromArgb(134, 239, 172); // 柔和绿边框
+        private static readonly Color ApproveBtnText = Color.FromArgb(22, 101, 52);     // 深绿文字
+        private static readonly Color RejectBtnBg = Color.FromArgb(243, 244, 246);      // 极浅灰
+        private static readonly Color RejectBtnBorder = Color.FromArgb(209, 213, 219);  // 灰边框
+        private static readonly Color RejectBtnText = Color.FromArgb(55, 65, 81);       // 深灰文字
+
+        // 审批结果状态背景
+        private static readonly Color ApprovedBg = Color.FromArgb(236, 253, 245);
+        private static readonly Color ApprovedBorder = Color.FromArgb(134, 239, 172);
+        private static readonly Color ApprovedFg = Color.FromArgb(22, 101, 52);
+        private static readonly Color RejectedBg = Color.FromArgb(254, 242, 242);
+        private static readonly Color RejectedBorder = Color.FromArgb(252, 165, 165);
+        private static readonly Color RejectedFg = Color.FromArgb(153, 27, 27);
+
+        public ApprovalCard(string toolDisplayName, string summary)
+        {
+            ToolDisplayName = toolDisplayName;
+            Summary = summary;
+        }
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            int textW = width - SidePad * 2;
+            var canvas = g.High();
+
+            int h = TopPad;
+            h += HeaderH;          // 标题行
+            h += SepGap;           // 标题→分隔线间距
+            h += 1;                // 分隔线
+            h += ContentGap;       // 分隔线→正文间距
+
+            // 描述提示语
+            var descSize = canvas.MeasureText("AI 助手请求执行以下操作，请确认是否允许：", DescFont, textW);
+            h += descSize.Height + 8;
+
+            // 摘要文本
+            if (!string.IsNullOrEmpty(Summary))
+            {
+                var summarySize = canvas.MeasureText(Summary, SummaryFont, textW);
+                h += summarySize.Height + ButtonTopGap;
+            }
+
+            _cachedBtnYOffset = h; // 缓存按钮起始位置
+
+            if (_result == null)
+                h += ButtonH + BottomPad;
+            else
+                h += ResultH + BottomPad;
+
+            return h;
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            var bgColor = _result == null ? PendingBg
+                        : _result.Value ? ApprovedBg : RejectedBg;
+            var borderColor = _result == null ? PendingBorder
+                            : _result.Value ? ApprovedBorder : RejectedBorder;
+            var accentColor = _result == null ? PendingBorder
+                            : _result.Value ? ApprovedFg : RejectedFg;
+
+            // 圆角背景
+            using (var path = RoundedRect(bounds, 8))
+            {
+                using (var brush = new SolidBrush(bgColor))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(borderColor))
+                    g.DrawPath(pen, path);
+            }
+
+            // 左侧装饰线
+            using (var pen = new Pen(accentColor, 2.5f))
+                g.DrawLine(pen, bounds.X + 4, bounds.Y + 10, bounds.X + 4, bounds.Bottom - 10);
+
+            var canvas = g.High();
+            int textX = bounds.X + SidePad;
+            int textW = bounds.Width - SidePad * 2;
+            int y = bounds.Y + TopPad;
+
+            // 标题
+            canvas.DrawText("操作审批", HeaderFont, HeaderFg,
+                new Rectangle(textX, y, textW, HeaderH),
+                FormatFlags.VerticalCenter | FormatFlags.Left);
+            y += HeaderH + SepGap;
+
+            // 分隔线
+            using (var pen = new Pen(_result == null ? SepColor : borderColor))
+                g.DrawLine(pen, textX, y, bounds.Right - SidePad, y);
+            y += 1 + ContentGap;
+
+            // 描述提示
+            string desc = "AI 助手请求执行以下操作，请确认是否允许：";
+            var descSize = canvas.MeasureText(desc, DescFont, textW);
+            canvas.DrawText(desc, DescFont, DescFg,
+                new Rectangle(textX, y, textW, descSize.Height),
+                FormatFlags.Top | FormatFlags.Left);
+            y += descSize.Height + 8;
+
+            // 摘要文本
+            if (!string.IsNullOrEmpty(Summary))
+            {
+                var summarySize = canvas.MeasureText(Summary, SummaryFont, textW);
+                canvas.DrawText(Summary, SummaryFont, SummaryFg,
+                    new Rectangle(textX, y, textW, summarySize.Height),
+                    FormatFlags.Top | FormatFlags.Left);
+                y += summarySize.Height + ButtonTopGap;
+            }
+
+            if (_result == null)
+            {
+                // 绘制审批按钮（柔和描边风格）
+                int btnX = textX;
+
+                // 允许按钮
+                var approveRect = new Rectangle(btnX, y, ButtonW, ButtonH);
+                using (var path = RoundedRect(approveRect, 6))
+                {
+                    using (var brush = new SolidBrush(ApproveBtnBg))
+                        g.FillPath(brush, path);
+                    using (var pen = new Pen(ApproveBtnBorder))
+                        g.DrawPath(pen, path);
+                }
+                canvas.DrawText("允许执行", ButtonFont, ApproveBtnText, approveRect,
+                    FormatFlags.Center);
+
+                // 拒绝按钮
+                var rejectRect = new Rectangle(btnX + ButtonW + ButtonGap, y, ButtonW, ButtonH);
+                using (var path = RoundedRect(rejectRect, 6))
+                {
+                    using (var brush = new SolidBrush(RejectBtnBg))
+                        g.FillPath(brush, path);
+                    using (var pen = new Pen(RejectBtnBorder))
+                        g.DrawPath(pen, path);
+                }
+                canvas.DrawText("拒绝", ButtonFont, RejectBtnText, rejectRect,
+                    FormatFlags.Center);
+            }
+            else
+            {
+                // 显示审批结果
+                string resultText = _result.Value ? "已允许执行" : "已拒绝执行";
+                var resultColor = _result.Value ? ApprovedFg : RejectedFg;
+                canvas.DrawText(resultText, ResultFont, resultColor,
+                    new Rectangle(textX, y, textW, ResultH),
+                    FormatFlags.VerticalCenter | FormatFlags.Left);
+            }
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds)
+        {
+            if (_result != null) return false;
+            var (approveRect, rejectRect) = ComputeButtonRects(bounds);
+            return approveRect.Contains(pt) || rejectRect.Contains(pt);
+        }
+
+        public void OnClick(Point pt, Rectangle bounds)
+        {
+            if (_result != null) return;
+            var (approveRect, rejectRect) = ComputeButtonRects(bounds);
+
+            if (approveRect.Contains(pt))
+            {
+                _result = true;
+                _tcs.TrySetResult(true);
+                ToggleRequested?.Invoke();
+            }
+            else if (rejectRect.Contains(pt))
+            {
+                _result = false;
+                _tcs.TrySetResult(false);
+                ToggleRequested?.Invoke();
+            }
+        }
+
+        private (Rectangle approve, Rectangle reject) ComputeButtonRects(Rectangle bounds)
+        {
+            int y = bounds.Y + _cachedBtnYOffset;
+            int btnX = bounds.X + SidePad;
+            return (
+                new Rectangle(btnX, y, ButtonW, ButtonH),
+                new Rectangle(btnX + ButtonW + ButtonGap, y, ButtonW, ButtonH)
+            );
+        }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  用户问答卡片 — LLM 向用户提问，支持选项和自由输入
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// LLM 向用户提问的卡片。支持选项点击和自由文本输入。
+    /// 使用 <see cref="ResultTask"/> 异步等待用户回答。
+    /// </summary>
+    internal class AskUserCard : IContentBlock
+    {
+        public string Question { get; }
+        public List<AskUserOption> Options { get; }
+        public bool AllowFreeInput { get; }
+
+        private string _answer;
+        private readonly TaskCompletionSource<string> _tcs = new TaskCompletionSource<string>();
+
+        /// <summary>等待用户回答</summary>
+        public Task<string> ResultTask => _tcs.Task;
+
+        internal event Action ToggleRequested;
+
+        /// <summary>嵌入的输入控件（由 MessageGroup.AddAskUserCard 创建并注入）</summary>
+        internal TextBox EmbeddedInput { get; set; }
+        internal System.Windows.Forms.Label EmbeddedSubmitBtn { get; set; }
+
+        // 布局常量
+        private const int TopPad = 14;
+        private const int SidePad = 14;
+        private const int HeaderH = 28;
+        private const int SepGap = 8;
+        private const int ContentGap = 10;
+        private const int PillH = 32;
+        private const int PillPadH = 16;
+        private const int PillGap = 8;
+        private const int PillRowGap = 8;
+        private const int InputAreaH = 34;
+        private const int InputGap = 10;
+        private const int SubmitBtnW = 60;
+        private const int BottomPad = 14;
+        private const int AnsweredH = 26;
+
+        // 字体
+        private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
+        private static readonly Font QuestionFont = new Font("Microsoft YaHei UI", 9F);
+        private static readonly Font PillFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font PillDescFont = new Font("Microsoft YaHei UI", 7.5F);
+        private static readonly Font AnsweredFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+
+        // 颜色 — 冷灰蓝调，与审批卡片的暖黄区分
+        private static readonly Color CardBg = Color.FromArgb(248, 250, 254);
+        private static readonly Color CardBorder = Color.FromArgb(196, 206, 224);
+        private static readonly Color AccentColor = Color.FromArgb(99, 120, 180);
+        private static readonly Color HeaderFg = Color.FromArgb(40, 52, 80);
+        private static readonly Color QuestionFg = Color.FromArgb(55, 65, 81);
+        private static readonly Color SepColor = Color.FromArgb(218, 225, 238);
+
+        // 选项 pill — 柔和描边
+        private static readonly Color PillBg = Color.FromArgb(238, 243, 252);
+        private static readonly Color PillBorder = Color.FromArgb(180, 198, 230);
+        private static readonly Color PillText = Color.FromArgb(45, 65, 130);
+        private static readonly Color PillDescColor = Color.FromArgb(100, 116, 150);
+        private static readonly Color PillHoverBg = Color.FromArgb(222, 232, 250);
+
+        // 已回答状态
+        private static readonly Color AnsweredBg = Color.FromArgb(240, 249, 244);
+        private static readonly Color AnsweredBorder = Color.FromArgb(167, 227, 190);
+        private static readonly Color AnsweredAccent = Color.FromArgb(22, 101, 52);
+        private static readonly Color AnsweredFg = Color.FromArgb(22, 101, 52);
+
+        // 缓存 pill 矩形（MeasureHeight 中计算）
+        private List<Rectangle> _pillRects = new List<Rectangle>();
+        private int _cachedPillsEndY;
+        private int _hoveredPillIndex = -1;
+        private int _cachedInputYOffset;
+
+        public AskUserCard(string question, List<AskUserOption> options, bool allowFreeInput)
+        {
+            Question = question;
+            Options = options ?? new List<AskUserOption>();
+            AllowFreeInput = allowFreeInput;
+        }
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            int textW = width - SidePad * 2;
+            var canvas = g.High();
+
+            int h = TopPad;
+            h += HeaderH;
+            h += SepGap + 1 + ContentGap; // 分隔线区
+
+            // 问题文本
+            var qSize = canvas.MeasureText(Question, QuestionFont, textW);
+            h += qSize.Height + ContentGap;
+
+            // 计算 pill 布局（自动换行）
+            _pillRects.Clear();
+            if (Options.Count > 0 && _answer == null)
+            {
+                int px = 0;
+                int py = h;
+                foreach (var opt in Options)
+                {
+                    var labelSize = canvas.MeasureText(opt.Label, PillFont, textW);
+                    int pillW = labelSize.Width + PillPadH * 2;
+                    if (opt.Description != null)
+                    {
+                        var descSize = canvas.MeasureText(opt.Description, PillDescFont, textW);
+                        pillW = Math.Max(pillW, descSize.Width + PillPadH * 2);
+                    }
+                    pillW = Math.Max(pillW, 48);
+                    pillW = Math.Min(pillW, textW);
+
+                    int pillHeight = opt.Description != null ? PillH + 14 : PillH;
+
+                    if (px + pillW > textW && px > 0)
+                    {
+                        px = 0;
+                        py += pillHeight + PillRowGap;
+                    }
+                    // 矩形坐标是相对于卡片 bounds 的偏移（SidePad 已包含在 paint 中，这里用相对于 h 的偏移）
+                    _pillRects.Add(new Rectangle(px, py - h + (h - TopPad - HeaderH - SepGap - 1 - ContentGap - qSize.Height - ContentGap), pillW, pillHeight));
+                    // 实际上更简洁的方式：记录相对于块顶部的绝对偏移
+                    _pillRects[_pillRects.Count - 1] = new Rectangle(px, py, pillW, pillHeight);
+                    px += pillW + PillGap;
+                }
+                int lastPillBottom = _pillRects.Count > 0 ? _pillRects[_pillRects.Count - 1].Bottom : py;
+                h = lastPillBottom + PillRowGap;
+                _cachedPillsEndY = h;
+            }
+            else if (_answer != null)
+            {
+                h += AnsweredH;
+                _cachedPillsEndY = h;
+            }
+
+            // 自由输入区
+            if (AllowFreeInput && _answer == null)
+            {
+                _cachedInputYOffset = h;
+                h += InputAreaH + InputGap;
+            }
+
+            h += BottomPad;
+            return h;
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            bool answered = _answer != null;
+            var bgColor = answered ? AnsweredBg : CardBg;
+            var borderColor = answered ? AnsweredBorder : CardBorder;
+            var accentClr = answered ? AnsweredAccent : AccentColor;
+
+            // 圆角背景
+            using (var path = RoundedRect(bounds, 8))
+            {
+                using (var brush = new SolidBrush(bgColor))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(borderColor))
+                    g.DrawPath(pen, path);
+            }
+
+            // 左侧装饰线
+            using (var pen = new Pen(accentClr, 2.5f))
+                g.DrawLine(pen, bounds.X + 4, bounds.Y + 10, bounds.X + 4, bounds.Bottom - 10);
+
+            var canvas = g.High();
+            int textX = bounds.X + SidePad;
+            int textW = bounds.Width - SidePad * 2;
+            int y = bounds.Y + TopPad;
+
+            // 标题
+            canvas.DrawText("💬 需要您的输入", HeaderFont, answered ? AnsweredFg : HeaderFg,
+                new Rectangle(textX, y, textW, HeaderH),
+                FormatFlags.VerticalCenter | FormatFlags.Left);
+            y += HeaderH + SepGap;
+
+            // 分隔线
+            using (var pen = new Pen(answered ? AnsweredBorder : SepColor))
+                g.DrawLine(pen, textX, y, bounds.Right - SidePad, y);
+            y += 1 + ContentGap;
+
+            // 问题文本
+            var qSize = canvas.MeasureText(Question, QuestionFont, textW);
+            canvas.DrawText(Question, QuestionFont, QuestionFg,
+                new Rectangle(textX, y, textW, qSize.Height),
+                FormatFlags.Top | FormatFlags.Left);
+            y += qSize.Height + ContentGap;
+
+            if (!answered)
+            {
+                // 绘制选项 pills
+                for (int i = 0; i < _pillRects.Count && i < Options.Count; i++)
+                {
+                    var pr = _pillRects[i];
+                    var pillBounds = new Rectangle(textX + pr.X, bounds.Y + pr.Y, pr.Width, pr.Height);
+                    bool hovered = (i == _hoveredPillIndex);
+
+                    using (var path = RoundedRect(pillBounds, 6))
+                    {
+                        using (var brush = new SolidBrush(hovered ? PillHoverBg : PillBg))
+                            g.FillPath(brush, path);
+                        using (var pen = new Pen(PillBorder))
+                            g.DrawPath(pen, path);
+                    }
+
+                    if (Options[i].Description != null)
+                    {
+                        int labelH = PillH - 4;
+                        canvas.DrawText(Options[i].Label, PillFont, PillText,
+                            new Rectangle(pillBounds.X + PillPadH, pillBounds.Y + 2, pillBounds.Width - PillPadH * 2, labelH),
+                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        canvas.DrawText(Options[i].Description, PillDescFont, PillDescColor,
+                            new Rectangle(pillBounds.X + PillPadH, pillBounds.Y + labelH - 2, pillBounds.Width - PillPadH * 2, 14),
+                            FormatFlags.Top | FormatFlags.Left);
+                    }
+                    else
+                    {
+                        canvas.DrawText(Options[i].Label, PillFont, PillText, pillBounds,
+                            FormatFlags.Center);
+                    }
+                }
+
+                // 定位嵌入的输入控件
+                if (AllowFreeInput && EmbeddedInput != null && EmbeddedSubmitBtn != null)
+                {
+                    int inputY = bounds.Y + _cachedInputYOffset;
+                    int inputW = textW - SubmitBtnW - PillGap;
+                    EmbeddedInput.SetBounds(textX, inputY, inputW, InputAreaH);
+                    EmbeddedSubmitBtn.SetBounds(textX + inputW + PillGap, inputY, SubmitBtnW, InputAreaH);
+                    EmbeddedInput.Visible = true;
+                    EmbeddedSubmitBtn.Visible = true;
+                }
+            }
+            else
+            {
+                // 已回答：显示答案
+                canvas.DrawText($"已回答：{_answer}", AnsweredFont, AnsweredFg,
+                    new Rectangle(textX, y, textW, AnsweredH),
+                    FormatFlags.VerticalCenter | FormatFlags.Left);
+
+                // 隐藏嵌入控件
+                if (EmbeddedInput != null) EmbeddedInput.Visible = false;
+                if (EmbeddedSubmitBtn != null) EmbeddedSubmitBtn.Visible = false;
+            }
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds)
+        {
+            if (_answer != null) return false;
+            int textX = bounds.X + SidePad;
+            for (int i = 0; i < _pillRects.Count; i++)
+            {
+                var pr = _pillRects[i];
+                var pillBounds = new Rectangle(textX + pr.X, bounds.Y + pr.Y, pr.Width, pr.Height);
+                if (pillBounds.Contains(pt)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>鼠标移动时更新 hover 状态（由 MessageGroup 调用）</summary>
+        internal bool UpdateHover(Point pt, Rectangle bounds)
+        {
+            if (_answer != null) { _hoveredPillIndex = -1; return false; }
+            int textX = bounds.X + SidePad;
+            int oldHover = _hoveredPillIndex;
+            _hoveredPillIndex = -1;
+            for (int i = 0; i < _pillRects.Count; i++)
+            {
+                var pr = _pillRects[i];
+                var pillBounds = new Rectangle(textX + pr.X, bounds.Y + pr.Y, pr.Width, pr.Height);
+                if (pillBounds.Contains(pt)) { _hoveredPillIndex = i; break; }
+            }
+            return _hoveredPillIndex != oldHover;
+        }
+
+        public void OnClick(Point pt, Rectangle bounds)
+        {
+            if (_answer != null) return;
+            int textX = bounds.X + SidePad;
+            for (int i = 0; i < _pillRects.Count && i < Options.Count; i++)
+            {
+                var pr = _pillRects[i];
+                var pillBounds = new Rectangle(textX + pr.X, bounds.Y + pr.Y, pr.Width, pr.Height);
+                if (pillBounds.Contains(pt))
+                {
+                    Submit(Options[i].Label);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>提交自由文本答案（由嵌入的提交按钮调用）</summary>
+        internal void SubmitFreeText(string text)
+        {
+            if (_answer != null || string.IsNullOrWhiteSpace(text)) return;
+            Submit(text.Trim());
+        }
+
+        private void Submit(string answer)
+        {
+            _answer = answer;
+            _tcs.TrySetResult(answer);
+            ToggleRequested?.Invoke();
+        }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    /// <summary>ask_user 工具的选项</summary>
+    public class AskUserOption
+    {
+        public string Label { get; set; }
+        public string Description { get; set; }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -426,12 +1506,21 @@ namespace FuXing.UI
         // 内容块
         private readonly List<IContentBlock> _blocks = new List<IContentBlock>();
 
+        // 测量缓存：避免在 OnPaint/OnMouseMove 中重复 Measure
+        private readonly List<int> _cachedBlockHeights = new List<int>();
+        private int _cachedMeasuredWidth = -1;
+        private int _cachedTotalContentHeight;
+        private bool _measureDirty = true;
+        private bool _containsInteractiveBlocks;
+        private bool _lastHandCursor;
+
         // 颜色
         private static readonly Color AIBg = Color.White;
         private static readonly Color UserBg = Color.FromArgb(59, 130, 246);
         private static readonly Color AIBorder = Color.FromArgb(229, 231, 235);
         private static readonly Color NameColor = Color.FromArgb(107, 114, 128);
         private static readonly Color ShadowColor = Color.FromArgb(15, 0, 0, 0);
+        private static readonly Color PanelBg = Color.FromArgb(245, 247, 250);
 
         public MessageGroup(string name, Image avatar, ChatRole role, int maxWidth)
         {
@@ -442,10 +1531,8 @@ namespace FuXing.UI
 
             SetStyle(ControlStyles.UserPaint
                    | ControlStyles.AllPaintingInWmPaint
-                   | ControlStyles.DoubleBuffer
-                   | ControlStyles.ResizeRedraw
-                   | ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+                   | ControlStyles.OptimizedDoubleBuffer, true);
+            BackColor = PanelBg;
             Cursor = Cursors.Default;
 
             // 右键菜单 — 支持复制消息文本
@@ -473,11 +1560,15 @@ namespace FuXing.UI
                     sb.AppendLine(tb.Text);
                 else if (block is ThinkBlock thk && !string.IsNullOrEmpty(thk.Text))
                     sb.AppendLine(thk.Text);
+                else if (block is TableBlock tbl)
+                    sb.AppendLine(tbl.GetPlainText());
+                else if (block is SubAgentBlock sab)
+                    sb.AppendLine($"[子智能体: {sab.TaskName}]");
             }
             return sb.ToString().TrimEnd();
         }
 
-        /// <summary>设置文本内容，自动解析 &lt;think&gt; 标签为折叠块</summary>
+        /// <summary>设置文本内容，自动解析 &lt;think&gt; 标签为折叠块，自动识别 Markdown 表格。</summary>
         public void SetText(string text)
         {
             text = text ?? "";
@@ -490,12 +1581,35 @@ namespace FuXing.UI
             if (thinkMatch.Success)
             {
                 thinkContent = thinkMatch.Groups[1].Value.Trim();
-                // 移除 <think>...</think> 及其前后空白
                 mainContent = Regex.Replace(text, @"\s*<think>.*?(?:</think>|$)\s*", "", RegexOptions.Singleline).Trim();
             }
 
-            // 更新或创建 ThinkBlock
-            var existingThink = _blocks.OfType<ThinkBlock>().FirstOrDefault();
+            // 确定当前流式段落的起点（最后一个 ToolCallCard 之后）
+            int sectionStart = 0;
+            for (int i = _blocks.Count - 1; i >= 0; i--)
+            {
+                if (_blocks[i] is ToolCallCard)
+                {
+                    sectionStart = i + 1;
+                    break;
+                }
+            }
+
+            // 保留 ThinkBlock 的折叠状态
+            ThinkBlock existingThink = null;
+            for (int i = sectionStart; i < _blocks.Count; i++)
+            {
+                if (_blocks[i] is ThinkBlock tb) { existingThink = tb; break; }
+            }
+
+            // 移除当前段落中所有内容块（TextBlock / TableBlock），保留 ThinkBlock
+            for (int i = _blocks.Count - 1; i >= sectionStart; i--)
+            {
+                if (!(_blocks[i] is ThinkBlock))
+                    _blocks.RemoveAt(i);
+            }
+
+            // 处理 ThinkBlock
             if (thinkContent != null)
             {
                 if (existingThink != null)
@@ -503,30 +1617,97 @@ namespace FuXing.UI
                 else
                 {
                     var thinkBlock = new ThinkBlock(thinkContent);
-                    _blocks.Insert(0, thinkBlock);
+                    _blocks.Insert(sectionStart, thinkBlock);
                     thinkBlock.ToggleRequested += () => RequestLayout();
                 }
             }
 
-            // 更新或创建 TextBlock
-            var existingText = _blocks.OfType<TextBlock>().FirstOrDefault();
+            // 解析主要内容为内容块序列（TextBlock + TableBlock）
             if (!string.IsNullOrEmpty(mainContent))
             {
-                if (existingText != null)
-                    existingText.Text = mainContent;
-                else
-                {
-                    // 在 ThinkBlock 之后插入
-                    int insertIdx = thinkContent != null ? 1 : 0;
-                    _blocks.Insert(insertIdx, new TextBlock(mainContent, Role));
-                }
-            }
-            else if (existingText != null)
-            {
-                existingText.Text = "";
+                var contentBlocks = SplitIntoBlocks(mainContent, Role);
+                _blocks.AddRange(contentBlocks);
             }
 
             RequestLayout();
+        }
+
+        // ── Markdown 表格检测辅助方法 ──
+
+        private static bool IsTableLine(string line)
+        {
+            var trimmed = line.Trim();
+            return trimmed.StartsWith("|") && trimmed.EndsWith("|") && trimmed.Length >= 3;
+        }
+
+        private static bool IsValidTable(List<string> lines)
+        {
+            // 至少 header + separator + 1 data row = 3 行
+            if (lines.Count < 3) return false;
+            return Regex.IsMatch(lines[1].Trim(), @"^\|[\s\-:\|]+\|$");
+        }
+
+        private static List<IContentBlock> SplitIntoBlocks(string text, ChatRole role)
+        {
+            var blocks = new List<IContentBlock>();
+            if (string.IsNullOrEmpty(text)) return blocks;
+
+            var lines = text.Split('\n');
+            var textLines = new List<string>();
+            var tableLines = new List<string>();
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].TrimEnd('\r');
+                if (IsTableLine(line))
+                {
+                    tableLines.Add(line);
+                }
+                else
+                {
+                    if (tableLines.Count > 0)
+                    {
+                        if (IsValidTable(tableLines))
+                        {
+                            if (textLines.Count > 0)
+                            {
+                                blocks.Add(new TextBlock(string.Join("\n", textLines), role));
+                                textLines.Clear();
+                            }
+                            blocks.Add(new TableBlock(tableLines, role));
+                        }
+                        else
+                        {
+                            textLines.AddRange(tableLines);
+                        }
+                        tableLines.Clear();
+                    }
+                    textLines.Add(line);
+                }
+            }
+
+            // 处理末尾剩余
+            if (tableLines.Count > 0)
+            {
+                if (IsValidTable(tableLines))
+                {
+                    if (textLines.Count > 0)
+                    {
+                        blocks.Add(new TextBlock(string.Join("\n", textLines), role));
+                        textLines.Clear();
+                    }
+                    blocks.Add(new TableBlock(tableLines, role));
+                }
+                else
+                {
+                    textLines.AddRange(tableLines);
+                }
+            }
+
+            if (textLines.Count > 0)
+                blocks.Add(new TextBlock(string.Join("\n", textLines), role));
+
+            return blocks;
         }
 
         /// <summary>添加可折叠思考块</summary>
@@ -546,6 +1727,81 @@ namespace FuXing.UI
         public ToolCallCard AddToolCall(string toolName, string statusText)
         {
             var card = new ToolCallCard(toolName, statusText, ToolCallStatus.Running);
+            card.ToggleRequested += () => RequestLayout();
+            _blocks.Add(card);
+            RequestLayout();
+            return card;
+        }
+
+        /// <summary>添加子智能体执行块（展示子智能体的完整执行过程）</summary>
+        public SubAgentBlock AddSubAgent(string taskName)
+        {
+            var block = new SubAgentBlock(taskName);
+            block.ToggleRequested += () => RequestLayout();
+            _blocks.Add(block);
+            RequestLayout();
+            return block;
+        }
+
+        /// <summary>添加危险操作审批卡片，返回卡片实例（通过 ResultTask 等待用户决策）</summary>
+        internal ApprovalCard AddApprovalCard(string toolDisplayName, string summary)
+        {
+            var card = new ApprovalCard(toolDisplayName, summary);
+            card.ToggleRequested += () => RequestLayout();
+            _blocks.Add(card);
+            RequestLayout();
+            return card;
+        }
+
+        /// <summary>添加用户问答卡片，返回卡片实例（通过 ResultTask 等待用户回答）</summary>
+        internal AskUserCard AddAskUserCard(string question, List<AskUserOption> options, bool allowFreeInput)
+        {
+            var card = new AskUserCard(question, options, allowFreeInput);
+            card.ToggleRequested += () => RequestLayout();
+
+            // 如果允许自由输入，嵌入 TextBox 和提交按钮
+            if (allowFreeInput)
+            {
+                var inputBox = new TextBox
+                {
+                    Font = new Font("Microsoft YaHei UI", 9F),
+                    BorderStyle = BorderStyle.FixedSingle,
+                    BackColor = Color.FromArgb(249, 250, 251),
+                    ForeColor = Color.FromArgb(55, 65, 81),
+                    Visible = false
+                };
+
+                var submitBtn = new System.Windows.Forms.Label
+                {
+                    Text = "提交",
+                    Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    ForeColor = Color.White,
+                    BackColor = Color.FromArgb(99, 120, 180),
+                    Cursor = Cursors.Hand,
+                    Visible = false
+                };
+
+                submitBtn.Click += (s, ev) =>
+                {
+                    card.SubmitFreeText(inputBox.Text);
+                };
+
+                inputBox.KeyDown += (s, ev) =>
+                {
+                    if (ev.KeyCode == Keys.Enter)
+                    {
+                        ev.SuppressKeyPress = true;
+                        card.SubmitFreeText(inputBox.Text);
+                    }
+                };
+
+                card.EmbeddedInput = inputBox;
+                card.EmbeddedSubmitBtn = submitBtn;
+                this.Controls.Add(inputBox);
+                this.Controls.Add(submitBtn);
+            }
+
             _blocks.Add(card);
             RequestLayout();
             return card;
@@ -560,6 +1816,13 @@ namespace FuXing.UI
         /// <summary>通知内容已更新，重新布局和绘制</summary>
         public void NotifyContentChanged()
         {
+            RequestLayout();
+        }
+
+        /// <summary>开始新的文本段落（用于工具调用后继续流式输出，不创建新消息）</summary>
+        public void PrepareNewStreamSection(string placeholder = "🤔 正在思考中...")
+        {
+            _blocks.Add(new TextBlock(placeholder, Role));
             RequestLayout();
         }
 
@@ -579,14 +1842,9 @@ namespace FuXing.UI
                 using (var g = CreateGraphics())
                 {
                     int contentW = BubbleContentWidth();
-                    int totalH = 0;
-                    foreach (var block in _blocks)
-                    {
-                        totalH += block.MeasureHeight(g, contentW) + BlockGap;
-                    }
-                    if (totalH > 0) totalH -= BlockGap;
+                    EnsureMeasureCache(g, contentW);
 
-                    int bubbleH = totalH + BubblePadV * 2;
+                    int bubbleH = _cachedTotalContentHeight + BubblePadV * 2;
                     int newH = NameHeight + bubbleH + 6;
                     if (Height != newH)
                         Height = newH;
@@ -601,6 +1859,7 @@ namespace FuXing.UI
 
             try
             {
+                MarkMeasureDirty();
                 RecalcLayout();
                 LayoutChanged?.Invoke();
                 Invalidate();
@@ -617,16 +1876,10 @@ namespace FuXing.UI
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             int contentW = BubbleContentWidth();
-            int totalContentH = 0;
-            using (var measG = CreateGraphics())
-            {
-                foreach (var block in _blocks)
-                    totalContentH += block.MeasureHeight(measG, contentW) + BlockGap;
-            }
-            if (totalContentH > 0) totalContentH -= BlockGap;
+            EnsureMeasureCache(g, contentW);
 
             int bubbleW = Math.Max(Radius * 2 + 2, contentW + BubblePadH * 2);
-            int bubbleH = Math.Max(Radius * 2 + 2, totalContentH + BubblePadV * 2);
+            int bubbleH = Math.Max(Radius * 2 + 2, _cachedTotalContentHeight + BubblePadV * 2);
             bool isUser = Role == ChatRole.User;
 
             // 计算位置
@@ -678,11 +1931,10 @@ namespace FuXing.UI
             // ── 绘制内容块 ──
             int blockX = bubbleX + BubblePadH;
             int blockY = bubbleY + BubblePadV;
-            foreach (var block in _blocks)
+            for (int i = 0; i < _blocks.Count; i++)
             {
-                int h;
-                using (var measG = CreateGraphics())
-                    h = block.MeasureHeight(measG, contentW);
+                var block = _blocks[i];
+                int h = i < _cachedBlockHeights.Count ? _cachedBlockHeights[i] : 0;
                 var blockRect = new Rectangle(blockX, blockY, contentW, h);
                 block.Paint(g, blockRect, isUser);
                 blockY += h + BlockGap;
@@ -695,36 +1947,111 @@ namespace FuXing.UI
         {
             base.OnMouseClick(e);
             int contentW = BubbleContentWidth();
-            bool isUser = Role == ChatRole.User;
-            int bubbleW = contentW + BubblePadH * 2;
-            int bubbleX = isUser
-                ? Width - AvatarSize - 6 - AvatarGap - bubbleW
-                : 6 + AvatarSize + AvatarGap;
-
-            int blockX = bubbleX + BubblePadH;
-            int blockY = NameHeight + BubblePadV;
-
-            using (var measG = CreateGraphics())
+            using (var g = CreateGraphics())
             {
-                foreach (var block in _blocks)
-                {
-                    int h = block.MeasureHeight(measG, contentW);
-                    var blockRect = new Rectangle(blockX, blockY, contentW, h);
-                    if (blockRect.Contains(e.Location))
-                    {
-                        block.OnClick(e.Location, blockRect);
-                        break;
-                    }
-                    blockY += h + BlockGap;
-                }
+                EnsureMeasureCache(g, contentW);
+            }
+
+            if (TryFindBlock(e.Location, contentW, out var block, out var blockRect))
+            {
+                block.OnClick(e.Location, blockRect);
             }
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            // 思考块头部显示手型光标
+            if (e.Button != MouseButtons.None)
+            {
+                if (_lastHandCursor)
+                {
+                    Cursor = Cursors.Default;
+                    _lastHandCursor = false;
+                }
+                return;
+            }
+
             int contentW = BubbleContentWidth();
+
+            if (_measureDirty || _cachedMeasuredWidth != contentW)
+            {
+                using (var g = CreateGraphics())
+                {
+                    EnsureMeasureCache(g, contentW);
+                }
+            }
+
+            if (!_containsInteractiveBlocks)
+            {
+                if (_lastHandCursor)
+                {
+                    Cursor = Cursors.Default;
+                    _lastHandCursor = false;
+                }
+                return;
+            }
+
+            // 思考块头部显示手型光标
+            bool hand = false;
+
+            if (TryFindBlock(e.Location, contentW, out var block, out var blockRect))
+            {
+                hand = block.HitTest(e.Location, blockRect);
+
+                // AskUserCard 需要更新 hover 状态以高亮选项
+                if (block is AskUserCard askCard)
+                {
+                    if (askCard.UpdateHover(e.Location, blockRect))
+                        Invalidate();
+                }
+            }
+
+            if (hand != _lastHandCursor)
+            {
+                Cursor = hand ? Cursors.Hand : Cursors.Default;
+                _lastHandCursor = hand;
+            }
+        }
+
+        private void MarkMeasureDirty()
+        {
+            _measureDirty = true;
+            _cachedMeasuredWidth = -1;
+            _cachedTotalContentHeight = 0;
+            _cachedBlockHeights.Clear();
+            _containsInteractiveBlocks = false;
+        }
+
+        private void EnsureMeasureCache(Graphics g, int contentW)
+        {
+            if (!_measureDirty && _cachedMeasuredWidth == contentW)
+                return;
+
+            _cachedBlockHeights.Clear();
+            _cachedTotalContentHeight = 0;
+            _containsInteractiveBlocks = false;
+
+            foreach (var block in _blocks)
+            {
+                int height = block.MeasureHeight(g, contentW);
+                _cachedBlockHeights.Add(height);
+                _cachedTotalContentHeight += height + BlockGap;
+                if (!_containsInteractiveBlocks && (block is ThinkBlock || block is ToolCallCard || block is SubAgentBlock || block is ApprovalCard || block is AskUserCard))
+                    _containsInteractiveBlocks = true;
+            }
+
+            if (_cachedTotalContentHeight > 0)
+                _cachedTotalContentHeight -= BlockGap;
+
+            _cachedMeasuredWidth = contentW;
+            _measureDirty = false;
+        }
+
+        private bool TryFindBlock(Point location, int contentW, out IContentBlock hitBlock, out Rectangle hitRect)
+        {
+            hitBlock = null;
+            hitRect = Rectangle.Empty;
+
             bool isUser = Role == ChatRole.User;
             int bubbleW = contentW + BubblePadH * 2;
             int bubbleX = isUser
@@ -733,23 +2060,21 @@ namespace FuXing.UI
 
             int blockX = bubbleX + BubblePadH;
             int blockY = NameHeight + BubblePadV;
-            bool hand = false;
 
-            using (var measG = CreateGraphics())
+            for (int i = 0; i < _blocks.Count; i++)
             {
-                foreach (var block in _blocks)
+                int height = i < _cachedBlockHeights.Count ? _cachedBlockHeights[i] : 0;
+                var rect = new Rectangle(blockX, blockY, contentW, height);
+                if (rect.Contains(location))
                 {
-                    int h = block.MeasureHeight(measG, contentW);
-                    var blockRect = new Rectangle(blockX, blockY, contentW, h);
-                    if (blockRect.Contains(e.Location) && block.HitTest(e.Location, blockRect))
-                    {
-                        hand = true;
-                        break;
-                    }
-                    blockY += h + BlockGap;
+                    hitBlock = _blocks[i];
+                    hitRect = rect;
+                    return true;
                 }
+                blockY += height + BlockGap;
             }
-            Cursor = hand ? Cursors.Hand : Cursors.Default;
+
+            return false;
         }
 
         // ── 工具方法 ──
@@ -790,8 +2115,7 @@ namespace FuXing.UI
 
         public RichChatPanel()
         {
-            SetStyle(ControlStyles.UserPaint
-                   | ControlStyles.AllPaintingInWmPaint
+            SetStyle(ControlStyles.AllPaintingInWmPaint
                    | ControlStyles.OptimizedDoubleBuffer, true);
             AutoScroll = true;
             BackColor = Color.FromArgb(245, 247, 250);
@@ -799,7 +2123,7 @@ namespace FuXing.UI
             _container = new System.Windows.Forms.Panel
             {
                 Location = Point.Empty,
-                BackColor = Color.Transparent,
+                BackColor = Color.FromArgb(245, 247, 250),
                 AutoSize = false
             };
             Controls.Add(_container);
@@ -856,7 +2180,6 @@ namespace FuXing.UI
         {
             try
             {
-                Application.DoEvents();
                 if (_container.Height > ClientSize.Height)
                     AutoScrollPosition = new Point(0, _container.Height);
             }
@@ -877,14 +2200,15 @@ namespace FuXing.UI
             foreach (var msg in _messages)
             {
                 msg.MaxBubbleWidth = w;
-                msg.Width = w;  // 先设宽度，再计算高度
+                msg.Width = w;
                 msg.RecalcLayout();
                 msg.Location = new Point(4, y);
                 y += msg.Height + 8;
             }
             _container.Size = new Size(w + 8, y + 12);
             _container.ResumeLayout(false);
-            _container.Invalidate(true);
+            _container.Invalidate();
+            Invalidate();
         }
     }
 }

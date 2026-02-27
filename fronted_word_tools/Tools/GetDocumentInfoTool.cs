@@ -5,16 +5,18 @@ using System.Threading.Tasks;
 namespace FuXing
 {
     /// <summary>获取当前文档的基本信息</summary>
-    public class GetDocumentInfoTool : ITool
+    public class GetDocumentInfoTool : ToolBase
     {
-        public string Name => "get_document_info";
+        public override string Name => "get_document_info";
+        public override string DisplayName => "获取文档信息";
+        public override ToolCategory Category => ToolCategory.Query;
 
-        public string Description =>
-            "获取当前 Word 文档的基本信息，包括文件名、页数、段落数、字数等。";
+        public override string Description =>
+            "Get basic information about the current Word document, including file name, page count, paragraph count, word count, etc.";
 
-        public JObject Parameters => null;
+        public override JObject Parameters => null;
 
-        public Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
+        public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
             var app = connect.WordApplication;
             if (app.Documents.Count == 0)

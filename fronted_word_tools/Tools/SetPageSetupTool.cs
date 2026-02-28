@@ -13,11 +13,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.PageLayout;
 
         public override string Description =>
-            "Set document page layout (only the properties you pass are changed; others remain unchanged).\n" +
-            "- Margins in points (1cm ≈ 28.35pt). Common values: 2.54cm ≈ 72pt, 3.17cm ≈ 90pt\n" +
-            "- paper_size: A3/A4/B5/Letter/Legal or custom (use page_width/page_height)\n" +
-            "- orientation: portrait / landscape\n" +
-            "- section_index: section number (1-based); omit to apply to all sections";
+            "Set page layout (only passed properties change). Margins in points (1cm≈28.35pt, 2.54cm≈72pt). " +
+            "paper_size: A3/A4/B5/Letter/Legal/custom. section_index: omit for all sections.";
 
         public override JObject Parameters => new JObject
         {

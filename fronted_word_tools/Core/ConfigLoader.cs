@@ -29,6 +29,9 @@ namespace FuXing
 
             /// <summary>危险操作审批：执行脚本、批量操作、删除章节等高风险工具前弹窗确认</summary>
             public bool RequireApprovalForDangerousTools { get; set; } = true;
+
+            /// <summary>启动时显示安全提示遮罩（提醒用户提前备份文档）</summary>
+            public bool ShowStartupWarning { get; set; } = true;
         }
 
         // 获取文档目录路径

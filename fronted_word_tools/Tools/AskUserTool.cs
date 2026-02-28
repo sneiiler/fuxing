@@ -15,13 +15,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.System;
 
         public override string Description =>
-            "Ask the user a question to clarify intent, gather preferences, or choose between approaches. " +
-            "Returns the user's selected option or free-text answer.\n" +
-            "- question: the question to display (required)\n" +
-            "- options: array of selectable choices, each with label (required) and optional description\n" +
-            "- allow_free_input: whether to show a text input for custom answers (default: true)\n" +
-            "- Use this when the user's request is ambiguous or you need to confirm a decision that affects the outcome\n" +
-            "- Do NOT use this for trivial confirmations or when you can reasonably decide yourself";
+            "Ask the user a question when intent is ambiguous or a decision affects the outcome. " +
+            "Supports selectable options and free-text input. Do NOT use for trivial confirmations.";
 
         public override JObject Parameters => new JObject
         {

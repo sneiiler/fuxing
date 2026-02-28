@@ -25,6 +25,18 @@ namespace FuXing
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  操作历史记录（供 UndoRedo 工具感知操作上下文）
+    // ═══════════════════════════════════════════════════════════════
+
+    public class OperationRecord
+    {
+        public string ToolName { get; set; }
+        public string DisplayName { get; set; }
+        public string Summary { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  工具注册表 — 将插件功能封装为 LLM 可调用的 tools
     // ═══════════════════════════════════════════════════════════════
 
@@ -36,6 +48,17 @@ namespace FuXing
     public class ToolRegistry
     {
         private readonly Dictionary<string, ITool> _tools = new Dictionary<string, ITool>();
+
+        /// <summary>操作历史记录（仅记录会修改文档的操作，最多保留 100 条）</summary>
+        private readonly List<OperationRecord> _operationHistory = new List<OperationRecord>();
+        private const int MaxHistorySize = 100;
+
+        /// <summary>只读工具不产生文档修改，不记入操作历史</summary>
+        private static readonly HashSet<string> ReadOnlyTools = new HashSet<string>
+        {
+            "get_document_info", "get_document_map", "get_selected_text",
+            "read_document_section", "read_table", "list_files", "load_skill"
+        };
 
         /// <summary>分类名称映射（用于 system prompt 中的分类标题）</summary>
         private static readonly Dictionary<ToolCategory, string> CategoryNames
@@ -74,7 +97,7 @@ namespace FuXing
                 _tools[tool.Name] = tool;
             }
 
-            System.Diagnostics.Debug.WriteLine(
+            DebugLogger.Instance.LogInfo(
                 $"[ToolRegistry] 自动发现 {_tools.Count} 个工具: {string.Join(", ", _tools.Keys.OrderBy(k => k))}");
         }
 
@@ -115,7 +138,15 @@ namespace FuXing
 
             try
             {
-                return await tool.ExecuteAsync(connect, arguments);
+                var result = await tool.ExecuteAsync(connect, arguments);
+
+                // 记录成功的文档修改操作到历史
+                if (result.Success && !ReadOnlyTools.Contains(functionName))
+                {
+                    RecordOperation(functionName, tool.DisplayName, result.Output);
+                }
+
+                return result;
             }
             catch (ToolArgumentException ex)
             {
@@ -158,6 +189,45 @@ namespace FuXing
 
         /// <summary>检查工具名称是否已注册</summary>
         public bool IsRegistered(string functionName) => _tools.ContainsKey(functionName);
+
+        // ═══════════════════════════════════════════════════════════════
+        //  操作历史 API
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>记录一次文档修改操作</summary>
+        private void RecordOperation(string toolName, string displayName, string summary)
+        {
+            // 截断过长的摘要
+            if (summary != null && summary.Length > 200)
+                summary = summary.Substring(0, 200) + "...";
+
+            _operationHistory.Add(new OperationRecord
+            {
+                ToolName = toolName,
+                DisplayName = displayName,
+                Summary = summary ?? "",
+                Timestamp = DateTime.Now
+            });
+
+            // 超出上限时移除最早的记录
+            while (_operationHistory.Count > MaxHistorySize)
+                _operationHistory.RemoveAt(0);
+        }
+
+        /// <summary>获取最近 N 条操作记录（最新的排在前面）</summary>
+        public List<OperationRecord> GetRecentOperations(int count = 10)
+        {
+            int start = Math.Max(0, _operationHistory.Count - count);
+            var recent = _operationHistory.GetRange(start, _operationHistory.Count - start);
+            recent.Reverse();
+            return recent;
+        }
+
+        /// <summary>获取操作历史总数</summary>
+        public int OperationCount => _operationHistory.Count;
+
+        /// <summary>清空操作历史（会话重置时调用）</summary>
+        public void ClearOperationHistory() => _operationHistory.Clear();
 
         /// <summary>
         /// 生成按分类组织的工具摘要（用于 system prompt），
@@ -226,14 +296,14 @@ namespace FuXing
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  危险操作审批辅助（审批 UI 由调用方负责）
+        //  操作审批辅助（审批 UI 由调用方负责）
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>检查指定工具是否需要用户审批</summary>
-        public bool RequiresApproval(string functionName)
+        /// <summary>根据工具名和实际参数判断是否需要用户审批确认</summary>
+        public bool RequiresApproval(string functionName, JObject arguments = null)
         {
             if (!_tools.TryGetValue(functionName, out var tool)) return false;
-            if (!tool.RequiresApproval) return false;
+            if (!tool.ShouldRequireApproval(arguments)) return false;
             var config = new ConfigLoader().LoadConfig();
             return config.RequireApprovalForDangerousTools;
         }

@@ -1,14 +1,15 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace FuXing
 {
     /// <summary>
     /// 开发者调试日志 — 当 DeveloperMode 开启时，将对话和工具调用信息写入文件。
-    /// 日志路径: %USERPROFILE%\.fuxing\logs\fuxing_debug.log
-    /// 单文件上限 5 MB，超限时滚动（最多保留 3 个历史文件）。
+    /// 日志路径: %USERPROFILE%\.fuxing\logs\fuxing_YYYY-MM-DD.log
+    /// 每天自动创建新的日志文件，保留最近 30 天的日志。
     /// </summary>
     public sealed class DebugLogger
     {
@@ -16,9 +17,9 @@ namespace FuXing
         //  常量
         // ═══════════════════════════════════════════════════════════════
 
-        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
-        private const int MaxHistoryFiles = 3;
-        private const string LogFileName = "fuxing_debug.log";
+        private const int MaxRetainDays = 30;
+        private const string LogFilePrefix = "fuxing_";
+        private const string LogFileExtension = ".log";
 
         // ═══════════════════════════════════════════════════════════════
         //  单例
@@ -32,7 +33,10 @@ namespace FuXing
 
         private readonly object _lock = new object();
         private readonly string _logDir;
-        private readonly string _logPath;
+
+        /// <summary>当前日志文件路径（按日期变化）</summary>
+        private string _currentLogPath;
+        private string _currentDate;
 
         /// <summary>是否启用（由外部设置，通常在加载配置后调用）</summary>
         public bool Enabled { get; set; }
@@ -42,7 +46,16 @@ namespace FuXing
             _logDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".fuxing", "logs");
-            _logPath = Path.Combine(_logDir, LogFileName);
+        }
+
+        /// <summary>获取当前日志文件的完整路径</summary>
+        public string CurrentLogPath
+        {
+            get
+            {
+                EnsureCurrentLogPath();
+                return _currentLogPath;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -132,12 +145,13 @@ namespace FuXing
                 lock (_lock)
                 {
                     EnsureDirectory();
-                    RotateIfNeeded();
+                    EnsureCurrentLogPath();
+                    CleanOldLogsIfNeeded();
 
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     string entry = $"[{timestamp}] [{tag}]\n{body}\n{"".PadRight(60, '─')}\n";
 
-                    File.AppendAllText(_logPath, entry, Encoding.UTF8);
+                    File.AppendAllText(_currentLogPath, entry, Encoding.UTF8);
                 }
             }
             catch
@@ -152,30 +166,41 @@ namespace FuXing
                 Directory.CreateDirectory(_logDir);
         }
 
-        private void RotateIfNeeded()
+        /// <summary>确保日志文件路径与当前日期一致</summary>
+        private void EnsureCurrentLogPath()
         {
-            if (!File.Exists(_logPath)) return;
-
-            var fi = new FileInfo(_logPath);
-            if (fi.Length < MaxFileSize) return;
-
-            // 删除最老的历史文件
-            string oldest = Path.Combine(_logDir, $"fuxing_debug_{MaxHistoryFiles}.log");
-            if (File.Exists(oldest))
-                File.Delete(oldest);
-
-            // 依次重命名 N-1 → N
-            for (int i = MaxHistoryFiles - 1; i >= 1; i--)
+            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            if (_currentDate != today || _currentLogPath == null)
             {
-                string src = Path.Combine(_logDir, $"fuxing_debug_{i}.log");
-                string dst = Path.Combine(_logDir, $"fuxing_debug_{i + 1}.log");
-                if (File.Exists(src))
-                    File.Move(src, dst);
+                _currentDate = today;
+                _currentLogPath = Path.Combine(_logDir, $"{LogFilePrefix}{today}{LogFileExtension}");
             }
+        }
 
-            // 当前文件 → _1
-            string first = Path.Combine(_logDir, "fuxing_debug_1.log");
-            File.Move(_logPath, first);
+        /// <summary>清理超过保留天数的旧日志（每天只检查一次）</summary>
+        private string _lastCleanDate;
+        private void CleanOldLogsIfNeeded()
+        {
+            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            if (_lastCleanDate == today) return;
+            _lastCleanDate = today;
+
+            try
+            {
+                var cutoff = DateTime.Now.AddDays(-MaxRetainDays);
+                var logFiles = Directory.GetFiles(_logDir, $"{LogFilePrefix}*{LogFileExtension}");
+
+                foreach (var file in logFiles)
+                {
+                    var fi = new FileInfo(file);
+                    if (fi.LastWriteTime < cutoff)
+                        fi.Delete();
+                }
+            }
+            catch
+            {
+                // 清理失败不影响主流程
+            }
         }
     }
 }

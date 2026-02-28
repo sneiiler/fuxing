@@ -18,38 +18,37 @@ namespace FuXing
         public override string Name => "execute_word_script";
         public override string DisplayName => "执行Word脚本";
         public override ToolCategory Category => ToolCategory.Advanced;
-        public override bool RequiresApproval => true;
+        public override bool RequiresApproval => true;  // 静态标记为 true，动态判断在下方
+
+        // 高危关键词：匹配到则需要审批
+        private static readonly System.Text.RegularExpressions.Regex _dangerousPattern =
+            new System.Text.RegularExpressions.Regex(
+                @"\b(Delete|Remove|Clear|SaveAs|Close|Quit|Kill)\b|\.Text\s*=\s*""""",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// 根据脚本代码内容动态判断是否需要审批：
+        /// 仅当代码包含删除、清空、另存等高危操作时才需要审批，
+        /// 查找、选中、读取等只读操作不需要审批。
+        /// </summary>
+        public override bool ShouldRequireApproval(JObject arguments)
+        {
+            string code = arguments?["code"]?.ToString();
+            if (string.IsNullOrWhiteSpace(code)) return false;
+            return _dangerousPattern.IsMatch(code);
+        }
 
         public override string Description =>
-            "Execute C# code to manipulate the Word document (via NetOffice.WordApi).\n\n" +
-            "- Pre-defined variables:\n" +
-            "  app — Application object\n" +
-            "  doc — ActiveDocument\n" +
-            "  sel — current Selection\n\n" +
-            "- Helper methods:\n" +
-            "  WdColor RGB(int r, int g, int b) — RGB to Word color\n" +
-            "  float Cm(float cm) — centimeters to points\n" +
-            "  float Mm(float mm) — millimeters to points\n\n" +
-            "- Code must end with return \"description\"; to return a result string.\n\n" +
-            "- Available enums (no prefix needed): WdParagraphAlignment, WdBuiltinStyle, WdLineSpacing,\n" +
-            "  WdUnderline, WdColor, WdLineStyle, WdReplace, WdUnits, WdPaperSize,\n" +
-            "  WdOrientation, WdHeaderFooterIndex, WdCaptionPosition, WdBorderType, etc.\n\n" +
-            "- Common API reference:\n" +
-            "[Font] range.Font.Name/Size/Bold(0|1)/Italic(0|1)/Color=RGB(r,g,b)\n" +
-            "[Paragraph] ParagraphFormat.Alignment / SpaceBefore / SpaceAfter / FirstLineIndent=Cm(0.74f)\n" +
-            "[Line spacing] LineSpacingRule=WdLineSpacing.wdLineSpaceMultiple; LineSpacing=18f(1.5x)\n" +
-            "[Style] range.set_Style(WdBuiltinStyle.wdStyleHeading1) or doc.Styles[\"name\"]\n" +
-            "[Iterate paragraphs] foreach(Paragraph p in doc.Paragraphs){...} / p.OutlineLevel / p.Range\n" +
-            "[Table] doc.Tables.Add(range,rows,cols) / table.Cell(r,c).Range.Text / Borders\n" +
-            "[Image] doc.InlineShapes.AddPicture(path).Width/Height\n" +
-            "[Find/Replace] var f=doc.Content.Find; f.Text=\"old\"; f.Replacement.Text=\"new\"; f.Execute()\n" +
-            "[Caption] range.InsertCaption(\"图\", \" title\")\n" +
-            "[Page] doc.PageSetup.TopMargin=Cm(2.54f) / PaperSize / Orientation\n" +
-            "[Header/Footer] doc.Sections[1].Headers[WdHeaderFooterIndex.wdHeaderFooterPrimary].Range\n" +
-            "[TOC] doc.TablesOfContents.Add(range)\n" +
-            "[Save] doc.Save() / doc.SaveAs(path)\n\n" +
-            "- Note: collection indices start at 1 (Paragraphs[1], Tables[1], Sections[1]).\n" +
-            "- Compilation errors return line numbers and descriptions — fix and retry accordingly.";
+            "Execute C# code via NetOffice.WordApi. Variables: app(Application), doc(ActiveDocument), sel(Selection). " +
+            "Helpers: RGB(r,g,b)→WdColor, Cm()/Mm()→points, ResizeShape(InlineShape,widthCm)→proportional resize. Must end with return \"result\";\n" +
+            "API: range.Font.Name/Size/Bold/Color=RGB() | ParagraphFormat.Alignment/SpaceBefore/SpaceAfter/FirstLineIndent=Cm() " +
+            "| LineSpacingRule=WdLineSpacing.wdLineSpaceMultiple;LineSpacing=18f " +
+            "| range.set_Style(WdBuiltinStyle.wdStyleHeading1) | doc.Styles[\"name\"] " +
+            "| foreach(Paragraph p in doc.Paragraphs) | doc.Tables.Add(range,rows,cols) | table.Cell(r,c).Range " +
+            "| doc.InlineShapes.AddPicture(path) | Find: doc.Content.Find | range.InsertCaption(\"图\",\" title\") " +
+            "| doc.PageSetup | doc.Sections[1].Headers[WdHeaderFooterIndex.wdHeaderFooterPrimary].Range " +
+            "| doc.TablesOfContents.Add(range) | doc.Save()/SaveAs(path)\n" +
+            "Indices start at 1. Enums: WdParagraphAlignment, WdBuiltinStyle, WdLineSpacing, WdColor, WdLineStyle, MsoTriState (use short name directly). etc.";
 
         public override JObject Parameters => new JObject
         {
@@ -66,7 +65,7 @@ namespace FuXing
         };
 
         /// <summary>包装模板中用户代码前的行数，用于将编译错误行号映射回用户代码行号</summary>
-        private const int HeaderLineCount = 25;
+        private const int HeaderLineCount = 36;
 
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
@@ -168,12 +167,14 @@ namespace FuXing
         private static string WrapCode(string userCode)
         {
             // ⚠ 修改此模板后必须同步更新 HeaderLineCount 常量
-            // 当前用户代码起始行 = 第 26 行（HeaderLineCount + 1）
+            // 当前用户代码起始行 = 第 36 行（HeaderLineCount + 1）
             return @"using System;
 using System.Linq;
+using System.Reflection;
 using System.Collections.Generic;
 using NetOffice.WordApi;
 using NetOffice.WordApi.Enums;
+using NetOffice.OfficeApi.Enums;
 
 public static class WordScript
 {
@@ -192,11 +193,19 @@ public static class WordScript
         return mm * 2.83465f;
     }
 
+    /// <summary>等比缩放 InlineShape 到指定宽度(cm)，自动保持纵横比</summary>
+    public static void ResizeShape(InlineShape shape, float widthCm)
+    {
+        float ratio = shape.Height / shape.Width;
+        shape.Width = Cm(widthCm);
+        shape.Height = Cm(widthCm) * ratio;
+    }
+
     public static string Run(Application app, Document doc, Selection sel)
     {
         " + userCode + @"
     }
-}";
+}";  
         }
     }
 }

@@ -40,8 +40,14 @@ namespace FuXing
         public abstract JObject Parameters { get; }
         public virtual ToolCategory Category => ToolCategory.Advanced;
 
-        /// <summary>是否为危险操作（执行前需用户审批）。子类可覆写返回 true。</summary>
+        /// <summary>是否需要用户审批确认。子类可覆写返回 true。</summary>
         public virtual bool RequiresApproval => false;
+
+        /// <summary>
+        /// 根据实际调用参数判断是否需要审批确认。
+        /// 默认回退到 <see cref="RequiresApproval"/> 属性；子类可覆写实现动态判断。
+        /// </summary>
+        public virtual bool ShouldRequireApproval(JObject arguments) => RequiresApproval;
 
         /// <summary>子类实现具体逻辑</summary>
         public abstract Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments);
@@ -118,8 +124,24 @@ namespace FuXing
             return args?[key] as JObject;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  文档就绪守卫
+        // ═══════════════════════════════════════════════════════════════        //  插入位置守卫
+        // ═════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 确保非文本内容（图片、表格、目录等）插入在独立段落上。
+        /// 如果光标所在段落已有文字内容，先插入一个新段落，避免格式污染。
+        /// 如果光标已在空行上，不做任何操作。
+        /// </summary>
+        protected static void EnsureNewParagraphIfNeeded(NetOffice.WordApi.Application app)
+        {
+            var sel = app.Selection;
+            var curPara = sel.Range.Paragraphs[1];
+            string paraText = curPara.Range.Text?.TrimEnd('\r', '\n', '\a') ?? "";
+            if (paraText.Length > 0)
+                sel.TypeParagraph();
+        }
+
+        // ═════════════════════════════════════════════════════════════        //  文档就绪守卫
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>

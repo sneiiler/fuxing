@@ -4,12 +4,12 @@
 			<tab id='AIAssistantTab' label='福星'>
 				<group id='AIGroup' label='AI功能'>
 					<button id='toggle_taskpane_btn'
-                            label='AI助手'
+                            label='AI福星'
                             size='large'
                             getImage='GetButtonImage'
                             onAction='toggle_taskpane_btn_Click'
-                            screentip='显示/隐藏AI助手'
-                            supertip='打开或关闭AI助手对话窗口'/>
+                            screentip='显示/隐藏AI福星'
+                            supertip='打开或关闭AI福星对话窗口'/>
 					<splitButton id='TextCorrectionSplitButton' size='large'>
 						<button id='ai_text_correction_btn'
                                 label='文本纠错'

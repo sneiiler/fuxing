@@ -18,20 +18,9 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Formatting;
 
         public override string Description =>
-            "Unified formatting tool with two actions:\n" +
-            "- action=\"format\" (default): apply formatting to target range\n" +
-            "  - target.type: selection=current selection, search=by text search, heading=by heading name, " +
-                "paragraph_index=by paragraph number (1-based), heading_level=batch by heading level (1-9)\n" +
-            "  - style_name: optional, apply a named style first (e.g. \"标题 1\" or \"wdStyleHeading1\")\n" +
-            "  - font: optional, set/override font properties\n" +
-            "  - paragraph: optional, set/override paragraph properties\n" +
-            "  → style_name and font/paragraph can be combined (apply style first, then fine-tune)\n" +
-            "- action=\"create_style\": create/update a custom paragraph style\n" +
-            "  - name: style name (required; updates if exists)\n" +
-            "  - based_on: base style (default \"正文\")\n" +
-            "  - next_style: style after pressing Enter\n" +
-            "  - font / paragraph: same as above\n" +
-            "- Note: 1cm ≈ 28.35pt, Chinese first-line indent of 2 chars ≈ 28pt";
+            "Format text/paragraphs or create custom styles. action=\"format\": apply to target range (selection/search/heading/paragraph_index/heading_level); " +
+            "can combine style_name with font/paragraph overrides. action=\"create_style\": create or update a named paragraph style. " +
+            "Units: 1cm≈28.35pt, Chinese 2-char indent≈28pt.";
 
         public override JObject Parameters => new JObject
         {
@@ -69,7 +58,7 @@ namespace FuXing
                 ["style_name"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "套用的样式名（支持中文名如\"标题 1\"或枚举名如\"wdStyleHeading1\"）"
+                    ["description"] = "样式名（如\"标题 1\"或wdStyleHeading1）"
                 },
 
                 // ── create_style 模式参数 ──
@@ -96,8 +85,8 @@ namespace FuXing
                     ["description"] = "字体属性（均可选，未传的保持原样）",
                     ["properties"] = new JObject
                     {
-                        ["name"] = new JObject { ["type"] = "string", ["description"] = "字体名，如 宋体、黑体、Times New Roman" },
-                        ["size"] = new JObject { ["type"] = "number", ["description"] = "字号（磅），如 12, 14, 16, 22" },
+                        ["name"] = new JObject { ["type"] = "string", ["description"] = "字体名" },
+                        ["size"] = new JObject { ["type"] = "number", ["description"] = "字号（磅）" },
                         ["bold"] = new JObject { ["type"] = "boolean" },
                         ["italic"] = new JObject { ["type"] = "boolean" },
                         ["underline"] = new JObject { ["type"] = "boolean" },
@@ -118,8 +107,8 @@ namespace FuXing
                         },
                         ["spaceBefore"] = new JObject { ["type"] = "number", ["description"] = "段前间距（磅）" },
                         ["spaceAfter"] = new JObject { ["type"] = "number", ["description"] = "段后间距（磅）" },
-                        ["lineSpacingMultiple"] = new JObject { ["type"] = "number", ["description"] = "行距倍数，如 1.0, 1.5, 2.0" },
-                        ["firstLineIndent"] = new JObject { ["type"] = "number", ["description"] = "首行缩进（磅），中文2字符≈28" },
+                        ["lineSpacingMultiple"] = new JObject { ["type"] = "number", ["description"] = "行距倍数" },
+                        ["firstLineIndent"] = new JObject { ["type"] = "number", ["description"] = "首行缩进（磅）" },
                         ["outlineLevel"] = new JObject { ["type"] = "integer", ["description"] = "大纲级别 1-9，10=正文" }
                     }
                 }

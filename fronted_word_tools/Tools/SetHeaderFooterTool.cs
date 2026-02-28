@@ -14,13 +14,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.PageLayout;
 
         public override string Description =>
-            "Set header or footer text content and formatting.\n" +
-            "- type: header / footer\n" +
-            "- text: content (use {PAGE} and {NUMPAGES} to insert page number and total pages fields)\n" +
-            "- alignment: left/center/right (default: center)\n" +
-            "- font_name / font_size: font settings (default: SimSun/9pt)\n" +
-            "- section_index: section number; omit for all sections\n" +
-            "- page_type: primary=default(odd pages), first_page=first page, even_pages=even pages";
+            "Set header/footer text and formatting. Use {PAGE}/{NUMPAGES} for page number fields. " +
+            "page_type: primary (default/odd), first_page, even_pages.";
 
         public override JObject Parameters => new JObject
         {

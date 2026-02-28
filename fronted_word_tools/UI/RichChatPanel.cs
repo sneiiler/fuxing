@@ -172,6 +172,163 @@ namespace FuXing.UI
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  引用块 — 渲染 Markdown > 引用
+    // ════════════════════════════════════════════════════════════════
+
+    internal class BlockquoteBlock : IContentBlock
+    {
+        public string Text { get; set; }
+        private readonly ChatRole _role;
+
+        private static readonly Font QuoteFont = new Font("Microsoft YaHei UI", 9.5F);
+        private static readonly Color QuoteBorderColor = Color.FromArgb(59, 130, 246);   // 蓝色左竖线
+        private static readonly Color QuoteBgColor = Color.FromArgb(239, 246, 255);       // 淡蓝背景
+        private static readonly Color QuoteFgColor = Color.FromArgb(55, 65, 81);          // 深灰文字
+        private const int LeftBarWidth = 3;
+        private const int PadLeft = 14;  // 左竖线 + 内间距
+        private const int PadVert = 8;
+        private const int Radius = 6;
+
+        public BlockquoteBlock(string text, ChatRole role)
+        {
+            Text = text;
+            _role = role;
+        }
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            if (string.IsNullOrEmpty(Text)) return 0;
+            var canvas = g.High();
+            var size = canvas.MeasureText(Text, QuoteFont, width - PadLeft - 10);
+            return size.Height + PadVert * 2;
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            if (string.IsNullOrEmpty(Text)) return;
+
+            // 圆角背景
+            using (var path = RoundedRect(bounds, Radius))
+            using (var brush = new SolidBrush(QuoteBgColor))
+                g.FillPath(brush, path);
+
+            // 左侧蓝色竖线
+            using (var pen = new Pen(QuoteBorderColor, LeftBarWidth))
+                g.DrawLine(pen, bounds.X + LeftBarWidth / 2 + 1, bounds.Y + 4,
+                               bounds.X + LeftBarWidth / 2 + 1, bounds.Bottom - 4);
+
+            // 文字
+            var canvas = g.High();
+            var textRect = new Rectangle(bounds.X + PadLeft, bounds.Y + PadVert,
+                                         bounds.Width - PadLeft - 10, bounds.Height - PadVert * 2);
+            canvas.DrawText(Text, QuoteFont, QuoteFgColor, textRect,
+                FormatFlags.Top | FormatFlags.Left);
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds) => false;
+        public void OnClick(Point pt, Rectangle bounds) { }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  围栏代码块 — 渲染 Markdown ``` 代码块
+    // ════════════════════════════════════════════════════════════════
+
+    internal class FencedCodeBlock : IContentBlock
+    {
+        public string Code { get; set; }
+        public string Language { get; set; }
+
+        private static readonly Font CodeFont = new Font("Consolas", 9F);
+        private static readonly Font LangFont = new Font("Microsoft YaHei UI", 7.5F);
+        private static readonly Color CodeBg = Color.FromArgb(245, 243, 235);
+        private static readonly Color CodeBorder = Color.FromArgb(230, 218, 185);
+        private static readonly Color CodeFg = Color.FromArgb(55, 65, 81);
+        private static readonly Color LangFg = Color.FromArgb(120, 80, 20);
+        private const int PadX = 12;
+        private const int PadY = 10;
+        private const int LangH = 20;
+        private const int Radius = 6;
+
+        public FencedCodeBlock(string code, string language)
+        {
+            Code = code;
+            Language = language;
+        }
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            if (string.IsNullOrEmpty(Code)) return 0;
+            var canvas = g.High();
+            int langExtra = string.IsNullOrEmpty(Language) ? 0 : LangH;
+            var size = canvas.MeasureText(Code, CodeFont, width - PadX * 2);
+            return size.Height + PadY * 2 + langExtra;
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            if (string.IsNullOrEmpty(Code)) return;
+            var canvas = g.High();
+            int langExtra = string.IsNullOrEmpty(Language) ? 0 : LangH;
+
+            // 圆角背景
+            using (var path = RoundedRect(bounds, Radius))
+            {
+                using (var brush = new SolidBrush(CodeBg))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(CodeBorder))
+                    g.DrawPath(pen, path);
+            }
+
+            // 语言标签
+            if (!string.IsNullOrEmpty(Language))
+            {
+                canvas.DrawText(Language, LangFont, LangFg,
+                    new Rectangle(bounds.X + PadX, bounds.Y + 4, bounds.Width - PadX * 2, 16),
+                    FormatFlags.Top | FormatFlags.Left);
+            }
+
+            // 代码文本
+            canvas.DrawText(Code, CodeFont, CodeFg,
+                new Rectangle(bounds.X + PadX, bounds.Y + PadY + langExtra,
+                              bounds.Width - PadX * 2, bounds.Height - PadY * 2 - langExtra),
+                FormatFlags.Top | FormatFlags.Left);
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds) => false;
+        public void OnClick(Point pt, Rectangle bounds) { }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  表格块 — 渲染 Markdown 表格
     // ════════════════════════════════════════════════════════════════
 
@@ -935,11 +1092,11 @@ namespace FuXing.UI
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  审批卡片 — 危险操作嵌入式确认（替代弹窗 MessageBox）
+    //  审批卡片 — 操作确认嵌入式卡片（替代弹窗 MessageBox）
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// 危险操作审批卡片 — 嵌入聊天面板，用户通过点击按钮完成审批。
+    /// 操作审批确认卡片 — 嵌入聊天面板，用户通过点击按钮完成审批。
     /// 使用 <see cref="ResultTask"/> 异步等待用户决策。
     /// </summary>
     internal class ApprovalCard : IContentBlock
@@ -1089,7 +1246,7 @@ namespace FuXing.UI
             int y = bounds.Y + TopPad;
 
             // 标题
-            canvas.DrawText("操作审批", HeaderFont, HeaderFg,
+            canvas.DrawText("操作确认", HeaderFont, HeaderFg,
                 new Rectangle(textX, y, textW, HeaderH),
                 FormatFlags.VerticalCenter | FormatFlags.Left);
             y += HeaderH + SepGap;
@@ -1758,54 +1915,120 @@ namespace FuXing.UI
             var lines = text.Split('\n');
             var textLines = new List<string>();
             var tableLines = new List<string>();
+            var quoteLines = new List<string>();
+
+            // 围栏代码块状态
+            bool inCodeBlock = false;
+            string codeLanguage = "";
+            var codeLines = new List<string>();
+
+            // 辅助：刷出当前积累的文本行
+            void FlushText()
+            {
+                if (textLines.Count > 0)
+                {
+                    blocks.Add(new TextBlock(string.Join("\n", textLines), role));
+                    textLines.Clear();
+                }
+            }
+
+            // 辅助：刷出当前积累的表格行
+            void FlushTable()
+            {
+                if (tableLines.Count > 0)
+                {
+                    if (IsValidTable(tableLines))
+                    {
+                        FlushText();
+                        blocks.Add(new TableBlock(tableLines, role));
+                    }
+                    else
+                    {
+                        textLines.AddRange(tableLines);
+                    }
+                    tableLines.Clear();
+                }
+            }
+
+            // 辅助：刷出当前积累的引用行
+            void FlushQuote()
+            {
+                if (quoteLines.Count > 0)
+                {
+                    FlushText();
+                    blocks.Add(new BlockquoteBlock(string.Join("\n", quoteLines), role));
+                    quoteLines.Clear();
+                }
+            }
 
             for (int i = 0; i < lines.Length; i++)
             {
                 string line = lines[i].TrimEnd('\r');
+
+                // ── 围栏代码块检测（``` 开头） ──
+                if (line.StartsWith("```"))
+                {
+                    if (!inCodeBlock)
+                    {
+                        // 代码块开始：刷出之前所有积累的内容
+                        FlushTable();
+                        FlushQuote();
+                        FlushText();
+                        codeLanguage = line.Length > 3 ? line.Substring(3).Trim() : "";
+                        inCodeBlock = true;
+                        codeLines.Clear();
+                    }
+                    else
+                    {
+                        // 代码块结束
+                        blocks.Add(new FencedCodeBlock(string.Join("\n", codeLines), codeLanguage));
+                        inCodeBlock = false;
+                        codeLines.Clear();
+                    }
+                    continue;
+                }
+
+                // 在代码块内部，直接收集行
+                if (inCodeBlock)
+                {
+                    codeLines.Add(line);
+                    continue;
+                }
+
+                // ── 引用块检测: > 开头的行 ──
+                bool isQuote = line.StartsWith("> ") || line == ">";
+                if (isQuote)
+                {
+                    FlushTable();
+                    string stripped = line.Length > 2 ? line.Substring(2) : "";
+                    quoteLines.Add(stripped);
+                    continue;
+                }
+
+                // 非引用行 → 刷出之前积累的引用块
+                FlushQuote();
+
                 if (IsTableLine(line))
                 {
                     tableLines.Add(line);
                 }
                 else
                 {
-                    if (tableLines.Count > 0)
-                    {
-                        if (IsValidTable(tableLines))
-                        {
-                            if (textLines.Count > 0)
-                            {
-                                blocks.Add(new TextBlock(string.Join("\n", textLines), role));
-                                textLines.Clear();
-                            }
-                            blocks.Add(new TableBlock(tableLines, role));
-                        }
-                        else
-                        {
-                            textLines.AddRange(tableLines);
-                        }
-                        tableLines.Clear();
-                    }
+                    FlushTable();
                     textLines.Add(line);
                 }
             }
 
             // 处理末尾剩余
-            if (tableLines.Count > 0)
+            // 未闭合的代码块也输出
+            if (inCodeBlock && codeLines.Count > 0)
             {
-                if (IsValidTable(tableLines))
-                {
-                    if (textLines.Count > 0)
-                    {
-                        blocks.Add(new TextBlock(string.Join("\n", textLines), role));
-                        textLines.Clear();
-                    }
-                    blocks.Add(new TableBlock(tableLines, role));
-                }
-                else
-                {
-                    textLines.AddRange(tableLines);
-                }
+                FlushText();
+                blocks.Add(new FencedCodeBlock(string.Join("\n", codeLines), codeLanguage));
             }
+
+            FlushTable();
+            FlushQuote();
 
             if (textLines.Count > 0)
                 blocks.Add(new TextBlock(string.Join("\n", textLines), role));
@@ -1846,7 +2069,7 @@ namespace FuXing.UI
             return block;
         }
 
-        /// <summary>添加危险操作审批卡片，返回卡片实例（通过 ResultTask 等待用户决策）</summary>
+        /// <summary>添加操作审批确认卡片，返回卡片实例（通过 ResultTask 等待用户决策）</summary>
         internal ApprovalCard AddApprovalCard(string toolDisplayName, string functionName, string summary)
         {
             var card = new ApprovalCard(toolDisplayName, functionName, summary);

@@ -5,14 +5,13 @@ using System.Threading.Tasks;
 namespace FuXing
 {
     /// <summary>
-    /// 获取文档 Map（AST 树形结构图），彻底替代原 GetDocumentOutlineTool。
+    /// 获取文档 Map（AST 树形结构图）。
     ///
-    /// 核心升级：
-    /// - 原工具只能读取标准 Heading 样式，不规范文档直接失效
-    /// - 新工具对不规范文档自动调用 LLM 推断标题层级映射规则
-    /// - 返回树形结构（类似编码智能体的 Repo Map），而非平面列表
-    /// - 每个节点有唯一 Hash ID，配合 get_node_detail 按需深入
-    /// - 内置缓存，文档未变更时 O(1) 返回
+    /// 双模式设计：
+    /// - 默认快速感知：仅读取具有大纲级别的标题，程序化构建 AST，无 LLM 调用
+    /// - 深度感知（deep=true）：提取全量段落格式，LLM 推断标题层级，适用于不规范文档
+    ///
+    /// 快速感知若检测到结构不完整，会在结果中提示可启用深度感知。
     /// </summary>
     public class GetDocumentMapTool : ToolBase
     {
@@ -21,16 +20,22 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Query;
 
         public override string Description =>
-            "Get the document's tree-structured Document Map. " +
-            "Returns a hierarchical section tree where each node has a unique ID; use with get_node_detail to view specific section content. " +
-            "For documents without heading styles, automatically uses AI to infer heading levels from paragraph formatting. " +
-            "Results are cached and returned instantly when document content is unchanged.";
+            "Get hierarchical Document Map (section tree with unique node IDs). " +
+            "Default: fast mode reads only outline-level headings (no LLM). " +
+            "Set deep=true for AI-powered heading inference on unformatted documents. " +
+            "Use node IDs with read_document_section to read content. Cached.";
 
         public override JObject Parameters => new JObject
         {
             ["type"] = "object",
             ["properties"] = new JObject
             {
+                ["deep"] = new JObject
+                {
+                    ["type"] = "boolean",
+                    ["description"] = "启用深度感知：分析所有段落的字体格式，由 AI 推断标题层级。" +
+                                     "适用于未使用标准标题样式的文档。默认 false"
+                },
                 ["force_rebuild"] = new JObject
                 {
                     ["type"] = "boolean",
@@ -42,12 +47,13 @@ namespace FuXing
         public override async Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
             var doc = RequireActiveDocument(connect);
+            bool deep = OptionalBool(arguments, "deep", false);
             bool forceRebuild = OptionalBool(arguments, "force_rebuild", false);
 
             if (forceRebuild)
                 DocumentMapCache.Instance.Invalidate(doc.FullName);
 
-            var map = await DocumentMapCache.Instance.GetOrBuildAsync(doc);
+            var map = await DocumentMapCache.Instance.GetOrBuildAsync(doc, deep);
             return ToolExecutionResult.Ok(map.ToMapText());
         }
     }

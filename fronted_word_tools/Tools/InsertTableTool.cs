@@ -13,11 +13,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Structure;
 
         public override string Description =>
-            "Insert a table at the cursor position.\n" +
-            "- rows/cols: number of rows/columns (required)\n" +
-            "- data: 2D array for cell content, e.g. [[\"Header1\",\"Header2\"],[\"Val1\",\"Val2\"]]\n" +
-            "- auto_format: apply default formatting (SimSun 12pt, centered, bold gray header, 1pt borders). Default: true\n" +
-            "- col_widths: column width array (in points), e.g. [100, 200]; omit for auto-distribution";
+            "Insert table at cursor. data: 2D array for cell content. " +
+            "auto_format: apply default styling (true by default). col_widths: optional column widths in points.";
 
         public override JObject Parameters => new JObject
         {
@@ -59,6 +56,8 @@ namespace FuXing
 
             var doc = RequireActiveDocument(connect);
             var app = connect.WordApplication;
+
+            EnsureNewParagraphIfNeeded(app);
             var range = app.Selection.Range;
 
             var table = doc.Tables.Add(range, rows, cols);

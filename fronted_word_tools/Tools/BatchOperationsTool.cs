@@ -16,12 +16,9 @@ namespace FuXing
         public override bool RequiresApproval => true;
 
         public override string Description =>
-            "Execute multiple tool operations in batch to reduce round-trips.\n" +
-            "- operations: array of operations, each containing tool (tool name) and args (parameter object)\n" +
-            "- Executes sequentially; stops on first failure and returns completed results plus error info\n" +
-            "- Available tools: format_text, apply_style, search_and_replace, insert_text, " +
-            "replace_selected_text, insert_table, insert_caption, insert_toc, insert_image, " +
-            "set_page_setup, set_header_footer, create_style, navigate_to_heading, delete_section";
+            "Execute multiple tool operations sequentially in one call to reduce round-trips. Stops on first failure. " +
+            "Available tools: format_content, search_and_replace, edit_document_text, insert_table, insert_caption, " +
+            "insert_toc, insert_image, set_page_setup, set_header_footer, navigate_to_heading, delete_section";
 
         public override JObject Parameters => new JObject
         {
@@ -56,6 +53,13 @@ namespace FuXing
             var registry = connect.ToolRegistry;
             var results = new StringBuilder();
             int successCount = 0;
+
+            // 批量操作期间关闭屏幕刷新，避免每步渲染导致 Word 卡顿
+            var app = connect.WordApplication;
+            bool wasScreenUpdating = app.ScreenUpdating;
+            try
+            {
+            app.ScreenUpdating = false;
 
             for (int i = 0; i < operations.Count; i++)
             {
@@ -97,6 +101,13 @@ namespace FuXing
 
             results.Insert(0, $"全部 {successCount} 个操作执行成功：\n");
             return ToolExecutionResult.Ok(results.ToString());
+
+            }
+            finally
+            {
+                // 无论成功失败，都恢复屏幕刷新
+                app.ScreenUpdating = wasScreenUpdating;
+            }
         }
     }
 }

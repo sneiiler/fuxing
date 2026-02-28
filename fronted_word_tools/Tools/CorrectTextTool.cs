@@ -13,11 +13,9 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Editing;
 
         public override string Description =>
-            "AI-powered proofreading for Word documents (typos, semantic errors, consistency checks).\n" +
-            "- Automatically detects and corrects errors in Track Changes mode, with comments explaining each correction\n" +
-            "- If text is selected, proofreads the selection; otherwise proofreads the entire document\n" +
-            "- This is the PRIMARY tool for any proofreading / error-checking / typo-detection task — one call handles full error detection and correction\n" +
-            "- No parameters required";
+            "AI proofreading: detect and fix typos/errors in Track Changes mode with explanatory comments. " +
+            "Operates on selection or entire document. " +
+            "PRIMARY tool for any proofreading/error-checking task — use this, not search_and_replace. No parameters.";
 
         public override JObject Parameters => null;
 

@@ -12,9 +12,7 @@ namespace FuXing
         public override bool RequiresApproval => true;
 
         public override string Description =>
-            "Delete a section identified by its heading in the current document. " +
-            "Can delete both the heading and its content, or clear only the body text while preserving the heading. " +
-            "Operates in Track Changes mode for user review.";
+            "Delete section by heading name. include_heading: true=delete all (default), false=clear body only. Track Changes mode.";
 
         public override JObject Parameters => new JObject
         {

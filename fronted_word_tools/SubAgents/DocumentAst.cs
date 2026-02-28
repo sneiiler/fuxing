@@ -89,8 +89,12 @@ namespace FuXing.SubAgents
     }
 
     /// <summary>
-    /// 文档 Map：包含 AST 树 + 结构索引 + 原始段落数据。
+    /// 文档 Map：包含 AST 树 + 结构索引。
     /// 整个 Map 可被缓存，通过 ContentHash 判断是否失效。
+    ///
+    /// 双模式：
+    /// - 快速感知（IsDeepPerception=false）：从大纲级别程序化构建，无 LLM
+    /// - 深度感知（IsDeepPerception=true）：含完整段落元数据 + LLM 推断
     /// </summary>
     public class DocumentMap
     {
@@ -100,6 +104,9 @@ namespace FuXing.SubAgents
         /// <summary>文档内容 hash（用于缓存失效检测，来自 doc.Content.Text.GetHashCode()）</summary>
         public int ContentHash { get; set; }
 
+        /// <summary>文档总段落数</summary>
+        public int TotalParagraphs { get; set; }
+
         /// <summary>AST 根节点</summary>
         public DocumentAstNode Root { get; set; }
 
@@ -107,11 +114,14 @@ namespace FuXing.SubAgents
         public Dictionary<string, DocumentAstNode> Index { get; set; }
             = new Dictionary<string, DocumentAstNode>();
 
-        /// <summary>原始段落元数据（AST 构建的基础数据源）</summary>
+        /// <summary>
+        /// 原始段落元数据（仅深度感知模式填充，快速模式为 null）。
+        /// 深度感知的 AST 构建基础数据源。
+        /// </summary>
         public DocumentStructure RawStructure { get; set; }
 
-        /// <summary>是否通过 LLM 辅助推断的层级（标志非标准文档）</summary>
-        public bool LlmAssisted { get; set; }
+        /// <summary>是否为深度感知模式（含 LLM 辅助推断）</summary>
+        public bool IsDeepPerception { get; set; }
 
         /// <summary>Map 构建时间戳</summary>
         public DateTime BuiltAt { get; set; }
@@ -120,30 +130,85 @@ namespace FuXing.SubAgents
         /// 生成压缩的树形大纲文本（Document Map）。
         /// 只显示节点 ID + 标题 + 段落数 + 内容预览，不包含正文全文。
         /// 相当于编码智能体的 Repo Map。
+        ///
+        /// 快速模式下若未检测到标题或层级单一，附加深度感知提示。
         /// </summary>
         public string ToMapText()
         {
             var sb = new StringBuilder();
             sb.AppendLine($"═══ Document Map: {DocumentName} ═══");
-            sb.AppendLine($"总段落数: {RawStructure.TotalParagraphs}");
+            sb.AppendLine($"总段落数: {TotalParagraphs}");
             sb.AppendLine($"章节数: {Index.Count}");
-            if (LlmAssisted)
-                sb.AppendLine("⚠ 标题层级由 AI 推断（文档未使用标准标题样式）");
+            sb.AppendLine($"感知模式: {(IsDeepPerception ? "深度感知（LLM 辅助）" : "快速感知（大纲级别）")}");
             sb.AppendLine();
 
             if (Root.Children.Count == 0)
             {
                 sb.AppendLine("（未检测到任何标题结构）");
+                sb.AppendLine();
+                AppendDeepPerceptionHint(sb, DeepPerceptionHintReason.NoHeadings);
                 return sb.ToString();
             }
 
             foreach (var child in Root.Children)
                 AppendNodeToMap(sb, child, 0);
 
+            // 检查是否需要提示深度感知
+            if (!IsDeepPerception)
+            {
+                var hintReason = EvaluateMapQuality();
+                if (hintReason != DeepPerceptionHintReason.None)
+                {
+                    sb.AppendLine();
+                    AppendDeepPerceptionHint(sb, hintReason);
+                }
+            }
+
             sb.AppendLine();
-            sb.AppendLine("提示: 使用 get_node_detail(node_id) 查看具体章节内容");
+            sb.AppendLine("提示: 使用 read_document_section(node_id) 查看具体章节内容");
 
             return sb.ToString();
+        }
+
+        /// <summary>评估快速感知结果质量，判断是否需要提示深度感知</summary>
+        private DeepPerceptionHintReason EvaluateMapQuality()
+        {
+            if (Root.Children.Count == 0)
+                return DeepPerceptionHintReason.NoHeadings;
+
+            // 检查标题层级是否单一（所有标题都是同一级别）
+            var levels = new HashSet<int>();
+            CollectLevels(Root, levels);
+            if (levels.Count == 1)
+                return DeepPerceptionHintReason.SingleLevel;
+
+            return DeepPerceptionHintReason.None;
+        }
+
+        private static void CollectLevels(DocumentAstNode node, HashSet<int> levels)
+        {
+            if (node.Type == AstNodeType.Section)
+                levels.Add(node.Level);
+            foreach (var child in node.Children)
+                CollectLevels(child, levels);
+        }
+
+        /// <summary>追加深度感知提示信息</summary>
+        private static void AppendDeepPerceptionHint(StringBuilder sb, DeepPerceptionHintReason reason)
+        {
+            sb.AppendLine("═══ 深度感知提示 ═══");
+            switch (reason)
+            {
+                case DeepPerceptionHintReason.NoHeadings:
+                    sb.AppendLine("当前文档未检测到任何具有大纲级别的标题。");
+                    sb.AppendLine("可能原因：文档未使用标准标题样式（标题1~6），而是通过字体格式区分标题。");
+                    break;
+                case DeepPerceptionHintReason.SingleLevel:
+                    sb.AppendLine("当前文档所有标题均为同一层级，可能存在标题层级标注不完整。");
+                    break;
+            }
+            sb.AppendLine("建议：通过 ask_user 工具询问用户是否启用深度感知（get_document_map(deep=true)），");
+            sb.AppendLine("深度感知将分析所有段落的字体格式，由 AI 推断完整的标题层级结构。");
         }
 
         private static void AppendNodeToMap(StringBuilder sb, DocumentAstNode node, int indent)
@@ -159,5 +224,13 @@ namespace FuXing.SubAgents
             foreach (var child in node.Children)
                 AppendNodeToMap(sb, child, indent + 1);
         }
+    }
+
+    /// <summary>深度感知提示原因</summary>
+    internal enum DeepPerceptionHintReason
+    {
+        None,
+        NoHeadings,
+        SingleLevel
     }
 }

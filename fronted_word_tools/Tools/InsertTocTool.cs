@@ -12,10 +12,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Structure;
 
         public override string Description =>
-            "Insert or update a Table of Contents in the document.\n" +
-            "- action: insert=insert new TOC at cursor, update=update existing TOC\n" +
-            "- heading_levels: range of heading levels to include, e.g. \"1-3\" (default \"1-3\")\n" +
-            "- For insertion, position cursor at the desired TOC location (typically after title page or at beginning)";
+            "Insert or update Table of Contents. action: insert (at cursor) / update. " +
+            "heading_levels: e.g. \"1-3\" (default).";
 
         public override JObject Parameters => new JObject
         {
@@ -67,6 +65,7 @@ namespace FuXing
             if (lowerLevel < 1) lowerLevel = 1;
             if (upperLevel > 9) upperLevel = 9;
 
+            EnsureNewParagraphIfNeeded(app);
             var range = app.Selection.Range;
 
             // 使用位置参数: Add(range, useHeadingStyles, upperHeadingLevel, lowerHeadingLevel)

@@ -12,13 +12,13 @@ namespace FuXing.SubAgents
     // ═══════════════════════════════════════════════════════════════
     //  文档 AST 构建器
     //
-    //  两条路径：
-    //  1. 快速路径 — 文档使用了标准 Heading 样式 → 直接从 OutlineLevel 构建树
-    //  2. LLM 路径 — 文档未使用标题样式 → 发送格式特征给 LLM，
-    //     LLM 定义"格式签名→层级"映射规则，程序化应用到全部段落
+    //  双路径：
+    //  1. 快速路径（BuildFromOutline）— 直接从大纲级别程序化构建，无 LLM
+    //  2. 深度路径（BuildAsync）— 证据收集 + LLM 裁定，适用于不规范文档
     //
-    //  关键：LLM 只做一次判断（定义映射规则），
-    //  不逐段分析——用确定性逻辑保证一致性。
+    //  设计原则：
+    //  - 快速路径优先，保证响应速度
+    //  - 深度路径仅在用户明确要求时触发
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
@@ -26,50 +26,156 @@ namespace FuXing.SubAgents
     /// </summary>
     public class DocumentAstBuilder
     {
-        /// <summary>至少需要这么多个 OutlineLevel 标题才走快速路径</summary>
-        private const int MinHeadingCountThreshold = 2;
-
         /// <summary>发送给 LLM 的格式采样段落数上限</summary>
         private const int MaxSampleParagraphs = 50;
 
+        /// <summary>单行候选段落的最大字符数阈值</summary>
+        private const int SingleLineCandidateMaxLength = 80;
+
+        // ═══════════════════════════════════════════════════════════════
+        //  快速路径：从大纲级别直接构建（无 LLM）
+        // ═══════════════════════════════════════════════════════════════
+
         /// <summary>
-        /// 从段落元数据构建文档 AST。
-        /// 如果文档标题样式规范，直接用 OutlineLevel 构建；
-        /// 否则调用 LLM 推断格式→层级映射后程序化构建。
+        /// 从大纲级别提取结果直接构建 AST，纯程序化，不调用 LLM。
+        /// 适用于文档已使用标准标题样式（Heading 1~6）的场景。
+        /// </summary>
+        public DocumentMap BuildFromOutline(OutlineOnlyResult outline)
+        {
+            // 将 OutlineHeading 转换为 InferredHeading（复用树构建逻辑）
+            var headings = new List<InferredHeading>();
+            foreach (var h in outline.Headings)
+            {
+                headings.Add(new InferredHeading
+                {
+                    ParaIndex = h.ParaIndex,
+                    Level = h.Level,
+                    Title = h.Text
+                });
+            }
+
+            // 构建树（需要一个轻量的 position 查找结构）
+            var root = BuildTreeFromOutline(outline, headings);
+
+            // 构建索引
+            var index = new Dictionary<string, DocumentAstNode>();
+            BuildIndex(root, index);
+
+            // 计算段落统计
+            ComputeParaCounts(root, outline.TotalParagraphs);
+
+            return new DocumentMap
+            {
+                DocumentName = outline.DocumentName,
+                ContentHash = 0, // 由调用方（DocumentMapCache）设置
+                TotalParagraphs = outline.TotalParagraphs,
+                Root = root,
+                Index = index,
+                RawStructure = null, // 快速模式不需要完整段落数据
+                IsDeepPerception = false,
+                BuiltAt = DateTime.Now
+            };
+        }
+
+        /// <summary>从大纲标题列表构建 AST 树（快速路径专用）</summary>
+        private static DocumentAstNode BuildTreeFromOutline(
+            OutlineOnlyResult outline, List<InferredHeading> headings)
+        {
+            var root = new DocumentAstNode
+            {
+                NodeId = "root",
+                Type = AstNodeType.Root,
+                Level = 0,
+                Title = outline.DocumentName,
+                ParaStart = 1,
+                ParaEnd = outline.TotalParagraphs + 1,
+                CharStart = outline.Headings.Count > 0
+                    ? outline.Headings[0].StartPosition : 0,
+                CharEnd = -1
+            };
+
+            if (headings.Count == 0)
+                return root;
+
+            var stack = new Stack<DocumentAstNode>();
+            stack.Push(root);
+
+            for (int i = 0; i < headings.Count; i++)
+            {
+                var h = headings[i];
+                var outlineH = outline.Headings[i];
+
+                int nextParaIndex = (i + 1 < headings.Count)
+                    ? headings[i + 1].ParaIndex
+                    : outline.TotalParagraphs + 1;
+
+                int charEnd = (i + 1 < headings.Count)
+                    ? outline.Headings[i + 1].StartPosition
+                    : -1;
+
+                var node = new DocumentAstNode
+                {
+                    NodeId = DocumentAstNode.ComputeNodeId(h.Level, h.Title, h.ParaIndex),
+                    Type = AstNodeType.Section,
+                    Level = h.Level,
+                    Title = h.Title,
+                    ParaStart = h.ParaIndex,
+                    ParaEnd = nextParaIndex,
+                    CharStart = outlineH.StartPosition,
+                    CharEnd = charEnd,
+                    // 快速模式不读取正文段落，无法生成 ContentPreview
+                    ContentPreview = null
+                };
+
+                while (stack.Count > 1 && stack.Peek().Level >= h.Level)
+                    stack.Pop();
+
+                stack.Peek().Children.Add(node);
+                stack.Push(node);
+            }
+
+            return root;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  深度路径：证据收集 + LLM 裁定（含格式分析）
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 深度路径：从段落元数据构建文档 AST。
+        /// 收集 OutlineLevel 提示和单行候选段落，交给 LLM 统一裁定标题层级。
+        /// 仅在用户明确请求深度感知时调用。
         /// </summary>
         public async Task<DocumentMap> BuildAsync(
             DocumentStructure rawStructure,
             CancellationToken cancellation = default)
         {
-            int headingCount = rawStructure.Paragraphs
-                .Count(p => p.OutlineLevel >= 1 && p.OutlineLevel <= 6 && !p.IsBlank);
-
             List<InferredHeading> headings;
-            bool llmAssisted;
 
             // 非空段落数太少时，文档内容不足以区分标题与正文，直接返回平面树
             int nonBlankCount = rawStructure.Paragraphs.Count(p => !p.IsBlank);
 
-            if (headingCount >= MinHeadingCountThreshold)
+            if (nonBlankCount <= 3)
             {
-                // ═══ 快速路径：文档已有规范标题 ═══
-                Debug.WriteLine($"[AstBuilder] 检测到 {headingCount} 个规范标题，直接构建 AST");
-                headings = ExtractFromOutlineLevel(rawStructure);
-                llmAssisted = false;
-            }
-            else if (nonBlankCount <= 3)
-            {
-                // ═══ 简单文档路径：内容太少，无法推断标题规则，直接返回平面树 ═══
                 Debug.WriteLine($"[AstBuilder] 仅 {nonBlankCount} 个非空段落，跳过 LLM 推断，返回平面树");
                 headings = new List<InferredHeading>();
-                llmAssisted = false;
             }
             else
             {
-                // ═══ LLM 路径：请 LLM 根据格式特征推断层级 ═══
-                Debug.WriteLine($"[AstBuilder] 仅 {headingCount} 个规范标题，启动 LLM 推断");
-                headings = await InferHeadingsWithLlm(rawStructure, cancellation);
-                llmAssisted = true;
+                // ═══ 深度路径：证据收集 → LLM 裁定 ═══
+
+                // Phase 1: 收集 OutlineLevel 提示（Word 样式中已标记的标题）
+                var outlineLevelHints = ExtractOutlineLevelHints(rawStructure);
+                Debug.WriteLine($"[AstBuilder] 检测到 {outlineLevelHints.Count} 个 OutlineLevel 提示");
+
+                // Phase 2: 收集单行候选段落（可能是标题但未被样式标记）
+                var hintedIndices = new HashSet<int>(outlineLevelHints.Select(h => h.ParaIndex));
+                var singleLineCandidates = FindSingleLineCandidates(rawStructure, hintedIndices);
+                Debug.WriteLine($"[AstBuilder] 发现 {singleLineCandidates.Count} 个单行候选段落");
+
+                // Phase 3: LLM 统一裁定
+                headings = await InferHeadingsWithLlm(
+                    rawStructure, outlineLevelHints, singleLineCandidates, cancellation);
             }
 
             // 构建树
@@ -86,19 +192,21 @@ namespace FuXing.SubAgents
             {
                 DocumentName = rawStructure.DocumentName,
                 ContentHash = 0, // 由调用方（DocumentMapCache）设置
+                TotalParagraphs = rawStructure.TotalParagraphs,
                 Root = root,
                 Index = index,
                 RawStructure = rawStructure,
-                LlmAssisted = llmAssisted,
+                IsDeepPerception = true,
                 BuiltAt = DateTime.Now
             };
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  快速路径：从 OutlineLevel 提取标题
+        //  证据收集
         // ═══════════════════════════════════════════════════════════════
 
-        private static List<InferredHeading> ExtractFromOutlineLevel(DocumentStructure structure)
+        /// <summary>从 OutlineLevel 提取标题提示（作为 LLM 的参考证据）</summary>
+        private static List<InferredHeading> ExtractOutlineLevelHints(DocumentStructure structure)
         {
             var headings = new List<InferredHeading>();
 
@@ -119,24 +227,104 @@ namespace FuXing.SubAgents
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  LLM 路径：推断格式→层级映射
+        //  单行候选检测
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// 调用 LLM 一次：发送格式特征采样 → LLM 返回映射规则 JSON → 程序化应用。
-        /// LLM 只做一次判断，剩下的全是确定性逻辑。
+        /// 找出可能是标题的单行候选段落。
+        /// 条件：非空白、不在表格内、非列表项、文本长度 ≤ 阈值、
+        /// 尚未被 OutlineLevel 标记。
+        /// </summary>
+        private static List<int> FindSingleLineCandidates(
+            DocumentStructure structure, HashSet<int> hintedParaIndices)
+        {
+            var candidates = new List<int>();
+
+            foreach (var p in structure.Paragraphs)
+            {
+                if (p.IsBlank || p.IsInTable || p.IsListItem)
+                    continue;
+
+                if (hintedParaIndices.Contains(p.Index))
+                    continue;
+
+                if (p.Text == null || p.Text.Length > SingleLineCandidateMaxLength || p.Text.Length < 2)
+                    continue;
+
+                candidates.Add(p.Index);
+            }
+
+            return candidates;
+        }
+
+        /// <summary>
+        /// 为单行候选段落构建上下文描述（前后各 1 个非空段落）。
+        /// </summary>
+        private static string BuildCandidateContext(
+            DocumentStructure structure, int paraIndex)
+        {
+            var sb = new StringBuilder();
+            var para = structure.Paragraphs[paraIndex - 1]; // 1-based → 0-based
+
+            // 向前找 1 个非空段落
+            ParagraphMeta prevPara = null;
+            for (int i = paraIndex - 2; i >= 0; i--)
+            {
+                if (!structure.Paragraphs[i].IsBlank)
+                {
+                    prevPara = structure.Paragraphs[i];
+                    break;
+                }
+            }
+
+            // 向后找 1 个非空段落
+            ParagraphMeta nextPara = null;
+            for (int i = paraIndex; i < structure.Paragraphs.Count; i++)
+            {
+                if (!structure.Paragraphs[i].IsBlank)
+                {
+                    nextPara = structure.Paragraphs[i];
+                    break;
+                }
+            }
+
+            if (prevPara != null)
+                sb.AppendLine($"  前文: {prevPara.ToDescriptionLine()}");
+            else
+                sb.AppendLine("  前文: (文档开头)");
+
+            sb.AppendLine($"  ★候选: {para.ToDescriptionLine()}");
+
+            if (nextPara != null)
+                sb.AppendLine($"  后文: {nextPara.ToDescriptionLine()}");
+            else
+                sb.AppendLine("  后文: (文档末尾)");
+
+            return sb.ToString();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  LLM 统一裁定
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 将所有证据（OutlineLevel 提示 + 单行候选 + 格式采样）交给 LLM，
+        /// LLM 一次性返回最终标题列表。
         /// </summary>
         private async Task<List<InferredHeading>> InferHeadingsWithLlm(
             DocumentStructure structure,
+            List<InferredHeading> outlineLevelHints,
+            List<int> singleLineCandidates,
             CancellationToken cancellation)
         {
-            string featureSummary = BuildFormatFeatureSummary(structure);
+            string prompt = BuildUnifiedHeadingPrompt(
+                structure, outlineLevelHints, singleLineCandidates);
 
             var request = new SubAgentRequest
             {
                 Task = SubAgentTask.Custom,
-                Prompt = BuildLevelInferencePrompt(featureSummary),
-                MaxRounds = 1, // 一轮推理，不需要工具
+                Prompt = prompt,
+                MaxRounds = 1,
                 ToolDefinitions = null,
                 ToolExecutor = null
             };
@@ -145,36 +333,80 @@ namespace FuXing.SubAgents
             var result = await agent.RunAsync(request, cancellation);
 
             if (!result.Success)
-                throw new InvalidOperationException($"LLM 层级推断失败: {result.Output}");
+                throw new InvalidOperationException($"LLM 标题推断失败: {result.Output}");
 
-            var rules = ParseLevelMappingRules(result.Output);
+            var headings = ParseHeadingList(result.Output);
 
-            if (rules.Count == 0)
-            {
-                // LLM 认为文档没有可识别的标题模式，优雅降级为平面树
-                Debug.WriteLine("[AstBuilder] LLM 未返回映射规则，文档可能没有明显的标题结构，返回空列表");
-                return new List<InferredHeading>();
-            }
+            if (headings.Count == 0)
+                Debug.WriteLine("[AstBuilder] LLM 未返回任何标题，文档可能没有明显的标题结构");
+            else
+                Debug.WriteLine($"[AstBuilder] LLM 确定了 {headings.Count} 个标题");
 
-            Debug.WriteLine($"[AstBuilder] LLM 推断出 {rules.Count} 条映射规则:");
-            foreach (var r in rules)
-                Debug.WriteLine($"  Level {r.Level}: {r.Description}");
-
-            return ApplyRules(structure, rules);
+            return headings;
         }
 
-        /// <summary>构建格式特征摘要（只发送必要信息，不发全文）</summary>
+        /// <summary>构建格式特征摘要</summary>
         private static string BuildFormatFeatureSummary(DocumentStructure structure)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("=== 文档格式概况 ===");
             sb.AppendLine($"文档名: {structure.DocumentName}");
             sb.AppendLine($"总段落数: {structure.TotalParagraphs}");
             sb.AppendLine($"出现的字号: {string.Join(", ", structure.DistinctFontSizes.Select(s => s + "pt"))}");
             sb.AppendLine($"出现的样式: {string.Join(", ", structure.DistinctStyles)}");
-            sb.AppendLine();
-            sb.AppendLine($"=== 段落格式采样（前 {MaxSampleParagraphs} 个非空段落） ===");
 
+            return sb.ToString();
+        }
+
+        /// <summary>构建统一的 LLM 标题推断 Prompt</summary>
+        private static string BuildUnifiedHeadingPrompt(
+            DocumentStructure structure,
+            List<InferredHeading> outlineLevelHints,
+            List<int> singleLineCandidates)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("你是一个文档结构分析专家。请分析以下 Word 文档的段落信息，确定哪些段落是标题以及它们的层级。");
+            sb.AppendLine();
+
+            // 材料 1: 格式概况
+            sb.AppendLine("=== 1. 文档格式概况 ===");
+            sb.Append(BuildFormatFeatureSummary(structure));
+            sb.AppendLine();
+
+            // 材料 2: OutlineLevel 提示
+            sb.AppendLine("=== 2. 大纲级别提示（Word 样式中已标记的标题）===");
+            if (outlineLevelHints.Count > 0)
+            {
+                sb.AppendLine("以下段落在 Word 中设置了标题样式，供参考（你可以调整层级或排除误标）：");
+                foreach (var h in outlineLevelHints)
+                    sb.AppendLine($"  段落 #{h.ParaIndex}, 样式层级={h.Level}, 文本: {h.Title}");
+            }
+            else
+            {
+                sb.AppendLine("（无，文档未使用标准标题样式）");
+            }
+            sb.AppendLine();
+
+            // 材料 3: 单行候选
+            sb.AppendLine("=== 3. 疑似标题段落（短段落，可能是标题但未被样式标记）===");
+            if (singleLineCandidates.Count > 0)
+            {
+                sb.AppendLine("以下短段落可能是标题，每个附带前后各 1 段上下文：");
+                sb.AppendLine();
+                foreach (int paraIndex in singleLineCandidates)
+                {
+                    sb.AppendLine($"--- 候选 #{paraIndex} ---");
+                    sb.Append(BuildCandidateContext(structure, paraIndex));
+                    sb.AppendLine();
+                }
+            }
+            else
+            {
+                sb.AppendLine("（无单行候选段落）");
+            }
+            sb.AppendLine();
+
+            // 材料 4: 段落格式采样
+            sb.AppendLine($"=== 4. 段落格式采样（前 {MaxSampleParagraphs} 个非空段落）===");
             int count = 0;
             foreach (var p in structure.Paragraphs)
             {
@@ -183,68 +415,40 @@ namespace FuXing.SubAgents
                 count++;
                 if (count >= MaxSampleParagraphs) break;
             }
-
-            return sb.ToString();
-        }
-
-        /// <summary>构建 LLM 层级推断的 Prompt</summary>
-        private static string BuildLevelInferencePrompt(string featureSummary)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine("你是一个文档格式分析专家。");
-            sb.AppendLine("下面提供了一份 Word 文档的段落格式信息采样。");
-            sb.AppendLine("这份文档没有正确使用 Word 的标题样式（Heading 1~6），");
-            sb.AppendLine("但作者通过字号、加粗、居中等排版特征来区分标题与正文。");
             sb.AppendLine();
-            sb.AppendLine("请分析这些格式特征，输出一组「格式签名→标题层级」的映射规则。");
-            sb.AppendLine();
-            sb.AppendLine("规则说明：");
-            sb.AppendLine("- 每条规则描述一种标题的格式特征组合及其对应的层级（1-6）");
-            sb.AppendLine("- 字号越大、加粗、居中 通常意味着越高层级");
-            sb.AppendLine("- 不是所有段落都是标题，正文段落不需要映射");
-            sb.AppendLine("- 只输出你有信心判断为标题的规则");
+
+            // 判断要求
+            sb.AppendLine("=== 判断要求 ===");
+            sb.AppendLine("综合考虑以上所有材料，确定文档的标题及其层级（1-6）：");
+            sb.AppendLine("- 大纲级别提示是重要参考，但你可以根据实际情况调整或补充");
+            sb.AppendLine("- 短段落如果独占一行、前后是长正文段落、且语义像标题名称，则很可能是标题");
+            sb.AppendLine("- 标题通常是名词短语或简短描述，通常不以句号结尾");
+            sb.AppendLine("- 字号越大、加粗、居中通常意味着越高层级");
+            sb.AppendLine("- 层级应体现文档的逻辑嵌套关系");
+            sb.AppendLine("- 只输出你有信心判断为标题的段落");
             sb.AppendLine();
             sb.AppendLine("请严格按以下 JSON 格式输出（不要输出任何其他内容）：");
             sb.AppendLine("```json");
             sb.AppendLine("[");
-            sb.AppendLine("  {");
-            sb.AppendLine("    \"level\": 1,");
-            sb.AppendLine("    \"min_font_size\": 18.0,");
-            sb.AppendLine("    \"max_font_size\": 22.0,");
-            sb.AppendLine("    \"bold\": true,");
-            sb.AppendLine("    \"alignment\": \"居中\",");
-            sb.AppendLine("    \"description\": \"大号加粗居中，一级标题\"");
-            sb.AppendLine("  },");
-            sb.AppendLine("  {");
-            sb.AppendLine("    \"level\": 2,");
-            sb.AppendLine("    \"min_font_size\": 14.0,");
-            sb.AppendLine("    \"max_font_size\": 16.0,");
-            sb.AppendLine("    \"bold\": true,");
-            sb.AppendLine("    \"alignment\": null,");
-            sb.AppendLine("    \"description\": \"中等加粗，二级标题\"");
-            sb.AppendLine("  }");
+            sb.AppendLine("  {\"para_index\": 3, \"level\": 1, \"title\": \"第一章 引言\"},");
+            sb.AppendLine("  {\"para_index\": 15, \"level\": 2, \"title\": \"1.1 研究背景\"}");
             sb.AppendLine("]");
             sb.AppendLine("```");
             sb.AppendLine();
             sb.AppendLine("字段说明：");
+            sb.AppendLine("- para_index: 段落序号（与上面采样中的段落 # 一致）");
             sb.AppendLine("- level: 1-6，标题层级");
-            sb.AppendLine("- min_font_size / max_font_size: 字号范围（pt），null 表示不限制字号");
-            sb.AppendLine("- bold: true/false/null（null 表示不限制加粗）");
-            sb.AppendLine("- alignment: '居中'/'左对齐'/'右对齐'/'两端对齐'/null（null 表示不限制对齐）");
-            sb.AppendLine("- description: 规则说明（给人阅读的备注）");
-            sb.AppendLine();
-            sb.AppendLine("以下是文档格式数据：");
-            sb.AppendLine(featureSummary);
+            sb.AppendLine("- title: 标题文本");
 
             return sb.ToString();
         }
 
-        /// <summary>从 LLM 输出中解析映射规则 JSON</summary>
-        private static List<LevelMappingRule> ParseLevelMappingRules(string llmOutput)
+        /// <summary>从 LLM 输出中解析标题列表 JSON</summary>
+        private static List<InferredHeading> ParseHeadingList(string llmOutput)
         {
             string json = ExtractJsonArray(llmOutput);
             if (string.IsNullOrEmpty(json))
-                return new List<LevelMappingRule>();
+                return new List<InferredHeading>();
 
             JArray arr;
             try
@@ -260,29 +464,33 @@ namespace FuXing.SubAgents
                     $"提取到的内容: {json.Substring(0, Math.Min(200, json.Length))}\n" +
                     $"LLM 原始输出: {llmOutput.Substring(0, Math.Min(500, llmOutput.Length))}", ex);
             }
-            var rules = new List<LevelMappingRule>();
+
+            var headings = new List<InferredHeading>();
+            var seen = new HashSet<int>();
 
             foreach (var item in arr)
             {
-                var rule = new LevelMappingRule
-                {
-                    Level = item["level"]?.Value<int>() ?? 0,
-                    MinFontSize = item["min_font_size"]?.Type == JTokenType.Null
-                        ? null : item["min_font_size"]?.Value<float?>(),
-                    MaxFontSize = item["max_font_size"]?.Type == JTokenType.Null
-                        ? null : item["max_font_size"]?.Value<float?>(),
-                    Bold = item["bold"]?.Type == JTokenType.Null
-                        ? null : item["bold"]?.Value<bool?>(),
-                    Alignment = item["alignment"]?.Type == JTokenType.Null
-                        ? null : item["alignment"]?.Value<string>(),
-                    Description = item["description"]?.Value<string>()
-                };
+                int paraIndex = item["para_index"]?.Value<int>() ?? 0;
+                int level = item["level"]?.Value<int>() ?? 0;
+                string title = item["title"]?.Value<string>();
 
-                if (rule.Level >= 1 && rule.Level <= 6)
-                    rules.Add(rule);
+                if (paraIndex <= 0 || level < 1 || level > 6)
+                    continue;
+
+                if (!seen.Add(paraIndex))
+                    continue;
+
+                headings.Add(new InferredHeading
+                {
+                    ParaIndex = paraIndex,
+                    Level = level,
+                    Title = title ?? ""
+                });
             }
 
-            return rules;
+            headings.Sort((a, b) => a.ParaIndex.CompareTo(b.ParaIndex));
+
+            return headings;
         }
 
         /// <summary>从 LLM 文本输出中提取 JSON 数组</summary>
@@ -332,38 +540,6 @@ namespace FuXing.SubAgents
                     || char.IsDigit(c) || c == 't' || c == 'f' || c == 'n' || c == ']';
             }
             return false;
-        }
-
-        /// <summary>用映射规则程序化地标记标题段落</summary>
-        private static List<InferredHeading> ApplyRules(
-            DocumentStructure structure, List<LevelMappingRule> rules)
-        {
-            var headings = new List<InferredHeading>();
-
-            // 按层级排序（高层级优先匹配，避免低层级规则误捕获高层级标题）
-            var sortedRules = rules.OrderBy(r => r.Level).ToList();
-
-            foreach (var p in structure.Paragraphs)
-            {
-                if (p.IsBlank || p.IsInTable) continue;
-
-                foreach (var rule in sortedRules)
-                {
-                    if (rule.Matches(p))
-                    {
-                        headings.Add(new InferredHeading
-                        {
-                            ParaIndex = p.Index,
-                            Level = rule.Level,
-                            Title = p.Text
-                        });
-                        break; // 一个段落只匹配一条规则
-                    }
-                }
-            }
-
-            Debug.WriteLine($"[AstBuilder] 映射规则匹配了 {headings.Count} 个标题段落");
-            return headings;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -501,48 +677,6 @@ namespace FuXing.SubAgents
             public int ParaIndex { get; set; }  // 1-based 段落索引
             public int Level { get; set; }       // 1-6 标题层级
             public string Title { get; set; }    // 标题文本
-        }
-
-        /// <summary>
-        /// LLM 推断的格式→层级映射规则。
-        /// 描述一种标题的格式特征组合（字号范围、加粗、对齐）及其对应层级。
-        /// </summary>
-        private class LevelMappingRule
-        {
-            public int Level { get; set; }
-            public float? MinFontSize { get; set; }
-            public float? MaxFontSize { get; set; }
-            public bool? Bold { get; set; }
-            public string Alignment { get; set; }
-            public string Description { get; set; }
-
-            /// <summary>检查段落是否匹配此规则</summary>
-            public bool Matches(ParagraphMeta para)
-            {
-                // 如果规则指定了字号范围，段落必须有有效字号
-                if ((MinFontSize.HasValue || MaxFontSize.HasValue) && para.FontSize < 0)
-                    return false;
-
-                if (MinFontSize.HasValue && para.FontSize < MinFontSize.Value)
-                    return false;
-
-                if (MaxFontSize.HasValue && para.FontSize > MaxFontSize.Value)
-                    return false;
-
-                // 加粗检查
-                if (Bold.HasValue && para.Bold != Bold.Value)
-                    return false;
-
-                // 对齐检查
-                if (!string.IsNullOrEmpty(Alignment) && para.Alignment != Alignment)
-                    return false;
-
-                // 过短的段落不太可能是标题
-                if (para.Text == null || para.Text.Length < 2)
-                    return false;
-
-                return true;
-            }
         }
     }
 }

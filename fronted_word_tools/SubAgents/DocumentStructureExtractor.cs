@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -9,11 +10,41 @@ namespace FuXing.SubAgents
     // ═══════════════════════════════════════════════════════════════
     //  文档结构提取器
     //
-    //  从 Word COM 提取每个段落的格式元数据（字体、字号、加粗、
-    //  对齐等），生成结构化的文档骨架表示。
-    //  用于文档感知子智能体推断标题层级，尤其适用于
-    //  「格式标注不规范、未使用 Heading 样式」的文档。
+    //  双模式设计：
+    //  1. 快速模式（ExtractOutlineOnly）：只读取具有大纲级别的标题段落，
+    //     跳过所有格式属性，用于高效构建文档 Map。
+    //  2. 深度模式（Extract）：提取每个段落的格式元数据（字号、加粗、
+    //     对齐等），供 LLM 推断标题层级，适用于未使用标题样式的文档。
     // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>快速模式提取的大纲标题项</summary>
+    public class OutlineHeading
+    {
+        /// <summary>段落序号（1-based）</summary>
+        public int ParaIndex { get; set; }
+
+        /// <summary>大纲级别（1-9）</summary>
+        public int Level { get; set; }
+
+        /// <summary>标题文本</summary>
+        public string Text { get; set; }
+
+        /// <summary>段落在文档中的字符偏移位置</summary>
+        public int StartPosition { get; set; }
+    }
+
+    /// <summary>快速模式大纲提取结果</summary>
+    public class OutlineOnlyResult
+    {
+        /// <summary>文档名</summary>
+        public string DocumentName { get; set; }
+
+        /// <summary>总段落数</summary>
+        public int TotalParagraphs { get; set; }
+
+        /// <summary>检测到的大纲标题列表（按段落顺序排列）</summary>
+        public List<OutlineHeading> Headings { get; set; } = new List<OutlineHeading>();
+    }
 
     /// <summary>单个段落的结构描述</summary>
     public class ParagraphMeta
@@ -26,9 +57,6 @@ namespace FuXing.SubAgents
 
         /// <summary>大纲级别（1-9 为标题级别，10 = 正文 / 未设置）</summary>
         public int OutlineLevel { get; set; }
-
-        /// <summary>字体名称</summary>
-        public string FontName { get; set; }
 
         /// <summary>字号（pt），-1 表示段落内混合字号</summary>
         public float FontSize { get; set; }
@@ -148,9 +176,81 @@ namespace FuXing.SubAgents
         /// <summary>段落文本截断长度</summary>
         private const int MaxTextLength = 120;
 
-        /// <summary>提取整个文档的结构。</summary>
+        /// <summary>标题文本截断长度（快速模式）</summary>
+        private const int MaxHeadingTextLength = 200;
+
+        // ═══════════════════════════════════════════════════════════════
+        //  快速模式：仅提取大纲级别标题
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 快速提取：只遍历段落的 OutlineLevel，
+        /// 仅采集具有大纲级别（1-9）的标题段落的文本和位置。
+        /// 跳过所有正文段落的格式属性（字号、加粗、对齐等），
+        /// 最大限度减少 COM 调用开销。
+        /// </summary>
+        public static OutlineOnlyResult ExtractOutlineOnly(NetOffice.WordApi.Document doc)
+        {
+            var sw = Stopwatch.StartNew();
+
+            var result = new OutlineOnlyResult
+            {
+                DocumentName = doc.Name,
+                TotalParagraphs = doc.Paragraphs.Count
+            };
+
+            int index = 0;
+
+            foreach (NetOffice.WordApi.Paragraph para in doc.Paragraphs)
+            {
+                index++;
+
+                // 仅读取大纲级别 — 这是每段最低开销的 COM 属性
+                int outlineLevel = 10;
+                try { outlineLevel = (int)para.OutlineLevel; }
+                catch { continue; }
+
+                // 非标题段落直接跳过，不读取任何其他属性
+                if (outlineLevel < 1 || outlineLevel > 9)
+                    continue;
+
+                // 标题段落：读取文本和位置
+                var range = para.Range;
+                string text = range.Text?.TrimEnd('\r', '\n', '\a') ?? "";
+
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                result.Headings.Add(new OutlineHeading
+                {
+                    ParaIndex = index,
+                    Level = outlineLevel,
+                    Text = text.Length > MaxHeadingTextLength
+                        ? text.Substring(0, MaxHeadingTextLength) + "…"
+                        : text,
+                    StartPosition = range.Start
+                });
+            }
+
+            sw.Stop();
+            Debug.WriteLine($"[Extractor] 快速模式完成: {result.Headings.Count} 个标题, " +
+                            $"{result.TotalParagraphs} 总段落, 耗时 {sw.ElapsedMilliseconds}ms");
+
+            return result;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  深度模式：提取全量段落格式元数据（供 LLM 推断标题）
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 深度提取：遍历所有段落，采集字号、加粗、对齐、样式等格式元数据。
+        /// 用于文档未使用标准标题样式时，提供给 LLM 推断标题层级。
+        /// </summary>
         public static DocumentStructure Extract(NetOffice.WordApi.Document doc)
         {
+            var sw = Stopwatch.StartNew();
+
             var result = new DocumentStructure
             {
                 DocumentName = doc.Name,
@@ -250,11 +350,6 @@ namespace FuXing.SubAgents
                 }
                 catch { }
 
-                // 字体名
-                string fontName = "";
-                try { fontName = font.Name ?? ""; }
-                catch { }
-
                 if (fontSize > 0) fontSizes.Add(fontSize);
                 if (!string.IsNullOrEmpty(styleName)) styles.Add(styleName);
 
@@ -263,7 +358,6 @@ namespace FuXing.SubAgents
                     Index = index,
                     StyleName = styleName,
                     OutlineLevel = outlineLevel,
-                    FontName = fontName,
                     FontSize = fontSize,
                     Bold = bold,
                     Italic = italic,
@@ -279,6 +373,9 @@ namespace FuXing.SubAgents
 
             result.DistinctFontSizes = fontSizes.OrderByDescending(s => s).ToList();
             result.DistinctStyles = styles.OrderBy(s => s).ToList();
+
+            sw.Stop();
+            Debug.WriteLine($"[Extractor] 深度模式完成: {result.TotalParagraphs} 段落, 耗时 {sw.ElapsedMilliseconds}ms");
 
             return result;
         }

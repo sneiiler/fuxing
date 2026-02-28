@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Net.Http;
 
 namespace FuXing
@@ -54,155 +55,6 @@ namespace FuXing
                 _developerMode = false;
                 System.Diagnostics.Debug.WriteLine($"Failed to load configuration: {ex.Message}");
             }
-        }
-
-        // 发送AI文本纠错请求
-        public string SendTextCorrectionRequest(string text)
-        {
-            try
-            {
-                string url = $"{_baseUrl}/api/correct";
-                
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                request.Method = "POST";
-                request.ContentType = "application/json; charset=UTF-8";
-                request.Timeout = 10000;
-                if (!string.IsNullOrEmpty(_apiKey))
-                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
-
-                var requestData = new { text = text };
-                string jsonData = JsonConvert.SerializeObject(requestData);
-                byte[] data = Encoding.UTF8.GetBytes(jsonData);
-                request.ContentLength = data.Length;
-
-                using (Stream stream = request.GetRequestStream())
-                {
-                    stream.Write(data, 0, data.Length);
-                }
-
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                using (StreamReader reader = new StreamReader(response.GetResponseStream()))
-                {
-                    string responseText = reader.ReadToEnd();
-                    dynamic responseData = JsonConvert.DeserializeObject(responseText);
-                    return responseData?.corrected_text ?? text;
-                }
-            }
-            catch (Exception ex)
-            {
-                return $"文本纠错失败: {ex.Message}";
-            }
-        }
-
-        // 获取标准系统的SID（标准检验已迁移到后端服务，此方法保留兼容）
-        private string GetStandardSystemSid()
-        {
-            try
-            {
-                string loginUrl = $"{_baseUrl}/portal/r/w?cmd=com.awspaas.user.login";
-                
-                HttpWebRequest loginRequest = (HttpWebRequest)WebRequest.Create(loginUrl);
-                loginRequest.Method = "POST";
-                loginRequest.ContentType = "application/x-www-form-urlencoded; charset=UTF-8";
-                loginRequest.Timeout = 10000;
-
-                string postData = "type=login&jsonData={\"userid\":\"guest\",\"userpwd\":\"guest\"}";
-                byte[] data = Encoding.UTF8.GetBytes(postData);
-                loginRequest.ContentLength = data.Length;
-
-                using (Stream stream = loginRequest.GetRequestStream())
-                {
-                    stream.Write(data, 0, data.Length);
-                }
-
-                using (HttpWebResponse response = (HttpWebResponse)loginRequest.GetResponse())
-                using (StreamReader reader = new StreamReader(response.GetResponseStream()))
-                {
-                    string responseBody = reader.ReadToEnd();
-                    dynamic responseData = JsonConvert.DeserializeObject(responseBody);
-                    return responseData?.data?.sid ?? string.Empty;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Login failed: {ex.Message}");
-                return string.Empty;
-            }
-        }
-
-        // 使用SID执行标准校验查询
-        public string SendStandardCheckRequest(string searchInfo)
-        {
-            try
-            {
-                string sid = GetStandardSystemSid();
-                if (string.IsNullOrEmpty(sid))
-                {
-                    return "无法获取登录凭证，标准校验失败";
-                }
-
-                string checkUrl = $"{_baseUrl}/portal/r/w?sid={sid}&cmd=com.awspaas.user.apps.standard.pubController";
-                
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(checkUrl);
-                request.Method = "POST";
-                request.ContentType = "application/x-www-form-urlencoded; charset=UTF-8";
-                request.Headers.Add("Cookie", "AWSLOGINUID=null; AWSLOGINPWD=null; AWSLOGINRSAPWD=null");
-                request.Timeout = 10000;
-
-                string searchInfo_cleaned = Regex.Replace(searchInfo, @"[^\w\s\u4e00-\u9fa5\n-]", "");
-                string postData = $"type=serachInfo&jsonData={{\"tableName\":\"BO_EU_STANDARD_QUERY\",\"serachInfo\":\"{searchInfo_cleaned}\"}}";
-                byte[] data = Encoding.UTF8.GetBytes(postData);
-                request.ContentLength = data.Length;
-
-                using (Stream stream = request.GetRequestStream())
-                {
-                    stream.Write(data, 0, data.Length);
-                }
-
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                using (StreamReader reader = new StreamReader(response.GetResponseStream()))
-                {
-                    string responseText = reader.ReadToEnd();
-                    dynamic responseData = JsonConvert.DeserializeObject(responseText);
-                    string htmlContent = responseData?.data;
-
-                    if (!string.IsNullOrEmpty(htmlContent))
-                    {
-                        // 处理HTML内容，转换为纯文本
-                        htmlContent = Regex.Replace(htmlContent, @"<\\?\/?br\s*\/?>(?=\s*[^\s])", Environment.NewLine + Environment.NewLine);
-                        string plainText = Regex.Replace(htmlContent, "<[^>]+?>", "");
-                        return Environment.NewLine + plainText;
-                    }
-                    else
-                    {
-                        return "未找到相关标准信息";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                return $"标准校验失败: {ex.Message}";
-            }
-        }
-
-        // OpenAI兼容的流式聊天API模型类
-        public class ChatMessage
-        {
-            public string role { get; set; }
-            public string content { get; set; }
-        }
-
-        public class ChatCompletionRequest
-        {
-            public string model { get; set; } = "gpt-3.5-turbo";
-            public ChatMessage[] messages { get; set; }
-            public bool stream { get; set; } = true;
-            public double temperature { get; set; } = 0.7;
-            public int max_tokens { get; set; } = 2048;
-            // Office插件特定的元数据
-            public string mode { get; set; }
-            public object doc { get; set; }
-            public object selection_range { get; set; }
         }
 
         public class ChatCompletionChunk
@@ -264,7 +116,7 @@ namespace FuXing
             ChatMemory memory,
             JArray tools,
             Action<string> onChunkReceived,
-            Action<string> onError)
+            Action<string> onError, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(_baseUrl))
             {
@@ -319,6 +171,7 @@ namespace FuXing
                         string line;
                         while ((line = await reader.ReadLineAsync()) != null)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             if (!line.StartsWith("data: "))
                                 continue;
 
@@ -391,131 +244,15 @@ namespace FuXing
 
                 return result;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 var innerMsg = ex.InnerException != null ? $" -> {ex.InnerException.Message}" : "";
                 onError?.Invoke($"发送聊天请求失败: {ex.Message}{innerMsg}");
                 return null;
-            }
-        }
-
-        // 发送流式聊天请求到后端 OpenAI 兼容 API（旧接口，保留兼容）
-        public async Task SendStreamChatRequestAsync(string userMessage, string mode, string knowledgeBase, Action<string> onChunkReceived, Action onCompleted, Action<string> onError)
-        {
-            // 检查必需配置
-            if (string.IsNullOrWhiteSpace(_baseUrl))
-            {
-                onError?.Invoke("未配置 Base URL，请在设置中配置服务器地址");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(_modelName))
-            {
-                onError?.Invoke("未配置模型名称，请在设置中选择或输入模型");
-                return;
-            }
-
-            try
-            {
-                string url = $"{_baseUrl}/chat/completions";
-                
-                // 构建消息数组，可以根据mode和knowledgeBase调整系统消息
-                var systemMessage = GetSystemMessage(mode, knowledgeBase);
-                var messages = new[]
-                {
-                    new ChatMessage { role = "system", content = systemMessage },
-                    new ChatMessage { role = "user", content = userMessage }
-                };
-
-                var requestData = new ChatCompletionRequest
-                {
-                    model = _modelName,
-                    messages = messages,
-                    stream = true,
-                    temperature = 0.7,
-                    max_tokens = 2048,
-                    // 添加Office插件特定的元数据
-                    mode = ConvertToBackendMode(mode),
-                    // TODO: 未来可以添加文档引用和选择范围
-                    // doc = new { doc_id = "current_document", doc_version_id = "1" },
-                    // selection_range = new { startParagraphId = "p1", startOffset = 0, endParagraphId = "p1", endOffset = 100 }
-                };
-
-                string jsonData = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = content
-                };
-                if (!string.IsNullOrEmpty(_apiKey))
-                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
-
-                using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
-                {
-                    if (response.IsSuccessStatusCode)
-                    {
-                        using (var stream = await response.Content.ReadAsStreamAsync())
-                        using (var reader = new StreamReader(stream, Encoding.UTF8))
-                        {
-                            string line;
-                            System.Diagnostics.Debug.WriteLine("开始读取流式响应...");
-                            
-                            while ((line = await reader.ReadLineAsync()) != null)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"收到原始数据行: {line}");
-                                
-                                if (line.StartsWith("data: "))
-                                {
-                                    string data = line.Substring(6);
-                                    if (data == "[DONE]")
-                                    {
-                                        System.Diagnostics.Debug.WriteLine("收到流式结束标记");
-                                        onCompleted?.Invoke();
-                                        break;
-                                    }
-
-                                    try
-                                    {
-                                        var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(data);
-                                        if (chunk?.choices?.Length > 0 && chunk.choices[0].delta?.content != null)
-                                        {
-                                            string content_chunk = chunk.choices[0].delta.content;
-                                            System.Diagnostics.Debug.WriteLine($"解析到内容块: '{content_chunk}'");
-                                            onChunkReceived?.Invoke(content_chunk);
-                                        }
-                                        else
-                                        {
-                                            System.Diagnostics.Debug.WriteLine($"忽略空内容块: {data}");
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        System.Diagnostics.Debug.WriteLine($"解析流式数据失败: {ex.Message}, 数据: {data}");
-                                    }
-                                }
-                                else if (!string.IsNullOrWhiteSpace(line))
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"忽略非data行: {line}");
-                                }
-                            }
-                            
-                            System.Diagnostics.Debug.WriteLine("流式响应读取完成");
-                        }
-                    }
-                    else
-                    {
-                        onError?.Invoke($"请求失败: {response.StatusCode} - {response.ReasonPhrase}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                var innerMsg = ex.InnerException != null ? $" -> {ex.InnerException.Message}" : "";
-                System.Diagnostics.Debug.WriteLine($"流式请求异常: {ex.Message}{innerMsg}");
-                System.Diagnostics.Debug.WriteLine($"异常类型: {ex.GetType().FullName}");
-                if (ex.InnerException != null)
-                    System.Diagnostics.Debug.WriteLine($"内部异常: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
-                onError?.Invoke($"发送聊天请求失败: {ex.Message}{innerMsg}");
             }
         }
 

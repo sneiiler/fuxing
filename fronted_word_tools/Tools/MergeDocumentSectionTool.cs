@@ -15,11 +15,9 @@ namespace FuXing
         public override bool RequiresApproval => true;
 
         public override string Description =>
-            "Merge content from an external document into a target heading section of the active document (preserving formatting). " +
-            "Can merge an entire file or only a specific section from the source. " +
-            "Operates in Track Changes mode for user review. " +
-            "Defaults: replace_existing=true (clears target section first to avoid duplication); " +
-            "exclude_source_heading=true (skips source heading paragraph to prevent duplicate headings).";
+            "Merge external document content into a target heading section (preserving formatting, Track Changes mode). " +
+            "Can merge entire file or specific source section. " +
+            "Defaults: replace_existing=true, exclude_source_heading=true.";
 
         public override JObject Parameters => new JObject
         {

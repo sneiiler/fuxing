@@ -26,14 +26,9 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Advanced;
 
         public override string Description =>
-            "Launch an independent-context sub-agent to perform document analysis tasks. " +
-            "The sub-agent has a completely separate conversation context, unaffected by the current conversation, " +
-            "and can call read-only tools to gather additional document information.\n" +
-            "Supported task types:\n" +
-            "- analyze_structure: analyze document structure, infer heading levels (especially for documents without heading styles), detect formatting inconsistencies\n" +
-            "- extract_key_info: extract key document information (data, dates, terms, arguments), check cross-document consistency\n" +
-            "- custom: custom analysis task (describe in detail in the prompt)\n" +
-            "Sub-agents only perform analysis and information extraction — they do not modify the document.";
+            "Launch a read-only sub-agent for document analysis (separate context, cannot modify document). " +
+            "Tasks: analyze_structure (heading levels, formatting consistency), " +
+            "extract_key_info (data, dates, terms, cross-doc consistency), custom (describe in prompt).";
 
         public override JObject Parameters => new JObject
         {
@@ -49,25 +44,22 @@ namespace FuXing
                 ["prompt"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "给子智能体的具体指令。" +
-                        "对于 analyze_structure，可指定重点关注的方面（如'检查编号连续性'）；" +
-                        "对于 extract_key_info，可指定要关注的信息类别（如'重点检查数值是否前后一致'）；" +
-                        "对于 custom，需详细描述分析任务"
+                    ["description"] = "给子智能体的具体指令"
                 },
                 ["include_structure"] = new JObject
                 {
                     ["type"] = "boolean",
-                    ["description"] = "是否提取并注入文档结构元数据（段落格式信息）。默认 true"
+                    ["description"] = "注入文档结构元数据（默认 true）"
                 },
                 ["include_text"] = new JObject
                 {
                     ["type"] = "boolean",
-                    ["description"] = "是否注入文档全文文本。默认：analyze_structure 时 false，其他 true"
+                    ["description"] = "注入文档全文（默认因task而异）"
                 },
                 ["max_text_chars"] = new JObject
                 {
                     ["type"] = "integer",
-                    ["description"] = "注入文档文本时的最大字符数。默认 8000"
+                    ["description"] = "文本最大字符数（默认 8000）"
                 }
             },
             ["required"] = new JArray("task")

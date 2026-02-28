@@ -25,8 +25,14 @@ namespace FuXing
         /// <summary>工具分类（用于按功能域组织工具列表）</summary>
         ToolCategory Category { get; }
 
-        /// <summary>是否为危险操作（执行前需用户审批）</summary>
+        /// <summary>是否需要用户审批确认（静态标记，不依赖参数）</summary>
         bool RequiresApproval { get; }
+
+        /// <summary>
+        /// 根据实际调用参数判断是否需要审批确认。
+        /// 默认回退到 <see cref="RequiresApproval"/> 属性。
+        /// </summary>
+        bool ShouldRequireApproval(JObject arguments);
 
         /// <summary>执行工具逻辑</summary>
         Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments);

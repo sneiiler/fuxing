@@ -11,9 +11,7 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Structure;
 
         public override string Description =>
-            "Navigate the cursor to a specified heading in the active document. " +
-            "Supports three positioning modes: before (before heading), after (after heading), end_of_section (end of the section). " +
-            "Used for positioning the insertion point during document merging.";
+            "Move cursor to a heading. Positions: before/after heading, end_of_section.";
 
         public override JObject Parameters => new JObject
         {

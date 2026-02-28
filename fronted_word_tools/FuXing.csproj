@@ -1,4 +1,4 @@
-ï»¿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -78,7 +78,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <!-- Core: åŸºç¡€è®¾æ–½ & é…ç½® -->
+    <!-- Core: »ù´¡ÉèÊ© & ÅäÖÃ -->
     <Compile Include="Core\ChatMemory.cs" />
     <Compile Include="Core\ConfigLoader.cs" />
     <Compile Include="Core\NetWorkHelper.cs" />
@@ -88,7 +88,7 @@
     <Compile Include="Core\DocumentHelper.cs" />
     <Compile Include="Core\DebugLogger.cs" />
     <Compile Include="Core\ToolCategory.cs" />
-    <!-- SubAgents: å­æ™ºèƒ½ä½“ -->
+    <!-- SubAgents: ×ÓÖÇÄÜÌå -->
     <Compile Include="SubAgents\SubAgent.cs" />
     <Compile Include="SubAgents\SubAgentModels.cs" />
     <Compile Include="SubAgents\DocumentStructureExtractor.cs" />
@@ -97,7 +97,7 @@
     <Compile Include="SubAgents\DocumentAstBuilder.cs" />
     <Compile Include="SubAgents\DocumentMapCache.cs" />
     <Compile Include="Core\WordHelper.cs" />
-    <!-- UI: çª—ä½“ & ç•Œé¢ -->
+    <!-- UI: ´°Ìå & ½çÃæ -->
     <Compile Include="UI\AboutDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -108,21 +108,18 @@
     <Compile Include="UI\TaskPaneControl.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <!-- Tools: AI å·¥å…·æœåŠ¡ -->
+    <!-- Tools: AI ¹¤¾ß·þÎñ -->
     <Compile Include="Tools\ITool.cs" />
     <Compile Include="Tools\ToolBase.cs" />
     <Compile Include="Tools\TextCorrectionService.cs" />
     <Compile Include="Tools\CorrectTextTool.cs" />
     <Compile Include="Tools\FormatTableTool.cs" />
-    <Compile Include="Tools\CheckStandardTool.cs" />
     <Compile Include="Tools\GetSelectedTextTool.cs" />
     <Compile Include="Tools\GetDocumentInfoTool.cs" />
-    <Compile Include="Tools\InsertTextTool.cs" />
-    <Compile Include="Tools\ReplaceSelectedTextTool.cs" />
+    <Compile Include="Tools\EditDocumentTextTool.cs" />
     <Compile Include="Tools\ListFilesTool.cs" />
     <Compile Include="Tools\GetDocumentMapTool.cs" />
-    <Compile Include="Tools\GetNodeDetailTool.cs" />
-    <Compile Include="Tools\ReadSectionTextTool.cs" />
+    <Compile Include="Tools\ReadDocumentSectionTool.cs" />
     <Compile Include="Tools\NavigateToHeadingTool.cs" />
     <Compile Include="Tools\MergeDocumentSectionTool.cs" />
     <Compile Include="Tools\DeleteSectionTool.cs" />
@@ -137,7 +134,14 @@
     <Compile Include="Tools\SetHeaderFooterTool.cs" />
     <Compile Include="Tools\BatchOperationsTool.cs" />
     <Compile Include="Tools\LoadSkillTool.cs" />
-    <!-- æ’ä»¶å…¥å£ -->
+    <Compile Include="Tools\UndoRedoTool.cs" />
+    <Compile Include="Tools\ReadTableTool.cs" />
+    <Compile Include="Tools\AddCommentTool.cs" />
+    <Compile Include="Tools\ToggleTrackChangesTool.cs" />
+    <Compile Include="Tools\BookmarkTool.cs" />
+    <Compile Include="Tools\CrossReferenceTool.cs" />
+    <Compile Include="Tools\AskUserTool.cs" />
+    <!-- ²å¼þÈë¿Ú -->
     <Compile Include="FuXing.cs">
       <SubType>UserControl</SubType>
     </Compile>

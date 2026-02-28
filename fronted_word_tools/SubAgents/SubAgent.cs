@@ -149,82 +149,82 @@ namespace FuXing.SubAgents
             }
 
             sb.AppendLine();
-            sb.AppendLine("Important rules:");
-            sb.AppendLine("- You only perform analysis and information extraction. Never modify the document.");
-            sb.AppendLine("- Reference paragraphs using the format [Paragraph #N].");
-            sb.AppendLine("- Always respond in Chinese.");
-            sb.AppendLine("- Output analysis results directly without any pleasantries or preamble.");
-            sb.AppendLine("- If tools are available, you may call them to obtain additional document information.");
+            sb.AppendLine("重要规则：");
+            sb.AppendLine("- 你只执行信息分析和提取，不要修改文档。");
+            sb.AppendLine("- 使用 [第N段] 格式来引用段落。");
+            sb.AppendLine("- 必须用中文回复。");
+            sb.AppendLine("- 直接输出分析结果，不要客套话或开场白。");
+            sb.AppendLine("- 如果有可用的工具，可以调用它们获取更多文档信息。");
 
             return sb.ToString();
         }
 
         private static void BuildCustomAnalysisPrompt(StringBuilder sb)
         {
-            sb.AppendLine("You are a professional document analysis sub-agent.");
-            sb.AppendLine("Your task is to analyze the provided document content according to the user's instructions.");
+            sb.AppendLine("你是一个专业的文档分析子智能体。");
+            sb.AppendLine("你的任务是按照用户的指令分析所提供的文档内容。");
             sb.AppendLine();
-            sb.AppendLine("Analysis framework:");
-            sb.AppendLine("1. First, understand the overall structure and purpose of the document.");
-            sb.AppendLine("2. Focus on the specific aspects requested in the task instructions.");
-            sb.AppendLine("3. Support every finding with paragraph references [Paragraph #N].");
-            sb.AppendLine("4. If the task involves comparison or consistency checking, cross-reference all relevant sections.");
-            sb.AppendLine("5. If the provided data is insufficient, use available tools to fetch more document content.");
+            sb.AppendLine("分析框架：");
+            sb.AppendLine("1. 首先理解文档的整体结构和目的。");
+            sb.AppendLine("2. 重点关注任务指令中请求的具体方面。");
+            sb.AppendLine("3. 每个发现都要附带段落引用 [第N段]。");
+            sb.AppendLine("4. 如果任务涉及对比或一致性检查，请交叉引用所有相关章节。");
+            sb.AppendLine("5. 如果提供的数据不足，使用可用工具获取更多文档内容。");
             sb.AppendLine();
-            sb.AppendLine("Output format:");
-            sb.AppendLine("- Use structured sections with clear headings (##).");
-            sb.AppendLine("- List findings as bullet points with paragraph references.");
-            sb.AppendLine("- End with a concise summary of key findings.");
+            sb.AppendLine("输出格式：");
+            sb.AppendLine("- 使用带清晰标题（##）的结构化章节。");
+            sb.AppendLine("- 将发现结果列为带段落引用的项目符号列表。");
+            sb.AppendLine("- 最后以简洁的关键发现摘要结束。");
         }
 
         private static void BuildStructureAnalysisPrompt(StringBuilder sb)
         {
-            sb.AppendLine("You are a professional document structure analysis sub-agent.");
-            sb.AppendLine("Your task is to infer the true heading hierarchy of the document based on paragraph format metadata.");
+            sb.AppendLine("你是一个专业的文档结构分析子智能体。");
+            sb.AppendLine("你的任务是根据段落格式元数据推断文档的真实标题层级。");
             sb.AppendLine();
-            sb.AppendLine("Key analysis points:");
-            sb.AppendLine("1. Many documents do not correctly use Word heading styles (Heading 1~6), but instead rely on font size, bold, centering, etc. to distinguish heading levels.");
-            sb.AppendLine("2. Infer heading-to-body hierarchy by font size (larger → higher level), bold, centering, and other formatting cues.");
-            sb.AppendLine("3. Detect formatting inconsistencies (e.g., same-level headings with different font sizes, broken numbering sequences).");
-            sb.AppendLine("4. Output the inferred document outline tree plus a list of formatting issues found.");
+            sb.AppendLine("关键分析点：");
+            sb.AppendLine("1. 许多文档没有正确使用 Word 标题样式（标题1~6），而是通过字体大小、加粗、居中等方式来区分标题级别。");
+            sb.AppendLine("2. 通过字体大小（越大→级别越高）、加粗、居中等格式线索来推断标题与正文的层级关系。");
+            sb.AppendLine("3. 检测格式不一致问题（例如同级标题字体大小不同、编号序列中断）。");
+            sb.AppendLine("4. 输出推断的文档大纲树以及发现的格式问题列表。");
             sb.AppendLine();
-            sb.AppendLine("Required output format:");
-            sb.AppendLine("## Inferred Document Outline");
-            sb.AppendLine("Level 1: Heading text (Paragraph #N, traits: 18pt bold centered)");
-            sb.AppendLine("  Level 2: Heading text (Paragraph #N, traits: 14pt bold left-aligned)");
-            sb.AppendLine("    Level 3: Heading text (Paragraph #N, traits: 12pt bold left-aligned)");
+            sb.AppendLine("必需输出格式：");
+            sb.AppendLine("## 推断的文档大纲");
+            sb.AppendLine("一级：标题文字（第N段，特征：18pt 加粗 居中）");
+            sb.AppendLine("  二级：标题文字（第N段，特征：14pt 加粗 左对齐）");
+            sb.AppendLine("    三级：标题文字（第N段，特征：12pt 加粗 左对齐）");
             sb.AppendLine();
-            sb.AppendLine("## Formatting Issues");
-            sb.AppendLine("- [Paragraph #N] Suspected level-2 heading but font size is 16pt while peers are 14pt");
-            sb.AppendLine("- [Paragraph #N] Numbering '1.3' jumps to '1.5', missing '1.4'");
+            sb.AppendLine("## 格式问题");
+            sb.AppendLine("- [第N段] 疑似二级标题但字体为16pt，而同级为14pt");
+            sb.AppendLine("- [第N段] 编号从'1.3'跳到'1.5'，缺少'1.4'");
         }
 
         private static void BuildKeyInfoExtractionPrompt(StringBuilder sb)
         {
-            sb.AppendLine("You are a professional document key-information extraction sub-agent.");
-            sb.AppendLine("Your task is to extract key information from the document text for cross-checking consistency.");
+            sb.AppendLine("你是一个专业的文档关键信息提取子智能体。");
+            sb.AppendLine("你的任务是从文档文本中提取关键信息，用于交叉检查一致性。");
             sb.AppendLine();
-            sb.AppendLine("Information categories to extract:");
-            sb.AppendLine("1. **Data & Numbers**: Statistics, percentages, amounts, quantities — record the paragraph where each appears.");
-            sb.AppendLine("2. **Dates & Times**: Specific dates, time ranges, deadlines.");
-            sb.AppendLine("3. **Names & Terms**: Person names, organization names, project names, product names, technical terms (including abbreviation-full name mappings).");
-            sb.AppendLine("4. **Key Assertions**: Important conclusions, commitments, goals, metrics — especially claims that could contradict each other.");
-            sb.AppendLine("5. **References & Standards**: Cited literature numbers, standard numbers, regulations.");
+            sb.AppendLine("需要提取的信息类别：");
+            sb.AppendLine("1. **数据与数字**：统计数字、百分比、金额、数量 — 记录每个数据出现的段落。");
+            sb.AppendLine("2. **日期与时间**：具体日期、时间范围、截止日期。");
+            sb.AppendLine("3. **名称与术语**：人名、组织名、项目名、产品名、技术术语（包括缩写-全称对应关系）。");
+            sb.AppendLine("4. **关键论断**：重要结论、承诺、目标、指标 — 特别关注可能相互矛盾的声明。");
+            sb.AppendLine("5. **引用与标准**：引用的文献编号、标准编号、法规。");
             sb.AppendLine();
-            sb.AppendLine("Required output format:");
-            sb.AppendLine("## Key Data");
-            sb.AppendLine("- [Paragraph #N] Output: 5 million tons");
-            sb.AppendLine("- [Paragraph #M] Output: 5.2 million tons  ⚠️ Inconsistent with Paragraph #N");
+            sb.AppendLine("必需输出格式：");
+            sb.AppendLine("## 关键数据");
+            sb.AppendLine("- [第N段] 产量：500万吨");
+            sb.AppendLine("- [第M段] 产量：520万吨  ⚠️ 与第N段不一致");
             sb.AppendLine();
-            sb.AppendLine("## Dates");
-            sb.AppendLine("- [Paragraph #N] Deadline: 2025-12-31");
+            sb.AppendLine("## 日期");
+            sb.AppendLine("- [第N段] 截止日期：2025-12-31");
             sb.AppendLine();
-            sb.AppendLine("## Terms");
-            sb.AppendLine("- \"Project XXX\" = \"XX Plan\" (first appears in Paragraph #N)");
+            sb.AppendLine("## 术语");
+            sb.AppendLine("- \"项目XXX\" = \"XX计划\"（首次出现在第N段）");
             sb.AppendLine();
-            sb.AppendLine("## Consistency Issues");
-            sb.AppendLine("- ⚠️ [Paragraph #A vs #B] Data conflict: ...");
-            sb.AppendLine("- ⚠️ [Paragraph #A vs #B] Terminology inconsistency: ...");
+            sb.AppendLine("## 一致性问题");
+            sb.AppendLine("- ⚠️ [第A段 vs 第B段] 数据冲突：...");
+            sb.AppendLine("- ⚠️ [第A段 vs 第B段] 术语不一致：...");
         }
 
         // ═══════════════════════════════════════════════════════════════

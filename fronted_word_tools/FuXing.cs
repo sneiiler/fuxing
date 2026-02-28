@@ -22,7 +22,7 @@ namespace FuXing
     [ComVisible(true)]
     [Guid("C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A")]
     [ProgId("FuXing.Connect")]
-    [RegistryLocation(RegistrySaveLocation.CurrentUser), CustomPane(typeof(TaskPaneControl), "AI助手", false, PaneDockPosition.msoCTPDockPositionRight)]
+    [RegistryLocation(RegistrySaveLocation.CurrentUser), CustomPane(typeof(TaskPaneControl), "AI福星", false, PaneDockPosition.msoCTPDockPositionRight)]
 	
     // ═══════════════════════════════════════════════════════════════
     //  每个 Word 窗口的 TaskPane 上下文
@@ -95,10 +95,11 @@ namespace FuXing
             get
             {
                 var ctx = GetActiveWindowContext();
-                return ctx?.Memory ?? _fallbackMemory;
+                if (ctx == null) 
+                    throw new InvalidOperationException("没有活动的窗口上下文，无法获取 ChatMemory");
+                return ctx.Memory;
             }
         }
-        private readonly ChatMemory _fallbackMemory = new ChatMemory();
 
         /// <summary>工具注册表（定义大模型可调用的插件功能）</summary>
         public ToolRegistry ToolRegistry { get; } = new ToolRegistry();
@@ -295,7 +296,7 @@ namespace FuXing
                 case "LoadDefaultStylesButton": return "icons8-load_default_styles-all.png"; // 载入默认样式库图标
                 case "CheckStandardValidityButton": return "icons8-deepseek-150.png";
                 case "ai_text_correction_btn": return "icons8-spellcheck-70.png";
-                case "toggle_taskpane_btn": return "logo.png"; // AI助手图标
+                case "toggle_taskpane_btn": return "logo.png"; // AI福星图标
                 case "setting_btn": return "icons8-setting-128.png";
                 case "about_btn": return "icons8-clean-96.png";
                 default: 
@@ -568,7 +569,7 @@ namespace FuXing
             var chat = EnsureTaskPaneVisible();
             if (chat == null)
             {
-                MessageBox.Show("无法打开AI助手面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("无法打开AI福星面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -645,7 +646,7 @@ namespace FuXing
             var chat = EnsureTaskPaneVisible();
             if (chat == null)
             {
-                MessageBox.Show("无法打开AI助手面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("无法打开AI福星面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -807,7 +808,7 @@ namespace FuXing
 
             var ctp = _ctpFactory.CreateCTP(
                 typeof(TaskPaneControl).FullName,   // COM ProgId（与类的完全限定名一致）
-                "AI助手",
+                "AI福星",
                 activeWindow);                      // 绑定到当前窗口
 
             ctp.DockPosition = NetOffice.OfficeApi.Enums.MsoCTPDockPosition.msoCTPDockPositionRight;
@@ -837,6 +838,8 @@ namespace FuXing
                 ctx.Width = 500;
                 ctx.Visible = true;
             }
+            // 确保 LLM 问候健康检查已触发
+            ctx.Control.CheckAndRequestGreeting();
             return ctx.Control;
         }
 
@@ -885,10 +888,10 @@ namespace FuXing
             bool wasTracking = doc.TrackRevisions;
             doc.TrackRevisions = true;
 
-            // 临时修改用户名，让修订显示为"AI助手"
+            // 临时修改用户名，让修订显示为"AI福星"
             var savedName = _wordApplication.UserName;
             var savedInitials = _wordApplication.UserInitials;
-            _wordApplication.UserName = "AI助手";
+            _wordApplication.UserName = "AI福星";
             _wordApplication.UserInitials = "AI";
 
             try
@@ -1017,6 +1020,11 @@ namespace FuXing
                     ctx.Width = 500;
 
                 ctx.Visible = newVisible;
+
+                // 面板变为可见时触发 LLM 问候健康检查
+                if (newVisible)
+                    ctx.Control.CheckAndRequestGreeting();
+
                 System.Diagnostics.Debug.WriteLine($"[toggle] After={ctx.Visible}");
             }
             catch (Exception ex)
@@ -1079,8 +1087,8 @@ namespace FuXing
 
             try
             {
-                _wordApplication.UserName = "AI助手";
-                _wordApplication.UserInitials = "AI助手";
+                _wordApplication.UserName = "AI福星";
+                _wordApplication.UserInitials = "AI福星";
                 range.Comments.Add(range, commentContent);
             }
             finally
@@ -1170,12 +1178,12 @@ namespace FuXing
         /// <summary>载入默认AI样式库（公开）</summary>
         public void LoadDefaultStylesPublic() => LoadDefaultAIStyles();
 
-        /// <summary>进入修订追踪模式，并将作者设为"AI助手"，使文本修改可被用户可视化审阅</summary>
+        /// <summary>进入修订追踪模式，并将作者设为"AI福星"，使文本修改可被用户可视化审阅</summary>
         public void EnsureTrackRevisions()
         {
             _savedUserName = _wordApplication.UserName;
             _savedUserInitials = _wordApplication.UserInitials;
-            _wordApplication.UserName = "AI助手";
+            _wordApplication.UserName = "AI福星";
             _wordApplication.UserInitials = "AI";
             _wordApplication.ActiveDocument.TrackRevisions = true;
         }

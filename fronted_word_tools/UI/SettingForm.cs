@@ -15,6 +15,7 @@ namespace FuXing
         private AntdUI.Button fetchModelsBtn;
         private AntdUI.Switch devModeSwitch;
         private AntdUI.Switch approvalSwitch;
+        private AntdUI.Switch startupWarningSwitch;
         private AntdUI.Select contextWindowSelect;
         private AntdUI.Select maxToolRoundsSelect;
         private System.Windows.Forms.ContextMenuStrip modelMenu;
@@ -286,10 +287,10 @@ namespace FuXing
                 BackColor = BORDER
             };
 
-            // ── 危险操作审批 ──
+            // ── 操作审批确认 ──
             var lblApproval = new System.Windows.Forms.Label
             {
-                Text = "危险操作审批",
+                Text = "操作审批确认",
                 Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
                 ForeColor = SUBTITLE_FG,
                 AutoSize = false,
@@ -300,7 +301,7 @@ namespace FuXing
 
             var lblApprovalDesc = new System.Windows.Forms.Label
             {
-                Text = "执行脚本、批量操作、删除章节等高风险工具前弹窗确认",
+                Text = "执行脚本修改、批量操作、删除章节等操作前需要确认",
                 Font = new Font("Microsoft YaHei UI", 8.5F),
                 ForeColor = LABEL_FG,
                 AutoSize = false,
@@ -316,9 +317,46 @@ namespace FuXing
                 Checked = true
             };
 
+            var divider6 = new System.Windows.Forms.Panel
+            {
+                Location = new Point(28, 622),
+                Size = new Size(460, 1),
+                BackColor = BORDER
+            };
+
+            // ── 启动安全提示 ──
+            var lblWarning = new System.Windows.Forms.Label
+            {
+                Text = "启动安全提示",
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
+                ForeColor = SUBTITLE_FG,
+                AutoSize = false,
+                Size = new Size(140, 22),
+                Location = new Point(28, 642),
+                BackColor = Color.Transparent
+            };
+
+            var lblWarningDesc = new System.Windows.Forms.Label
+            {
+                Text = "每次打开插件时提醒备份文档",
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                ForeColor = LABEL_FG,
+                AutoSize = false,
+                Size = new Size(300, 18),
+                Location = new Point(28, 666),
+                BackColor = Color.Transparent
+            };
+
+            startupWarningSwitch = new AntdUI.Switch
+            {
+                Location = new Point(442, 642),
+                Size = new Size(50, 28),
+                Checked = true
+            };
+
             var spacer = new System.Windows.Forms.Panel
             {
-                Location = new Point(0, 640),
+                Location = new Point(0, 720),
                 Size = new Size(10, 40),
                 BackColor = Color.Transparent
             };
@@ -336,6 +374,8 @@ namespace FuXing
                 lblDev, lblDevDesc, devModeSwitch,
                 divider5,
                 lblApproval, lblApprovalDesc, approvalSwitch,
+                divider6,
+                lblWarning, lblWarningDesc, startupWarningSwitch,
                 spacer
             });
 
@@ -356,10 +396,12 @@ namespace FuXing
                 divider2.Width = inputWidth;
                 divider4.Width = inputWidth;
                 divider5.Width = inputWidth;
+                divider6.Width = inputWidth;
                 contextWindowSelect.Location = new Point(content.Width - 28 - contextWindowSelect.Width, contextWindowSelect.Location.Y);
                 maxToolRoundsSelect.Location = new Point(content.Width - 28 - maxToolRoundsSelect.Width, maxToolRoundsSelect.Location.Y);
                 devModeSwitch.Location = new Point(content.Width - 28 - devModeSwitch.Width, devModeSwitch.Location.Y);
                 approvalSwitch.Location = new Point(content.Width - 28 - approvalSwitch.Width, approvalSwitch.Location.Y);
+                startupWarningSwitch.Location = new Point(content.Width - 28 - startupWarningSwitch.Width, startupWarningSwitch.Location.Y);
             };
 
             // ═══════════════════════════════════
@@ -428,6 +470,7 @@ namespace FuXing
             contextWindowSelect.SelectedIndex = 2; // 128K
             maxToolRoundsSelect.SelectedIndex = 1; // 10
             approvalSwitch.Checked = true;
+            startupWarningSwitch.Checked = true;
             AntdUI.Notification.info(this, "提示", "已重置为默认设置", autoClose: 2);
         }
 
@@ -440,6 +483,7 @@ namespace FuXing
             modelNameInput.Text = config.ModelName ?? "";
             devModeSwitch.Checked = config.DeveloperMode;
             approvalSwitch.Checked = config.RequireApprovalForDangerousTools;
+            startupWarningSwitch.Checked = config.ShowStartupWarning;
 
             // 上下文窗口档位
             switch (config.ContextWindowLimit)
@@ -554,7 +598,8 @@ namespace FuXing
                 DeveloperMode = devModeSwitch.Checked,
                 ContextWindowLimit = contextLimit,
                 MaxToolRounds = maxToolRounds,
-                RequireApprovalForDangerousTools = approvalSwitch.Checked
+                RequireApprovalForDangerousTools = approvalSwitch.Checked,
+                ShowStartupWarning = startupWarningSwitch.Checked
             };
 
             var configLoader = new ConfigLoader();

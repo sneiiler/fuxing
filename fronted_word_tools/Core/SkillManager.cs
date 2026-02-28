@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -82,7 +81,7 @@ namespace FuXing
             // 2. 扫描全局目录（高优先级，同名覆盖文档级）
             ScanSkillRoot(GetGlobalSkillsDirectory(), SkillSource.Global);
 
-            Debug.WriteLine($"[SkillManager] 发现 {_skills.Count} 个 skill: {string.Join(", ", GetSkillNames())}");
+            DebugLogger.Instance.LogInfo($"[SkillManager] 发现 {_skills.Count} 个 skill: {string.Join(", ", GetSkillNames())}");
         }
 
         /// <summary>重新发现（保留上次的文档目录）</summary>
@@ -156,7 +155,7 @@ namespace FuXing
 
             if (!skill.ContentLoaded) LoadSkillContent(skill);
             _activatedSkills.Add(key);
-            Debug.WriteLine($"[SkillManager] Skill 已激活: {key}");
+            DebugLogger.Instance.LogInfo($"[SkillManager] Skill 已激活: {key}");
         }
 
         /// <summary>停用一个 skill</summary>
@@ -219,7 +218,7 @@ namespace FuXing
         {
             if (!System.IO.Directory.Exists(rootDir)) return;
 
-            Debug.WriteLine($"[SkillManager] 扫描 {rootDir} ({source})");
+            DebugLogger.Instance.LogInfo($"[SkillManager] 扫描 {rootDir} ({source})");
 
             foreach (var subDir in System.IO.Directory.GetDirectories(rootDir))
             {
@@ -240,7 +239,7 @@ namespace FuXing
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[SkillManager] 读取 {skillMdPath} 失败: {ex.Message}");
+                DebugLogger.Instance.LogInfo($"[SkillManager] 读取 {skillMdPath} 失败: {ex.Message}");
                 return null;
             }
 
@@ -249,7 +248,7 @@ namespace FuXing
             // 解析 YAML 前言
             if (!ParseFrontMatter(lines, out int bodyStartIndex, out var meta))
             {
-                Debug.WriteLine($"[SkillManager] {dirPath} 缺少 YAML 前言，已跳过");
+                DebugLogger.Instance.LogInfo($"[SkillManager] {dirPath} 缺少 YAML 前言，已跳过");
                 return null;
             }
 
@@ -260,17 +259,17 @@ namespace FuXing
             // 验证元数据
             if (string.IsNullOrEmpty(fmName))
             {
-                Debug.WriteLine($"[SkillManager] {dirPath} 缺少 name 字段，已跳过");
+                DebugLogger.Instance.LogInfo($"[SkillManager] {dirPath} 缺少 name 字段，已跳过");
                 return null;
             }
             if (string.IsNullOrEmpty(fmDescription))
             {
-                Debug.WriteLine($"[SkillManager] {dirPath} 缺少 description 字段，已跳过");
+                DebugLogger.Instance.LogInfo($"[SkillManager] {dirPath} 缺少 description 字段，已跳过");
                 return null;
             }
             if (!string.Equals(fmName, dirName, StringComparison.OrdinalIgnoreCase))
             {
-                Debug.WriteLine($"[SkillManager] name \"{fmName}\" 与目录名 \"{dirName}\" 不匹配，已跳过");
+                DebugLogger.Instance.LogInfo($"[SkillManager] name \"{fmName}\" 与目录名 \"{dirName}\" 不匹配，已跳过");
                 return null;
             }
 
@@ -330,7 +329,7 @@ namespace FuXing
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[SkillManager] 加载 skill 内容失败: {ex.Message}");
+                DebugLogger.Instance.LogInfo($"[SkillManager] 加载 skill 内容失败: {ex.Message}");
                 skill.Content = "";
             }
             skill.ContentLoaded = true;

@@ -12,12 +12,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Editing;
 
         public override string Description =>
-            "Execute find-and-replace in the document (requires knowing the exact text to find and replace).\n" +
-            "- Use for: batch replacement of known text (e.g. unify terminology, fix known misspellings)\n" +
-            "- NOT for: error detection tasks (proofreading, typo checking) — use correct_text instead\n" +
-            "- Normal mode: exact text match and replace\n" +
-            "- Wildcard mode (use_wildcards=true): Word wildcard syntax\n" +
-            "- Scope: all=entire document, first=first occurrence only";
+            "Find and replace known text in the document. Supports wildcards (use_wildcards) and scope control (all/first). " +
+            "NOT for error detection/proofreading — use correct_text instead.";
 
         public override JObject Parameters => new JObject
         {

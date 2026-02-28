@@ -45,6 +45,13 @@ namespace FuXing
         private System.Windows.Forms.Label _statusContext;
         private AntdUI.Button _sendButton;
         private bool _isAssistantRunning;
+        private CancellationTokenSource _agentCts;
+        private bool _hasRequestedGreeting;
+        private bool _isLLMAvailable = true;
+
+        // ── 启动安全提示遮罩 ──
+        private System.Windows.Forms.Panel _warningOverlay;
+        private bool _hasShownWarning;
 
         /// <summary>每个窗口独立的会话记忆</summary>
         public ChatMemory Memory { get; } = new ChatMemory();
@@ -160,7 +167,15 @@ namespace FuXing
                 System.Diagnostics.Debug.WriteLine($"TaskPane visibility changed to: {visible}");
                 // 当 TaskPane 变为可见时，更新 CurrentInstance 指向当前活动窗口的 TaskPaneControl
                 if (visible)
+                {
                     CurrentInstance = this;
+
+                    // 首次可见时显示安全提示遮罩
+                    ShowStartupWarningIfNeeded();
+
+                    // 首次可见时，向 LLM 发送问候请求作为健康检查
+                    CheckAndRequestGreeting();
+                }
             }
             catch (Exception ex)
             {
@@ -169,6 +184,363 @@ namespace FuXing
         }
 
         #endregion
+
+        // ════════════════════════════════════════════════════════════
+        //  启动安全提示遮罩 — 毛玻璃风格全屏提示
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 根据配置决定是否显示启动安全提示遮罩。
+        /// </summary>
+        private void ShowStartupWarningIfNeeded()
+        {
+            if (_hasShownWarning) return;
+            _hasShownWarning = true;
+
+            var config = new ConfigLoader().LoadConfig();
+            if (!config.ShowStartupWarning) return;
+
+            CreateWarningOverlay();
+        }
+
+        /// <summary>
+        /// 创建毛玻璃风格的安全提示遮罩层，覆盖整个 TaskPane。
+        /// </summary>
+        private void CreateWarningOverlay()
+        {
+            _warningOverlay = new System.Windows.Forms.Panel
+            {
+                Dock = DockStyle.Fill,
+                Name = "WarningOverlay",
+                BackColor = Color.FromArgb(240, 245, 250, 253) // 半透明浅白蓝底
+            };
+
+            // 开启双缓冲
+            typeof(System.Windows.Forms.Panel).GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?.SetValue(_warningOverlay, true, null);
+
+            // ── 毛玻璃背景绘制 ──
+            _warningOverlay.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                // 半透明白色底层（模拟毛玻璃）
+                using (var bgBrush = new SolidBrush(Color.FromArgb(220, 255, 255, 255)))
+                    g.FillRectangle(bgBrush, _warningOverlay.ClientRectangle);
+
+                // 顶部渐变光晕装饰
+                var glowRect = new Rectangle(0, 0, _warningOverlay.Width, 120);
+                using (var glowBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    glowRect, Color.FromArgb(40, 59, 130, 246), Color.FromArgb(0, 59, 130, 246),
+                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                    g.FillRectangle(glowBrush, glowRect);
+            };
+
+            // ── 内容卡片容器 ──
+            var cardPanel = new System.Windows.Forms.Panel
+            {
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.None
+            };
+
+            // 卡片绘制：白色圆角卡片 + 阴影
+            cardPanel.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                var cardRect = new Rectangle(0, 0, cardPanel.Width - 1, cardPanel.Height - 1);
+
+                // 淡阴影
+                var shadowRect = new Rectangle(2, 2, cardPanel.Width - 1, cardPanel.Height - 1);
+                using (var shadowPath = CreateRoundedRectanglePath(shadowRect, 16))
+                using (var shadowBrush = new SolidBrush(Color.FromArgb(20, 0, 0, 0)))
+                    g.FillPath(shadowBrush, shadowPath);
+
+                // 白色卡片
+                using (var cardPath = CreateRoundedRectanglePath(cardRect, 16))
+                {
+                    using (var fillBrush = new SolidBrush(Color.FromArgb(252, 252, 253)))
+                        g.FillPath(fillBrush, cardPath);
+                    using (var borderPen = new Pen(Color.FromArgb(229, 231, 235), 1f))
+                        g.DrawPath(borderPen, cardPath);
+                }
+            };
+
+            // ── 盾牌图标 ──
+            var iconLabel = new System.Windows.Forms.Label
+            {
+                Text = "\U0001F6E1\uFE0F",
+                Font = new Font("Segoe UI Emoji", 32F),
+                Size = new Size(60, 60),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                ForeColor = Color.FromArgb(59, 130, 246)
+            };
+
+            // ── 标题 ──
+            var titleLabel = new System.Windows.Forms.Label
+            {
+                Text = "使用前请注意",
+                Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(17, 24, 39),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                AutoSize = false,
+                Size = new Size(300, 36)
+            };
+
+            // ── 说明正文 ──
+            var bodyLabel = new System.Windows.Forms.Label
+            {
+                Text = "本插件可直接读取和修改当前 Word 文档内容，\n" +
+                       "包括文本、格式、表格、图片等所有元素。\n\n" +
+                       "为避免意外修改导致数据丢失，\n" +
+                       "请提前保存或备份您的文档。",
+                Font = new Font("Microsoft YaHei UI", 10F),
+                ForeColor = Color.FromArgb(75, 85, 99),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                AutoSize = false,
+                Size = new Size(320, 110)
+            };
+
+            // ── "不再提示" 复选框 ──
+            var dontShowCheck = new AntdUI.Checkbox
+            {
+                Text = "不再显示此提示",
+                Font = new Font("Microsoft YaHei UI", 9F),
+                ForeColor = Color.FromArgb(107, 114, 128),
+                BackColor = Color.Transparent,
+                Size = new Size(160, 28),
+                Checked = false
+            };
+
+            // ── "我知道了" 按钮 ──
+            var confirmBtn = new AntdUI.Button
+            {
+                Text = "我知道了",
+                Type = AntdUI.TTypeMini.Primary,
+                Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold),
+                Size = new Size(200, 42),
+                Radius = 21
+            };
+            confirmBtn.Click += (s, e) =>
+            {
+                // 如果勾选"不再提示"，保存到配置
+                if (dontShowCheck.Checked)
+                {
+                    var configLoader = new ConfigLoader();
+                    var cfg = configLoader.LoadConfig();
+                    cfg.ShowStartupWarning = false;
+                    configLoader.SaveConfig(cfg);
+                }
+                DismissWarningOverlay();
+            };
+
+            cardPanel.Controls.AddRange(new Control[] { iconLabel, titleLabel, bodyLabel, dontShowCheck, confirmBtn });
+
+            // ── 卡片内布局（居中排列） ──
+            cardPanel.Resize += (s, e) =>
+            {
+                int cw = cardPanel.ClientSize.Width;
+                int cy = 28;
+
+                iconLabel.Location = new Point((cw - iconLabel.Width) / 2, cy);
+                cy += iconLabel.Height + 8;
+
+                titleLabel.Location = new Point((cw - titleLabel.Width) / 2, cy);
+                cy += titleLabel.Height + 12;
+
+                bodyLabel.Location = new Point((cw - bodyLabel.Width) / 2, cy);
+                cy += bodyLabel.Height + 16;
+
+                dontShowCheck.Location = new Point((cw - dontShowCheck.Width) / 2, cy);
+                cy += dontShowCheck.Height + 12;
+
+                confirmBtn.Location = new Point((cw - confirmBtn.Width) / 2, cy);
+            };
+
+            _warningOverlay.Controls.Add(cardPanel);
+
+            // ── 遮罩层布局：卡片居中 ──
+            _warningOverlay.Resize += (s, e) =>
+            {
+                int ow = _warningOverlay.ClientSize.Width;
+                int oh = _warningOverlay.ClientSize.Height;
+                int cardW = Math.Min(380, ow - 32);
+                int cardH = 370;
+                cardPanel.Size = new Size(cardW, cardH);
+                cardPanel.Location = new Point((ow - cardW) / 2, (oh - cardH) / 2);
+            };
+
+            // 添加到 TaskPane 最顶层
+            Controls.Add(_warningOverlay);
+            _warningOverlay.BringToFront();
+        }
+
+        /// <summary>关闭并释放安全提示遮罩层。</summary>
+        private void DismissWarningOverlay()
+        {
+            if (_warningOverlay == null) return;
+            Controls.Remove(_warningOverlay);
+            _warningOverlay.Dispose();
+            _warningOverlay = null;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  LLM 健康检查 — TaskPane 首次可见时自动请求问候
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// TaskPane 首次显示时自动向 LLM 发送问候请求。
+        /// 成功则展示 AI 自我介绍，失败则将状态设为"不可用"。
+        /// 由外部（toggle / EnsureVisible）在面板变为可见后调用。
+        /// </summary>
+        public void CheckAndRequestGreeting()
+        {
+            if (_hasRequestedGreeting) return;
+            _hasRequestedGreeting = true;
+            RequestGreetingAsync();
+        }
+
+        private async void RequestGreetingAsync()
+        {
+            var panel = GetChatPanel();
+            if (panel == null) return;
+
+            SetAssistantRunning(true);
+            try
+            {
+                var memory = this.Memory;
+
+                // 构建精简的系统提示
+                memory.SetSystemPrompt(
+                    "你是'福星'，一个集成在 Microsoft Word 中的智能文档助手。请用中文回复。");
+
+                // 添加隐藏的用户消息（不在聊天面板显示），驱动 LLM 生成问候
+                string greetingPrompt = "请用简洁友好的方式向用户打招呼，介绍你作为 Word 文档助手的核心能力（例如：文档编辑、格式调整、内容生成、纠错润色、文档分析等），然后询问用户想要做什么。控制在100字以内。";
+                memory.AddUserMessage(greetingPrompt);
+
+                // 在聊天面板添加 AI 消息占位
+                var aiAvatar = GetAIAvatar();
+                var aiMsg = panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, "正在连接 AI 服务...");
+
+                string accumulatedResponse = "";
+                bool hasError = false;
+
+                var result = await _networkHelper.SendStreamChatWithMemoryAsync(
+                    memory,
+                    tools: null,  // 问候不需要工具
+                    onChunkReceived: (chunk) =>
+                    {
+                        try
+                        {
+                            accumulatedResponse += chunk;
+
+                            // 问候消息不显示思考过程：等 <think> 块结束后才开始显示
+                            string displayText = StripThinkBlock(accumulatedResponse);
+                            if (string.IsNullOrEmpty(displayText))
+                                return;  // 还在思考中，不更新 UI
+
+                            if (this.InvokeRequired)
+                                this.Invoke((MethodInvoker)delegate { aiMsg.SetText(displayText); });
+                            else
+                                aiMsg.SetText(displayText);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"问候流式更新出错: {ex.Message}");
+                        }
+                    },
+                    onError: (error) =>
+                    {
+                        hasError = true;
+                        System.Diagnostics.Debug.WriteLine($"问候请求失败: {error}");
+                    }
+                );
+
+                if (hasError || result == null)
+                {
+                    // LLM 不可用
+                    SetLLMUnavailable(aiMsg);
+                    memory.AddAssistantMessage("(问候请求失败)");
+                    return;
+                }
+
+                // 成功：记录完整响应到上下文（含 think），但 UI 只显示正文
+                memory.AddAssistantMessage(accumulatedResponse);
+                _isLLMAvailable = true;
+
+                string finalDisplay = StripThinkBlock(accumulatedResponse);
+                if (this.InvokeRequired)
+                    this.Invoke((MethodInvoker)delegate { aiMsg.SetText(finalDisplay); });
+                else
+                    aiMsg.SetText(finalDisplay);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RequestGreetingAsync exception: {ex}");
+                // 异常也视为不可用
+                var aiAvatar = GetAIAvatar();
+                var aiMsg = panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, "");
+                SetLLMUnavailable(aiMsg);
+            }
+            finally
+            {
+                SetAssistantRunning(false);
+            }
+        }
+
+        /// <summary>
+        /// 移除文本中的 &lt;think&gt;...&lt;/think&gt; 块（含未闭合的情况）。
+        /// 用于问候消息不显示思考过程。
+        /// </summary>
+        private static string StripThinkBlock(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+
+            // 已闭合的 <think>...</think>
+            string result = Regex.Replace(text, @"<think>[\s\S]*?</think>", "", RegexOptions.IgnoreCase).TrimStart();
+
+            // 未闭合的 <think>...（流式还没收到 </think>）→ 返回空，表示还在思考中
+            if (Regex.IsMatch(result, @"<think>", RegexOptions.IgnoreCase))
+                return "";
+
+            return result;
+        }
+
+        /// <summary>
+        /// 将状态设为"不可用"：更新状态栏、在聊天面板显示错误提示。
+        /// </summary>
+        private void SetLLMUnavailable(UI.MessageGroup aiMsg)
+        {
+            _isLLMAvailable = false;
+
+            if (InvokeRequired)
+            {
+                Invoke((MethodInvoker)delegate { SetLLMUnavailable(aiMsg); });
+                return;
+            }
+
+            // 更新状态栏
+            if (_statusRunning != null)
+            {
+                _statusRunning.Text = "● 不可用";
+                _statusRunning.ForeColor = Color.FromArgb(156, 163, 175);  // 灰色
+            }
+
+            // 在聊天面板显示不可用消息
+            aiMsg.SetText(
+                "⚠️ **AI 服务暂时不可用**\n\n" +
+                "无法连接到 AI 服务，可能的原因：\n" +
+                "- 服务器未启动或网络不通\n" +
+                "- API 配置错误（地址 / 密钥 / 模型名）\n\n" +
+                "请检查设置或联系开发者获取帮助。\n" +
+                "您可以尝试发送一条消息，系统将自动重新检测连接。");
+        }
 
         // ════════════════════════════════════════════════════════════
         //  公共消息 API — 供纠错 / 其他功能向聊天面板发送进度和结果
@@ -189,7 +561,7 @@ namespace FuXing
             if (panel == null) return;
 
             var aiAvatar = GetAIAvatar();
-            panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, markdownText);
+            panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, markdownText);
         }
 
         /// <summary>
@@ -241,7 +613,7 @@ namespace FuXing
             if (panel == null) return null;
 
             var aiAvatar = GetAIAvatar();
-            var msg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI);
+            var msg = panel.AddMessage("AI福星", aiAvatar, ChatRole.AI);
             return msg.AddToolCall(toolName, statusText);
         }
 
@@ -272,7 +644,7 @@ namespace FuXing
 
             // 添加新消息展示结果
             var aiAvatar = GetAIAvatar();
-            panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, text);
+            panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, text);
         }
 
         /// <summary>刷新聊天面板并滚动到底部</summary>
@@ -449,10 +821,19 @@ namespace FuXing
                     : Color.FromArgb(34, 197, 94);   // 绿色
             }
 
-            // 禁用/启用发送按钮
+            // 切换发送按钮外观：运行中 → 停止按钮，就绪 → 发送按钮
             if (_sendButton != null)
             {
-                _sendButton.Enabled = !running;
+                if (running)
+                {
+                    _sendButton.Text = "■ 停止";
+                    _sendButton.Type = AntdUI.TTypeMini.Error;
+                }
+                else
+                {
+                    _sendButton.Text = "发送";
+                    _sendButton.Type = AntdUI.TTypeMini.Primary;
+                }
             }
 
             // 运行结束时刷新上下文
@@ -775,12 +1156,9 @@ namespace FuXing
                 Margin = new Padding(0, 5, 0, 5),
             };
 
-            // 添加欢迎消息
-            var aiAvatar = GetAIAvatar();
-            _richChatPanel.AddMessage("AI助手", aiAvatar, ChatRole.AI,
-                "欢迎使用AI助手！\n\n我可以帮助您进行：\n\n- 文本纠错\n- 标准校验\n- 表格格式化\n- 其他文档处理操作\n\n请告诉我您需要什么帮助？");
+            // 欢迎消息由 RequestGreetingAsync() 在 TaskPane 首次可见时动态请求 LLM 生成
 
-            System.Diagnostics.Debug.WriteLine("RichChatPanel created with welcome message");
+            System.Diagnostics.Debug.WriteLine("RichChatPanel created");
 
             return _richChatPanel;
         }
@@ -823,9 +1201,9 @@ namespace FuXing
                 var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
                 panel.AddMessage("用户", userAvatar, ChatRole.User, $"已上传文件: {fileName}");
 
-                // 添加AI助手回复
+                // 添加AI福星回复
                 var aiAvatar = GetAIAvatar();
-                panel.AddMessage("AI助手", aiAvatar, ChatRole.AI,
+                panel.AddMessage("AI福星", aiAvatar, ChatRole.AI,
                     $"文件上传成功\n\n{fileName} 已成功上传到知识库中。\n\n您现在可以基于此文件内容进行对话。");
 
                 System.Diagnostics.Debug.WriteLine($"File upload messages added.");
@@ -852,8 +1230,12 @@ namespace FuXing
 
         private void SendBtn_Click(object sender, EventArgs e)
         {
-            // 助手运行中禁止发送
-            if (_isAssistantRunning) return;
+            // 运行中 → 停止
+            if (_isAssistantRunning)
+            {
+                _agentCts?.Cancel();
+                return;
+            }
 
             var inputTextBox = this.Controls.Find("MainChatContainer", true).FirstOrDefault()
                 ?.Controls.Find("InputTextBox", true).FirstOrDefault() as AntdUI.Input;
@@ -862,6 +1244,17 @@ namespace FuXing
             if (inputTextBox != null && panel != null && !string.IsNullOrWhiteSpace(inputTextBox.Text))
             {
                 var userMessage = inputTextBox.Text.Trim();
+
+                // LLM 之前标记为不可用 → 乐观重置状态，若再次失败会被错误处理重新标记
+                if (!_isLLMAvailable)
+                {
+                    _isLLMAvailable = true;
+                    if (_statusRunning != null)
+                    {
+                        _statusRunning.Text = "● 就绪";
+                        _statusRunning.ForeColor = Color.FromArgb(34, 197, 94);
+                    }
+                }
 
                 // 添加用户消息
                 var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
@@ -879,11 +1272,17 @@ namespace FuXing
 
         private async void ProcessAssistantMessage(string userMessage, RichChatPanel panel)
         {
+            _agentCts?.Dispose();
+            _agentCts = new CancellationTokenSource();
+            var ct = _agentCts.Token;
+
             SetAssistantRunning(true);
+            ChatMemory memory = null;
+            MessageGroup aiMsg = null;
             try
             {
                 var connect = Connect.CurrentInstance;
-                var memory = this.Memory;
+                memory = this.Memory;
                 var toolRegistry = connect?.ToolRegistry;
                 var skillManager = connect?.SkillManager;
 
@@ -914,7 +1313,7 @@ namespace FuXing
 
             // 先添加一个"正在思考"的占位消息
             var aiAvatar = GetAIAvatar();
-            var aiMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
+            aiMsg = panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, "🤔 正在思考中...");
 
             // 工具调用循环（从配置读取最大轮次，防止无限循环）
             int maxToolRounds = new ConfigLoader().LoadConfig().MaxToolRounds;
@@ -922,6 +1321,7 @@ namespace FuXing
             int round;
             for (round = 0; round < maxToolRounds; round++)
             {
+                ct.ThrowIfCancellationRequested();
                 DebugLogger.Instance.LogRoundStart(round, maxToolRounds);
                 string accumulatedResponse = "";
                 bool hasError = false;
@@ -960,13 +1360,31 @@ namespace FuXing
                         {
                             System.Diagnostics.Debug.WriteLine($"处理错误时出错: {ex.Message}");
                         }
-                    }
+                    },
+                    ct
                 );
 
                 if (hasError || result == null)
                 {
                     DebugLogger.Instance.LogError("SendStreamChat", "请求失败，result=" + (result == null ? "null" : "hasError"));
                     memory.AddAssistantMessage("(请求失败)");
+
+                    // 标记 LLM 不可用
+                    _isLLMAvailable = false;
+                    if (InvokeRequired)
+                        Invoke((MethodInvoker)delegate {
+                            if (_statusRunning != null)
+                            {
+                                _statusRunning.Text = "● 不可用";
+                                _statusRunning.ForeColor = Color.FromArgb(156, 163, 175);
+                            }
+                        });
+                    else if (_statusRunning != null)
+                    {
+                        _statusRunning.Text = "● 不可用";
+                        _statusRunning.ForeColor = Color.FromArgb(156, 163, 175);
+                    }
+
                     break;
                 }
 
@@ -983,6 +1401,8 @@ namespace FuXing
                     // 逐一执行工具调用
                     foreach (var tc in result.ToolCalls)
                     {
+                        ct.ThrowIfCancellationRequested();
+
                         // 超过单轮上限则跳过剩余调用，将截断信息记入上下文
                         if (toolCallIndex >= maxToolCallsPerRound)
                         {
@@ -996,8 +1416,8 @@ namespace FuXing
                         System.Diagnostics.Debug.WriteLine($"执行工具调用: {tc.FunctionName} (id={tc.Id})");
                         DebugLogger.Instance.LogToolCall(tc.FunctionName, tc.Id, tc.Arguments);
 
-                        // ── 危险操作审批拦截（嵌入聊天面板，非弹窗）──
-                        if (toolRegistry.RequiresApproval(tc.FunctionName))
+                        // ── 操作审批拦截（嵌入聊天面板，非弹窗）──
+                        if (toolRegistry.RequiresApproval(tc.FunctionName, tc.Arguments))
                         {
                             string summary = toolRegistry.BuildApprovalSummary(tc.FunctionName, tc.Arguments);
 
@@ -1224,6 +1644,19 @@ namespace FuXing
                 }
             }
             }
+            catch (OperationCanceledException)
+            {
+                // 用户点击停止按钮
+                string stopMsg = "\n\n⏹ 已手动停止";
+                memory?.AddAssistantMessage(stopMsg);
+                if (aiMsg != null)
+                {
+                    if (this.InvokeRequired)
+                        this.Invoke((MethodInvoker)delegate { aiMsg.PrepareNewStreamSection(stopMsg); });
+                    else
+                        aiMsg.PrepareNewStreamSection(stopMsg);
+                }
+            }
             finally
             {
                 SetAssistantRunning(false);
@@ -1235,8 +1668,8 @@ namespace FuXing
         {
             var sb = new StringBuilder();
 
-            sb.AppendLine("You are 'FuXing', an intelligent document assistant deeply integrated into a Microsoft Word plugin.");
-            sb.AppendLine("You can directly manipulate the user's Word document through tool calls.");
+            sb.AppendLine("你是'福星'，一个深度集成到 Microsoft Word 插件中的智能文档助手。");
+            sb.AppendLine("你可以通过工具调用直接操作用户的 Word 文档。");
             sb.AppendLine();
 
             // ── 注入当前活动文档信息，防止跨文档操作时上下文混淆 ──
@@ -1247,37 +1680,41 @@ namespace FuXing
                 {
                     var doc = app.ActiveDocument;
                     string docName = doc.Name ?? "(未知)";
-                    sb.AppendLine($"[Active Document: {docName}]");
-                    sb.AppendLine("IMPORTANT: All document operations MUST target the active document shown above. Ignore any other file paths or document names that appeared in previous tool results (e.g. source files from merge operations). Always operate on the current active document.");
+                    sb.AppendLine($"[活动文档：{docName}]");
+                    sb.AppendLine("重要：所有文档操作必须以上方显示的活动文档为目标。忽略之前工具结果中出现的任何其他文件路径或文档名称（例如合并操作中的源文件）。始终对当前活动文档进行操作。");
                     sb.AppendLine();
                 }
             }
             catch { /* 无活动文档时跳过 */ }
 
-            sb.AppendLine("Rules:");
-            sb.AppendLine("1. When the user asks for document operations, call the appropriate tool directly instead of just giving advice.");
-            sb.AppendLine("2. You retain memory of all operations performed in this conversation.");
-            sb.AppendLine("3. If the user asks what you did before, answer truthfully based on conversation history.");
-            sb.AppendLine("4. Be concise and professional. Always respond in Chinese.");
-            sb.AppendLine("5. If the user message starts with '[User attached selected text as context...]', the user selected text in Word that was auto-appended. You may directly analyze, correct, or rewrite it without calling get_selected_text.");
-            sb.AppendLine("6. When a tool call fails, analyze the error message. If it is a parameter issue, fix the parameters and retry once. If it is a system error, inform the user clearly instead of retrying blindly.");
+            sb.AppendLine("规则：");
+            sb.AppendLine("1. 当用户请求文档操作时，直接调用适当的工具，而不是仅提供建议。");
+            sb.AppendLine("2. 你会记住本次对话中执行的所有操作。");
+            sb.AppendLine("3. 如果用户问你之前做了什么，根据对话历史如实回答。");
+            sb.AppendLine("4. 简洁专业，始终用中文回复。");
+            sb.AppendLine("5. 如果用户消息以'[用户附加了选中文本作为上下文...]'开头，说明用户在 Word 中选中了文本并自动附加。你可以直接分析、纠正或重写它，而无需调用 get_selected_text。");
+            sb.AppendLine("6. 当工具调用失败时，分析错误信息。如果是参数问题，修复参数并重试一次。如果是系统错误，清楚地告知用户，而不是盲目重试。");
+            sb.AppendLine("7. 如果你需要向用户确认信息、征求意见或请求额外输入，**必须首先调用 ask_user 工具**来提问，而不是直接发送文本消息。");
             sb.AppendLine();
-            sb.AppendLine("Tool Safety Rules:");
-            sb.AppendLine("- Prefer read-only tools (get_document_info, get_document_map, get_selected_text, get_node_detail, read_section_text, list_files) for information gathering. Do NOT modify the document just to inspect it.");
-            sb.AppendLine("- execute_word_script is a DANGEROUS tool that runs arbitrary code. Only use it as a LAST RESORT when no other specialized tool can accomplish the task. Never call it for tasks that existing tools already support (e.g. formatting, inserting text/tables, page setup).");
-            sb.AppendLine("- batch_operations and delete_section are destructive. Confirm the user's intent before using them, especially when the scope of changes is large.");
-            sb.AppendLine("- Always prefer the least destructive approach: use replace_selected_text over execute_word_script, use format_content over batch script rewriting.");
+            sb.AppendLine("工具安全规则：");
+            sb.AppendLine("- 优先使用只读工具（get_document_info、get_document_map、get_selected_text、read_document_section、read_table、list_files）来收集信息。不要仅仅为了查看而修改文档。");
+            sb.AppendLine("- execute_word_script 是一个危险的工具，可以运行任意代码。只有在其他专业工具无法完成任务时才将其作为最后手段使用。不要对现有工具已支持的任务调用它（例如格式化、插入文本/表格、页面设置）。");
+            sb.AppendLine("- batch_operations 和 delete_section 是破坏性操作。在使用它们之前，特别是更改范围较大时，请确认用户的意图。");
+            sb.AppendLine("- 始终优先选择破坏性最小的方法：使用 edit_document_text 而非 execute_word_script，使用 format_content 而非批量脚本重写。");
+            sb.AppendLine("- 对于审核场景，优先使用 add_comment 和 toggle_track_changes 而非直接编辑，让用户可以接受/拒绝更改。");
+            sb.AppendLine("- 使用 undo_redo 来撤销错误，而不是让用户手动操作。");
+            sb.AppendLine("- 在执行复杂或不熟悉的操作之前，检查是否有相关的 Skill 并首先使用 load_skill 加载它。Skill 包含最佳实践和正确的 API 使用模式。");
 
             switch (mode)
             {
                 case "编辑":
-                    sb.AppendLine("7. Current mode: EDITING. Focus on improving text quality.");
+                    sb.AppendLine("8. 当前模式：编辑。专注于提高文本质量。");
                     break;
                 case "审核":
-                    sb.AppendLine("7. Current mode: REVIEW. Focus on checking document standards and accuracy.");
+                    sb.AppendLine("8. 当前模式：审核。专注于检查文档标准和准确性。");
                     break;
                 default:
-                    sb.AppendLine("7. Current mode: Q&A. Answer the user's questions.");
+                    sb.AppendLine("8. 当前模式：问答。回答用户的问题。");
                     break;
             }
 
@@ -1314,7 +1751,7 @@ namespace FuXing
                 var connectInstance = Connect.CurrentInstance;
                 if (connectInstance == null)
                 {
-                    MessageBox.Show("无法获取AI助手插件实例", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("无法获取AI福星插件实例", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -1409,7 +1846,7 @@ namespace FuXing
                 var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
 
                 // 显示上传工具调用卡片
-                var uploadMsg = panel.AddMessage("AI助手", aiAvatar, ChatRole.AI);
+                var uploadMsg = panel.AddMessage("AI福星", aiAvatar, ChatRole.AI);
                 var uploadCard = uploadMsg.AddToolCall("文件上传", $"正在上传 {fileName}...");
 
                 // 调用网络助手上传文件
@@ -1429,7 +1866,7 @@ namespace FuXing
                 panel.AddMessage("用户", userAvatar, ChatRole.User, $"已上传文件: {fileName}");
 
                 // 添加成功消息
-                panel.AddMessage("AI助手", aiAvatar, ChatRole.AI,
+                panel.AddMessage("AI福星", aiAvatar, ChatRole.AI,
                     $"文件上传成功！\n\n您现在可以基于此文件内容进行对话。\n\n处理模式: {currentMode}\n目标知识库: {currentKnowledgeBase}");
 
                 System.Diagnostics.Debug.WriteLine($"文件上传成功，文件ID: {uploadResponse.file_id}");
@@ -1453,7 +1890,7 @@ namespace FuXing
                     }
                     else
                     {
-                        panel.AddMessage("AI助手", aiAvatar, ChatRole.AI, $"❌ 文件上传失败: {ex.Message}");
+                        panel.AddMessage("AI福星", aiAvatar, ChatRole.AI, $"❌ 文件上传失败: {ex.Message}");
                     }
                 }
 

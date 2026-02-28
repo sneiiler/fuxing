@@ -15,10 +15,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.System;
 
         public override string Description =>
-            "Load and activate a Skill by name. " +
-            "Available skill names and descriptions are listed in the system prompt — choose the one relevant to the current task. " +
-            "Once activated, the skill's full instructions are injected into the context and remain active for the session. " +
-            "Do not reload the same skill within one conversation turn.";
+            "Activate a Skill by name (from system prompt skill list). " +
+            "Instructions are injected into context for the session. Do not reload within one turn.";
 
         public override JObject Parameters => new JObject
         {

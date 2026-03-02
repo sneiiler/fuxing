@@ -21,6 +21,10 @@ namespace FuXing
     [ProgId("FuXing.TaskPaneControl")]
     public partial class TaskPaneControl : UserControl, NetOffice.WordApi.Tools.ITaskPane
     {
+        private const int WM_MOUSEWHEEL = 0x020A;
+        private const int WM_MOUSEHOVER = 0x02A1;
+        private const int WH_MOUSE_LL = 14;
+
         private NetOffice.WordApi.Application _application;
         private NetOffice.OfficeApi._CustomTaskPane _parentPane;
 
@@ -49,8 +53,12 @@ namespace FuXing
         private bool _hasRequestedGreeting;
         private bool _isLLMAvailable = true;
 
-        // ── 启动安全提示遮罩 ──
-        private System.Windows.Forms.Panel _warningOverlay;
+        // ── 启动安全提示 ──
+        // 约束："每次应用会话仅显示一次"。
+        // 说明：TaskPaneControl 在多窗口场景会有多个实例，
+        // 因此使用 static 标志在整个插件进程内全局去重。
+        private static bool _globalStartupWarningShown;
+        // 实例级去重：防止同一窗口实例重复触发。
         private bool _hasShownWarning;
 
         /// <summary>每个窗口独立的会话记忆</summary>
@@ -108,16 +116,18 @@ namespace FuXing
                     System.Diagnostics.Debug.WriteLine($"TaskPane width set to: {_parentPane.Width}");
                 }
 
-                // Perform any additional initialization here if needed
+                // 安装鼠标钩子以捕获滚轮消息
                 if (this.InvokeRequired)
                 {
                     this.Invoke((MethodInvoker)delegate
                     {
+                        this.InstallMouseHook();
                         this.Invalidate();
                     });
                 }
                 else
                 {
+                    InstallMouseHook();
                     this.Invalidate();
                 }
             }
@@ -131,6 +141,10 @@ namespace FuXing
         {
             try
             {
+                // 卸载鼠标钩子
+                UninstallMouseHook();
+                _instance = null;
+
                 if (_application != null)
                 {
                     _application = null;
@@ -170,7 +184,7 @@ namespace FuXing
                 {
                     CurrentInstance = this;
 
-                    // 首次可见时显示安全提示遮罩
+                    // 首次可见时显示安全提示弹窗
                     ShowStartupWarningIfNeeded();
 
                     // 首次可见时，向 LLM 发送问候请求作为健康检查
@@ -186,208 +200,121 @@ namespace FuXing
         #endregion
 
         // ════════════════════════════════════════════════════════════
-        //  启动安全提示遮罩 — 毛玻璃风格全屏提示
+        //  启动安全提示 — 独立弹窗
         // ════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// 根据配置决定是否显示启动安全提示遮罩。
+        /// 根据配置决定是否显示启动安全提示弹窗。
+        /// 维护约定：此方法由多个入口触发（OnVisibleStateChanged / EnsureTaskPaneVisible），
+        /// 但必须保证在同一应用会话内最多弹出一次。
         /// </summary>
-        private void ShowStartupWarningIfNeeded()
+        public void ShowStartupWarningIfNeeded()
         {
-            if (_hasShownWarning) return;
-            _hasShownWarning = true;
+            // 控件句柄未就绪时不执行，避免跨线程/生命周期异常。
+            if (!IsHandleCreated || IsDisposed || Disposing)
+                return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)ShowStartupWarningIfNeeded);
+                return;
+            }
+
+            // 双重去重：实例级 + 全局会话级。
+            if (_hasShownWarning || _globalStartupWarningShown) return;
 
             var config = new ConfigLoader().LoadConfig();
             if (!config.ShowStartupWarning) return;
 
-            CreateWarningOverlay();
+            bool shown = ShowStartupWarningDialog();
+            if (shown)
+            {
+                // 仅在弹窗实际显示成功后才置位，避免“未显示但被误判已显示”。
+                _hasShownWarning = true;
+                _globalStartupWarningShown = true;
+            }
+        }
+
+        private sealed class NativeWindowOwner : IWin32Window
+        {
+            public IntPtr Handle { get; }
+            public NativeWindowOwner(IntPtr handle) { Handle = handle; }
+        }
+
+        /// <summary>弹出独立的安全提示窗口（AntdUI.Window，不依赖宿主 Form）。</summary>
+        private bool ShowStartupWarningDialog()
+        {
+            try
+            {
+                if (!IsHandleCreated || IsDisposed || Disposing)
+                    return false;
+
+                using (var dialog = new StartupWarningDialog())
+                {
+                    IntPtr hwnd = GetWordWindowHandle();
+
+                    if (hwnd != IntPtr.Zero)
+                        dialog.ShowDialog(new NativeWindowOwner(hwnd));
+                    else
+                        dialog.ShowDialog();
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ShowStartupWarningDialog error: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
-        /// 创建毛玻璃风格的安全提示遮罩层，覆盖整个 TaskPane。
+        /// 安全获取 Word 窗口句柄，兼容 Office 2010。
+        /// Office 2010 的 COM 对象模型可能不支持 Hwnd 属性。
         /// </summary>
-        private void CreateWarningOverlay()
+        private IntPtr GetWordWindowHandle()
         {
-            _warningOverlay = new System.Windows.Forms.Panel
+            try
             {
-                Dock = DockStyle.Fill,
-                Name = "WarningOverlay",
-                BackColor = Color.FromArgb(240, 245, 250, 253) // 半透明浅白蓝底
-            };
+                if (_application == null || _application.ActiveWindow == null)
+                    return IntPtr.Zero;
 
-            // 开启双缓冲
-            typeof(System.Windows.Forms.Panel).GetProperty("DoubleBuffered",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                ?.SetValue(_warningOverlay, true, null);
-
-            // ── 毛玻璃背景绘制 ──
-            _warningOverlay.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                // 半透明白色底层（模拟毛玻璃）
-                using (var bgBrush = new SolidBrush(Color.FromArgb(220, 255, 255, 255)))
-                    g.FillRectangle(bgBrush, _warningOverlay.ClientRectangle);
-
-                // 顶部渐变光晕装饰
-                var glowRect = new Rectangle(0, 0, _warningOverlay.Width, 120);
-                using (var glowBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    glowRect, Color.FromArgb(40, 59, 130, 246), Color.FromArgb(0, 59, 130, 246),
-                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
-                    g.FillRectangle(glowBrush, glowRect);
-            };
-
-            // ── 内容卡片容器 ──
-            var cardPanel = new System.Windows.Forms.Panel
-            {
-                BackColor = Color.Transparent,
-                Anchor = AnchorStyles.None
-            };
-
-            // 卡片绘制：白色圆角卡片 + 阴影
-            cardPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                var cardRect = new Rectangle(0, 0, cardPanel.Width - 1, cardPanel.Height - 1);
-
-                // 淡阴影
-                var shadowRect = new Rectangle(2, 2, cardPanel.Width - 1, cardPanel.Height - 1);
-                using (var shadowPath = CreateRoundedRectanglePath(shadowRect, 16))
-                using (var shadowBrush = new SolidBrush(Color.FromArgb(20, 0, 0, 0)))
-                    g.FillPath(shadowBrush, shadowPath);
-
-                // 白色卡片
-                using (var cardPath = CreateRoundedRectanglePath(cardRect, 16))
+                // 尝试通过 COM 方式获取 Hwnd
+                dynamic activeWindow = _application.ActiveWindow;
+                try
                 {
-                    using (var fillBrush = new SolidBrush(Color.FromArgb(252, 252, 253)))
-                        g.FillPath(fillBrush, cardPath);
-                    using (var borderPen = new Pen(Color.FromArgb(229, 231, 235), 1f))
-                        g.DrawPath(borderPen, cardPath);
+                    int hwndValue = (int)activeWindow.Hwnd;
+                    return new IntPtr(hwndValue);
                 }
-            };
-
-            // ── 盾牌图标 ──
-            var iconLabel = new System.Windows.Forms.Label
-            {
-                Text = "\U0001F6E1\uFE0F",
-                Font = new Font("Segoe UI Emoji", 32F),
-                Size = new Size(60, 60),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent,
-                ForeColor = Color.FromArgb(59, 130, 246)
-            };
-
-            // ── 标题 ──
-            var titleLabel = new System.Windows.Forms.Label
-            {
-                Text = "使用前请注意",
-                Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(17, 24, 39),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent,
-                AutoSize = false,
-                Size = new Size(300, 36)
-            };
-
-            // ── 说明正文 ──
-            var bodyLabel = new System.Windows.Forms.Label
-            {
-                Text = "本插件可直接读取和修改当前 Word 文档内容，\n" +
-                       "包括文本、格式、表格、图片等所有元素。\n\n" +
-                       "为避免意外修改导致数据丢失，\n" +
-                       "请提前保存或备份您的文档。",
-                Font = new Font("Microsoft YaHei UI", 10F),
-                ForeColor = Color.FromArgb(75, 85, 99),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent,
-                AutoSize = false,
-                Size = new Size(320, 110)
-            };
-
-            // ── "不再提示" 复选框 ──
-            var dontShowCheck = new AntdUI.Checkbox
-            {
-                Text = "不再显示此提示",
-                Font = new Font("Microsoft YaHei UI", 9F),
-                ForeColor = Color.FromArgb(107, 114, 128),
-                BackColor = Color.Transparent,
-                Size = new Size(160, 28),
-                Checked = false
-            };
-
-            // ── "我知道了" 按钮 ──
-            var confirmBtn = new AntdUI.Button
-            {
-                Text = "我知道了",
-                Type = AntdUI.TTypeMini.Primary,
-                Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold),
-                Size = new Size(200, 42),
-                Radius = 21
-            };
-            confirmBtn.Click += (s, e) =>
-            {
-                // 如果勾选"不再提示"，保存到配置
-                if (dontShowCheck.Checked)
+                catch
                 {
-                    var configLoader = new ConfigLoader();
-                    var cfg = configLoader.LoadConfig();
-                    cfg.ShowStartupWarning = false;
-                    configLoader.SaveConfig(cfg);
+                    // Office 2010 可能不支持 Hwnd 属性，尝试其他方式
+                    // 通过 FindWindow 查找 Word 窗口
+                    return FindWordWindow();
                 }
-                DismissWarningOverlay();
-            };
-
-            cardPanel.Controls.AddRange(new Control[] { iconLabel, titleLabel, bodyLabel, dontShowCheck, confirmBtn });
-
-            // ── 卡片内布局（居中排列） ──
-            cardPanel.Resize += (s, e) =>
+            }
+            catch
             {
-                int cw = cardPanel.ClientSize.Width;
-                int cy = 28;
-
-                iconLabel.Location = new Point((cw - iconLabel.Width) / 2, cy);
-                cy += iconLabel.Height + 8;
-
-                titleLabel.Location = new Point((cw - titleLabel.Width) / 2, cy);
-                cy += titleLabel.Height + 12;
-
-                bodyLabel.Location = new Point((cw - bodyLabel.Width) / 2, cy);
-                cy += bodyLabel.Height + 16;
-
-                dontShowCheck.Location = new Point((cw - dontShowCheck.Width) / 2, cy);
-                cy += dontShowCheck.Height + 12;
-
-                confirmBtn.Location = new Point((cw - confirmBtn.Width) / 2, cy);
-            };
-
-            _warningOverlay.Controls.Add(cardPanel);
-
-            // ── 遮罩层布局：卡片居中 ──
-            _warningOverlay.Resize += (s, e) =>
-            {
-                int ow = _warningOverlay.ClientSize.Width;
-                int oh = _warningOverlay.ClientSize.Height;
-                int cardW = Math.Min(380, ow - 32);
-                int cardH = 370;
-                cardPanel.Size = new Size(cardW, cardH);
-                cardPanel.Location = new Point((ow - cardW) / 2, (oh - cardH) / 2);
-            };
-
-            // 添加到 TaskPane 最顶层
-            Controls.Add(_warningOverlay);
-            _warningOverlay.BringToFront();
+                return IntPtr.Zero;
+            }
         }
 
-        /// <summary>关闭并释放安全提示遮罩层。</summary>
-        private void DismissWarningOverlay()
+        /// <summary>
+        /// 通过 Win32 API 查找 Word 窗口句柄。
+        /// </summary>
+        private IntPtr FindWordWindow()
         {
-            if (_warningOverlay == null) return;
-            Controls.Remove(_warningOverlay);
-            _warningOverlay.Dispose();
-            _warningOverlay = null;
+            try
+            {
+                // 尝试获取 Word 主窗口句柄
+                var process = System.Diagnostics.Process.GetProcessesByName("WINWORD");
+                if (process.Length > 0 && process[0].MainWindowHandle != IntPtr.Zero)
+                    return process[0].MainWindowHandle;
+                return IntPtr.Zero;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
         }
 
         // ════════════════════════════════════════════════════════════
@@ -1964,6 +1891,104 @@ namespace FuXing
             {
                 OnUiThread(() => _block.AddOutput(output, success));
             }
+        }
+
+        // 鼠标钩子相关
+        private static IntPtr _mouseHookHandle = IntPtr.Zero;
+        private static LowLevelMouseProc _mouseProc;
+        private static TaskPaneControl _instance;
+
+        /// <summary>
+        /// 安装鼠标钩子以捕获滚轮消息
+        /// </summary>
+        private void InstallMouseHook()
+        {
+            if (_mouseHookHandle != IntPtr.Zero) return;
+
+            _instance = this;
+            _mouseProc = MouseHookCallback;
+            using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
+            using (var curModule = curProcess.MainModule)
+            {
+                _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(curModule.ModuleName), 0);
+            }
+        }
+
+        /// <summary>
+        /// 卸载鼠标钩子
+        /// </summary>
+        private void UninstallMouseHook()
+        {
+            if (_mouseHookHandle != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_mouseHookHandle);
+                _mouseHookHandle = IntPtr.Zero;
+            }
+        }
+
+        private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0 && _instance != null && _instance._richChatPanel != null)
+            {
+                // WM_MOUSEWHEEL = 0x020A
+                if (wParam == (IntPtr)WM_MOUSEWHEEL)
+                {
+                    var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    // 检查鼠标位置是否在 TaskPane 区域内
+                    if (_instance.IsMouseInTaskPane(hookStruct.pt.x, hookStruct.pt.y))
+                    {
+                        // 将消息转发到 RichChatPanel
+                        PostMessage(_instance._richChatPanel.Handle, WM_MOUSEWHEEL, wParam, lParam);
+                        return (IntPtr)1; // 拦截消息
+                    }
+                }
+            }
+            return CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
+        }
+
+        /// <summary>
+        /// 检查鼠标是否在 TaskPane 区域内
+        /// </summary>
+        private bool IsMouseInTaskPane(int x, int y)
+        {
+            if (!IsHandleCreated) return false;
+            var pt = PointToClient(new Point(x, y));
+            return ClientRectangle.Contains(pt);
+        }
+
+        // P/Invoke 声明
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int x;
+            public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public POINT pt;
+            public uint mouseData;
+            public uint flags;
+            public uint time;
+            public IntPtr dwExtraInfo;
         }
     }
 }

@@ -2436,6 +2436,8 @@ namespace FuXing.UI
 
     public class RichChatPanel : System.Windows.Forms.Panel
     {
+        private const int WM_MOUSEWHEEL = 0x020A;
+
         private readonly System.Windows.Forms.Panel _container;
         private readonly List<MessageGroup> _messages = new List<MessageGroup>();
 
@@ -2455,6 +2457,21 @@ namespace FuXing.UI
             Controls.Add(_container);
 
             Resize += (s, e) => PerformRelayout();
+        }
+
+        protected override void WndProc(ref System.Windows.Forms.Message m)
+        {
+            // 捕获鼠标滚轮消息并处理滚动
+            if (m.Msg == WM_MOUSEWHEEL)
+            {
+                int delta = (short)((long)m.WParam >> 16);
+                int scrollAmount = delta / 3; // 调整滚动速度
+                int newY = Math.Max(0, Math.Min(_container.Height - ClientSize.Height, AutoScrollPosition.Y - scrollAmount));
+                AutoScrollPosition = new Point(0, newY);
+                m.Result = IntPtr.Zero;
+                return;
+            }
+            base.WndProc(ref m);
         }
 
         // ═══ 公共 API ═══

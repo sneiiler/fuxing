@@ -79,55 +79,36 @@ namespace FuXing
 
         // ── 系统 Prompt（按纠错模式动态生成） ──
 
-        private static readonly string OUTPUT_FORMAT =
-@"【Output Format — Strictly follow. Do not output anything else.】
+        // ── 共用输出格式规范（不含示例） ──
+        private static readonly string FORMAT_RULES =
+@"【输出格式 — 必须严格遵守，不要输出任何其他内容。】
 
-For each error found, output one correction entry in the following format:
+对于发现的每处错误，按以下格式输出一条纠错条目：
 
 >>>>ORIGINAL
-(The minimal contiguous snippet from the original text that needs correction. Must match the source text exactly.)
+（从原文中提取的最小连续片段，必须与原文完全一致。）
 >>>>REPLACEMENT
-(The corrected version of the ORIGINAL snippet — only fix the erroneous part, keep all correct characters intact.)
+（对 ORIGINAL 片段的修正版本 — 仅修复错误部分，保留所有正确的字词不变。）
 >>>>REASON
-(Brief reason for the correction.)
+（简要说明纠错原因，必须使用中文。）
 ====
 
-At the end, output a summary:
+在最后，输出一段总结：
 
 >>>>SUMMARY
-(Overall correction summary.)
+（整体纠错总结，必须使用中文。）
 ====
 
-【Core Rules — Must follow】
-- ORIGINAL must be a contiguous text snippet that can be precisely matched in the source text. Never fabricate non-existent original text.
-- REPLACEMENT is an in-place fix of ORIGINAL: only replace the erroneous part, preserving all correct words unchanged.
-- Never delete, add, or reorganize parts of ORIGINAL that are already correct.
-- Each correction must pinpoint the minimal error snippet. Do not use an entire sentence as one correction.
-- If the text is entirely correct, only output the SUMMARY section.
-- Do not output markdown, code blocks, or any other extra formatting.
+【核心规则 — 必须遵守】
+- ORIGINAL 必须是能在原文中精确匹配到的连续文本片段，不得编造不存在的原文。
+- REPLACEMENT 是对 ORIGINAL 的原位修复：仅替换错误部分，保留所有正确的字词不变。
+- 不得删除、增加或重新组织 ORIGINAL 中已经正确的部分。
+- 每条纠错必须精确定位到最小的错误片段，不要把整个句子作为一条纠错。
+- 如果文本完全正确，只需输出 SUMMARY 部分。
+- 不要输出 Markdown、代码块或任何多余的格式。
+- REASON 和 SUMMARY 必须使用中文书写。";
 
-【Example】
-
-Original text: 进一步彰显了高分辨率遥感在综合国士治理中的核心地位。
-
-Correct output:
->>>>ORIGINAL
-国士
->>>>REPLACEMENT
-国土
->>>>REASON
-""国士"" should be ""国土"" (national territory). This is a visually similar character error.
-====
-
-Incorrect example (FORBIDDEN):
->>>>ORIGINAL
-综合国士治理
->>>>REPLACEMENT
-综合治理
->>>>REASON
-...
-====
-The above is wrong because the correction deleted the correct word ""国土"" from the original.";
+        // ── 错别字模式 ──
 
         private static readonly string PROMPT_TYPO =
 @"你是一个专业的中文错别字检测专家。你的任务是**严格只检查错别字** — 不要检查其他类型的问题。
@@ -148,6 +129,70 @@ The above is wrong because the correction deleted the correct word ""国土"" fr
 
 只有当你确定某个字写错了才输出纠错条目。不确定时不要报告。";
 
+        private static readonly string EXAMPLES_TYPO =
+@"【示例一：形近字错误】
+
+原文：进一步彰显了高分辨率遥感在综合国士治理中的核心地位。
+
+正确输出：
+>>>>ORIGINAL
+国士
+>>>>REPLACEMENT
+国土
+>>>>REASON
+""国士""应为""国土""（国家领土），属于形近字混淆错误。
+====
+
+>>>>SUMMARY
+共发现 1 处错别字：形近字混淆。
+====
+
+【示例二：多处同音字错误】
+
+原文：该项目以经完成了初步的瓶估工作。
+
+正确输出：
+>>>>ORIGINAL
+以经
+>>>>REPLACEMENT
+已经
+>>>>REASON
+""以经""应为""已经""，属于同音字混淆错误。
+====
+
+>>>>ORIGINAL
+瓶估
+>>>>REPLACEMENT
+评估
+>>>>REASON
+""瓶估""应为""评估""，属于同音字混淆错误。
+====
+
+>>>>SUMMARY
+共发现 2 处错别字：均为同音字混淆。
+====
+
+【反面示例（禁止）】
+>>>>ORIGINAL
+综合国士治理
+>>>>REPLACEMENT
+综合治理
+>>>>REASON
+...
+====
+以上写法是错的，因为纠正时把正确的""国土""一词也删除了。ORIGINAL 必须仅包含错误的最小片段。
+
+【示例三：无错误文本】
+
+原文：该项目已经完成了初步的评估工作。
+
+正确输出：
+>>>>SUMMARY
+文本检查完毕，未发现错别字。
+====";
+
+        // ── 语义模式 ──
+
         private static readonly string PROMPT_SEMANTIC =
 @"你是一个专业的中文文本校对专家。仔细检查用户提供的文本，找出所有语义层面的错误并给出修改建议。
 
@@ -162,6 +207,53 @@ The above is wrong because the correction deleted the correct word ""国土"" fr
 【严格禁止检查】
 - 不要检查文档级跨引用术语一致性（这属于一致性检查模式）。
 - 不要进行润色 — 只关注明显的错误。";
+
+        private static readonly string EXAMPLES_SEMANTIC =
+@"【示例一：语法错误 — 介词套用导致主语缺失】
+
+原文：通过这次改革使企业效率得到了显著提高。
+
+正确输出：
+>>>>ORIGINAL
+通过这次改革使
+>>>>REPLACEMENT
+通过这次改革，
+>>>>REASON
+""通过……使……""构成介词套用，导致句子主语缺失。应去掉""使""，改为逗号分隔。
+====
+
+>>>>SUMMARY
+共发现 1 处语法问题：介词套用导致主语缺失。
+====
+
+【示例二：语义重复】
+
+原文：可以减少不必要的浪费。
+
+正确输出：
+>>>>ORIGINAL
+不必要的浪费
+>>>>REPLACEMENT
+浪费
+>>>>REASON
+""浪费""本身已含""不必要""之义，""不必要的浪费""属于语义重复。
+====
+
+>>>>SUMMARY
+共发现 1 处用词问题：语义重复。
+====
+
+【反面示例（禁止）】
+>>>>ORIGINAL
+通过这次改革使企业效率得到了显著提高。
+>>>>REPLACEMENT
+这次改革使企业效率得到了显著提高。
+>>>>REASON
+...
+====
+以上写法是错的，ORIGINAL 应仅包含需要修正的最小片段，而非整个句子。";
+
+        // ── 一致性模式 ──
 
         private static readonly string PROMPT_CONSISTENCY =
 @"你是一个专业的文档一致性审查专家。仔细阅读用户提供的全文，找出不同部分之间的不一致问题。
@@ -181,18 +273,55 @@ The above is wrong because the correction deleted the correct word ""国土"" fr
 
 注意：你必须通读全文，比较前后章节来发现一致性问题。单独的句子可能看起来没问题，但与上下文比较就能发现不一致。仔细比较全文中的所有术语、数据和表达。";
 
+        private static readonly string EXAMPLES_CONSISTENCY =
+@"【示例：术语不一致】
+
+原文片段：
+第3段：""本项目部署了高性能服务器集群……""
+第15段：""系统主机采用双路处理器架构……""
+第22段：""服务器运行状态良好……""
+
+正确输出：
+>>>>ORIGINAL
+主机
+>>>>REPLACEMENT
+服务器
+>>>>REASON
+第15段使用""主机""，而第3段和第22段使用""服务器""指代同一设备，应统一术语为""服务器""。
+====
+
+>>>>SUMMARY
+共发现 1 处术语不一致：同一设备在不同段落中使用了""服务器""和""主机""两种称呼。
+====
+
+【反面示例（禁止）】
+仅因为某段的句式和其他段不同就报告为不一致。一致性检查只关注同一概念的术语、数据、表达是否统一，不关注写作风格差异。";
+
+        // ── 组合：模式提示词 + 格式规范 + 模式专属示例 ──
+
         /// <summary>根据纠错模式获取完整的系统提示词</summary>
         private static string GetSystemPrompt(CorrectionMode mode)
         {
             string modePrompt;
+            string examples;
             switch (mode)
             {
-                case CorrectionMode.Typo: modePrompt = PROMPT_TYPO; break;
-                case CorrectionMode.Semantic: modePrompt = PROMPT_SEMANTIC; break;
-                case CorrectionMode.Consistency: modePrompt = PROMPT_CONSISTENCY; break;
-                default: throw new ArgumentOutOfRangeException(nameof(mode));
+                case CorrectionMode.Typo:
+                    modePrompt = PROMPT_TYPO;
+                    examples = EXAMPLES_TYPO;
+                    break;
+                case CorrectionMode.Semantic:
+                    modePrompt = PROMPT_SEMANTIC;
+                    examples = EXAMPLES_SEMANTIC;
+                    break;
+                case CorrectionMode.Consistency:
+                    modePrompt = PROMPT_CONSISTENCY;
+                    examples = EXAMPLES_CONSISTENCY;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mode));
             }
-            return modePrompt + "\n\n" + OUTPUT_FORMAT;
+            return modePrompt + "\n\n" + FORMAT_RULES + "\n\n" + examples;
         }
 
         // ── 核心方法 ──
@@ -337,7 +466,7 @@ The above is wrong because the correction deleted the correct word ""国土"" fr
                 messages = new[]
                 {
                     new { role = "system", content = systemPrompt },
-                    new { role = "user", content = $"Please check and correct the following text:\n\n{text}" }
+                    new { role = "user", content = $"请检查并纠正以下文本：\n\n{text}" }
                 },
                 temperature = 0.1,
                 max_tokens = 4096

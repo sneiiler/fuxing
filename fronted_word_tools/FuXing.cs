@@ -160,12 +160,12 @@ namespace FuXing
                         var activeWin = _wordApplication.ActiveWindow;
                         if (activeWin != null)
                         {
-                            int hwnd = activeWin.Hwnd;
+                            int hwnd = GetWindowHwnd(activeWin);
                             var ctp = TaskPanes[0].Pane;
                             var control = TaskPaneInstances.Count > 0
                                 ? (TaskPaneControl)TaskPaneInstances[0]
                                 : null;
-                            if (ctp != null && control != null)
+                            if (ctp != null && control != null && hwnd != 0)
                             {
                                 _windowPanes[hwnd] = new WindowPaneContext(ctp, control);
                                 System.Diagnostics.Debug.WriteLine(
@@ -741,6 +741,31 @@ namespace FuXing
         // ── TaskPane 辅助方法 ──
 
         /// <summary>
+        /// 安全获取 Word 窗口句柄，兼容 Office 2010。
+        /// Office 2010 的 COM 对象模型可能不支持 Hwnd 属性。
+        /// </summary>
+        private int GetWindowHwnd(NetOffice.WordApi.Window window)
+        {
+            if (window == null) return 0;
+            try
+            {
+                return (int)window.Hwnd;
+            }
+            catch
+            {
+                // Office 2010 不支持 Hwnd 属性，尝试通过进程获取
+                try
+                {
+                    var processes = System.Diagnostics.Process.GetProcessesByName("WINWORD");
+                    if (processes.Length > 0)
+                        return (int)processes[0].MainWindowHandle;
+                }
+                catch { }
+                return 0;
+            }
+        }
+
+        /// <summary>
         /// 获取当前活动窗口的 WindowPaneContext（不创建）。
         /// 如未找到返回 null。
         /// </summary>
@@ -750,7 +775,7 @@ namespace FuXing
             {
                 var activeWindow = _wordApplication?.ActiveWindow;
                 if (activeWindow == null) return null;
-                int hwnd = activeWindow.Hwnd;
+                int hwnd = GetWindowHwnd(activeWindow);
                 _windowPanes.TryGetValue(hwnd, out var ctx);
                 return ctx;
             }
@@ -770,7 +795,7 @@ namespace FuXing
             if (activeWindow == null)
                 throw new InvalidOperationException("没有活动窗口");
 
-            int hwnd = activeWindow.Hwnd;
+            int hwnd = GetWindowHwnd(activeWindow);
 
             // 已有映射 → 直接返回
             if (_windowPanes.TryGetValue(hwnd, out var existing))
@@ -838,7 +863,8 @@ namespace FuXing
                 ctx.Width = 500;
                 ctx.Visible = true;
             }
-            // 确保 LLM 问候健康检查已触发
+            // 确保启动安全提示和 LLM 问候健康检查已触发
+            ctx.Control.ShowStartupWarningIfNeeded();
             ctx.Control.CheckAndRequestGreeting();
             return ctx.Control;
         }

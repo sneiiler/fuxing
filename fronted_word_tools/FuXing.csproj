@@ -78,7 +78,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <!-- Core: »ù´¡ÉèÊ© & ÅäÖÃ -->
+    <!-- Core: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê© & ï¿½ï¿½ï¿½ï¿½ -->
     <Compile Include="Core\ChatMemory.cs" />
     <Compile Include="Core\ConfigLoader.cs" />
     <Compile Include="Core\NetWorkHelper.cs" />
@@ -88,7 +88,7 @@
     <Compile Include="Core\DocumentHelper.cs" />
     <Compile Include="Core\DebugLogger.cs" />
     <Compile Include="Core\ToolCategory.cs" />
-    <!-- SubAgents: ×ÓÖÇÄÜÌå -->
+    <!-- SubAgents: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ -->
     <Compile Include="SubAgents\SubAgent.cs" />
     <Compile Include="SubAgents\SubAgentModels.cs" />
     <Compile Include="SubAgents\DocumentStructureExtractor.cs" />
@@ -97,8 +97,11 @@
     <Compile Include="SubAgents\DocumentAstBuilder.cs" />
     <Compile Include="SubAgents\DocumentMapCache.cs" />
     <Compile Include="Core\WordHelper.cs" />
-    <!-- UI: ´°Ìå & ½çÃæ -->
+    <!-- UI: ï¿½ï¿½ï¿½ï¿½ & ï¿½ï¿½ï¿½ï¿½ -->
     <Compile Include="UI\AboutDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\StartupWarningDialog.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\SettingForm.cs">
@@ -108,7 +111,7 @@
     <Compile Include="UI\TaskPaneControl.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <!-- Tools: AI ¹¤¾ß·þÎñ -->
+    <!-- Tools: AI ï¿½ï¿½ï¿½ß·ï¿½ï¿½ï¿½ -->
     <Compile Include="Tools\ITool.cs" />
     <Compile Include="Tools\ToolBase.cs" />
     <Compile Include="Tools\TextCorrectionService.cs" />
@@ -141,7 +144,7 @@
     <Compile Include="Tools\BookmarkTool.cs" />
     <Compile Include="Tools\CrossReferenceTool.cs" />
     <Compile Include="Tools\AskUserTool.cs" />
-    <!-- ²å¼þÈë¿Ú -->
+    <!-- ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ -->
     <Compile Include="FuXing.cs">
       <SubType>UserControl</SubType>
     </Compile>

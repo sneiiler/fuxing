@@ -12,7 +12,7 @@ namespace FuXing.SubAgents
     // ═══════════════════════════════════════════════════════════════
     //  文档 AST 构建器（深度路径专用）
     //
-    //  仅被 DocumentGraphBuilder.BuildSkeletonDeepAsync 调用。
+    //  仅被 DocumentGraphBuilder.BuildFullDeepAsync 调用。
     //  负责：证据收集（OutlineLevel + 单行候选）→ LLM 裁定标题层级。
     //  返回 DocumentAstNode 根节点，由 GraphBuilder 转化为 DocNode 图。
     // ═══════════════════════════════════════════════════════════════

@@ -50,21 +50,15 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string hfType = arguments["type"]?.ToString();
-            string text = arguments["text"]?.ToString();
+            string hfType = RequireString(arguments, "type");
+            string text = RequireString(arguments, "text");
 
-            if (string.IsNullOrWhiteSpace(hfType))
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 type 参数"));
-            if (text == null)
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 text 参数"));
+            string alignment = OptionalString(arguments, "alignment", "center");
+            string fontName = OptionalString(arguments, "font_name", "宋体");
+            float fontSize = OptionalFloat(arguments, "font_size", 9f);
+            string pageType = OptionalString(arguments, "page_type", "primary");
 
-            string alignment = arguments["alignment"]?.ToString() ?? "center";
-            string fontName = arguments["font_name"]?.ToString() ?? "宋体";
-            float fontSize = arguments["font_size"] != null ? (float)arguments["font_size"] : 9f;
-            string pageType = arguments["page_type"]?.ToString() ?? "primary";
-
-            var app = connect.WordApplication;
-            var doc = app.ActiveDocument;
+            var doc = RequireActiveDocument(connect);
 
             WdHeaderFooterIndex hfIndex;
             switch (pageType)
@@ -74,7 +68,7 @@ namespace FuXing
                 default: hfIndex = WdHeaderFooterIndex.wdHeaderFooterPrimary; break;
             }
 
-            int? sectionIdx = arguments["section_index"] != null ? (int?)arguments["section_index"] : null;
+            int? sectionIdx = OptionalNullableInt(arguments, "section_index");
 
             if (sectionIdx.HasValue)
             {

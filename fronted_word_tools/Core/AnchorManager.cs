@@ -1,8 +1,8 @@
-using NetOffice.WordApi;
+﻿using NetOffice.WordApi;
 using NetOffice.WordApi.Enums;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Text;
 
 namespace FuXing.Core
 {
@@ -66,25 +66,36 @@ namespace FuXing.Core
 
             string tag = TagPrefix + label;
 
+            Log($"Place 开始: label={label}, range=[{range.Start},{range.End})");
+
             // 如果同名锚点已存在，先移除
             RemoveByTag(doc, tag);
 
             // 创建 RichText ContentControl
-            var cc = doc.ContentControls.Add(
-                WdContentControlType.wdContentControlRichText, range);
+            try
+            {
+                var cc = doc.ContentControls.Add(
+                    WdContentControlType.wdContentControlRichText, range);
 
-            cc.Tag = tag;
-            cc.Title = $"⚓ {label}";
-            cc.Temporary = true;
-            cc.LockContentControl = false;
-            cc.LockContents = false;
+                cc.Tag = tag;
+                cc.Title = $"⚓ {label}";
+                cc.Temporary = true;
+                cc.LockContentControl = false;
+                cc.LockContents = false;
 
             // 隐藏外观（不影响文档显示）
             cc.Appearance = WdContentControlAppearance.wdContentControlHidden;
 
-            Debug.WriteLine($"[AnchorManager] 已放置锚点: {label} (Tag={tag})");
+            Log($"Place 成功: label={label}, CC range=[{cc.Range.Start},{cc.Range.End})");
 
             return BuildAnchorInfo(cc, label);
+            }
+            catch (Exception ex)
+            {
+                LogError($"Place CC 创建失败: label={label}, range=[{range.Start},{range.End})", ex);
+                DumpAllContentControls(doc, "Place 失败现场");
+                throw;
+            }
         }
 
         /// <summary>
@@ -94,9 +105,14 @@ namespace FuXing.Core
         /// </summary>
         public AnchorInfo TryPlace(Document doc, Range range, string label)
         {
-            if (!CanPlaceRichTextControl(doc, range))
+            string selfTag = TagPrefix + label;
+
+            Log($"TryPlace 开始: label={label}, range=[{range.Start},{range.End}), selfTag={selfTag}");
+
+            if (!CanPlaceRichTextControl(doc, range, selfTag))
             {
-                Debug.WriteLine($"[AnchorManager] 跳过锚点 '{label}'：范围不适合创建 RichText ContentControl");
+                Log($"TryPlace 跳过: label={label} — CanPlaceRichTextControl 返回 false");
+                DumpAllContentControls(doc, $"TryPlace 跳过 '{label}'");
                 return null;
             }
 
@@ -105,11 +121,14 @@ namespace FuXing.Core
             app.DisplayAlerts = WdAlertLevel.wdAlertsNone;
             try
             {
-                return Place(doc, range, label);
+                var result = Place(doc, range, label);
+                Log($"TryPlace 成功: label={label}");
+                return result;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[AnchorManager] 无法放置锚点 '{label}': {ex.Message}");
+                LogError($"TryPlace CC 创建异常: label={label}, range=[{range.Start},{range.End})", ex);
+                DumpAllContentControls(doc, $"TryPlace 异常 '{label}'");
                 return null;
             }
             finally
@@ -121,37 +140,67 @@ namespace FuXing.Core
         /// <summary>
         /// 预判范围是否适合创建 RichText ContentControl。
         /// 避免调用 Word API 后弹出"不能在此处应用RTF控件"对话框。
-        /// Word 允许完全嵌套（子在父内）和完全包裹（父包子），但禁止部分交叉。
+        /// 规则：① 嵌套只允许在 RichText/BuildingBlockGallery/Group CC 内部
+        /// ② 完全包裹（父包子）允许 ③ 部分交叉禁止
         /// </summary>
-        private static bool CanPlaceRichTextControl(Document doc, Range range)
+        private static bool CanPlaceRichTextControl(Document doc, Range range, string selfTag = null)
         {
             if (doc == null || range == null) return false;
-            if (range.Start >= range.End) return false;
+            if (range.Start >= range.End)
+            {
+                Log($"CanPlace 拒绝: range.Start({range.Start}) >= range.End({range.End})");
+                return false;
+            }
+
+            int ccCount = doc.ContentControls.Count;
+            Log($"CanPlace 检查: 新范围[{range.Start},{range.End}), selfTag={selfTag ?? "(null)"}, 文档CC数={ccCount}");
 
             foreach (ContentControl existing in doc.ContentControls)
             {
-                // 跳过我们自己的锚点 CC（Place 会通过 RemoveByTag 处理同名的）
-                string tag = existing.Tag;
-                if (tag != null && tag.StartsWith(TagPrefix)) continue;
+                // 只跳过即将被 RemoveByTag 移除的同名 CC
+                string tag = existing.Tag ?? "(null)";
+                if (selfTag != null && tag == selfTag)
+                {
+                    Log($"  跳过同名CC: Tag={tag}");
+                    continue;
+                }
 
                 var existingRange = existing.Range;
                 int eStart = existingRange.Start;
                 int eEnd = existingRange.End;
+                var ccType = existing.Type;
 
-                // 无重叠  安全
+                // 无重叠 → 安全
                 if (range.End <= eStart || range.Start >= eEnd) continue;
 
-                // 新范围完全在现有 CC 内部（嵌套）  Word 允许
-                if (range.Start >= eStart && range.End <= eEnd) continue;
+                // 新范围完全在现有 CC 内部（嵌套）
+                // Word 只允许在 RichText / BuildingBlockGallery / Group CC 内部嵌套
+                if (range.Start >= eStart && range.End <= eEnd)
+                {
+                    if (ccType == WdContentControlType.wdContentControlRichText
+                        || ccType == WdContentControlType.wdContentControlBuildingBlockGallery
+                        || ccType == WdContentControlType.wdContentControlGroup)
+                    {
+                        Log($"  允许嵌套: 新范围[{range.Start},{range.End}) ⊂ CC[{eStart},{eEnd}) Type={ccType} Tag={tag}");
+                        continue; // 允许嵌套
+                    }
+                    Log($"  ❌ 拒绝嵌套: 不能在 {ccType} 类型的 CC 内部创建 RichText CC: [{eStart},{eEnd}) Tag={tag}");
+                    return false;
+                }
 
-                // 新范围完全包含现有 CC（包裹）  Word 允许
-                if (range.Start <= eStart && range.End >= eEnd) continue;
+                // 新范围完全包含现有 CC（包裹） → Word 允许
+                if (range.Start <= eStart && range.End >= eEnd)
+                {
+                    Log($"  允许包裹: 新范围[{range.Start},{range.End}) ⊃ CC[{eStart},{eEnd}) Type={ccType} Tag={tag}");
+                    continue;
+                }
 
-                // 部分交叉  会触发 RTF 弹框
-                Debug.WriteLine($"[AnchorManager] 检测到部分交叉：新范围[{range.Start},{range.End}) vs 现有CC[{eStart},{eEnd})");
+                // 部分交叉 → 会触发 RTF 弹框
+                Log($"  ❌ 拒绝部分交叉: 新范围[{range.Start},{range.End}) ∩ CC[{eStart},{eEnd}) Type={ccType} Tag={tag}");
                 return false;
             }
 
+            Log($"CanPlace 通过: 新范围[{range.Start},{range.End})");
             return true;
         }
         /// <summary>
@@ -220,7 +269,7 @@ namespace FuXing.Core
             }
 
             if (count > 0)
-                Debug.WriteLine($"[AnchorManager] 已清除 {count} 个锚点");
+                Log($"ClearAll: 已清除 {count} 个锚点");
 
             return count;
         }
@@ -256,7 +305,7 @@ namespace FuXing.Core
             for (int i = matches.Count; i >= 1; i--)
                 matches[i].Delete(false);
 
-            Debug.WriteLine($"[AnchorManager] 已移除锚点: {tag}");
+            Log($"RemoveByTag: 已移除 {matches.Count} 个 CC, tag={tag}");
             return true;
         }
 
@@ -275,6 +324,46 @@ namespace FuXing.Core
                 CharEnd = range.End,
                 TextPreview = text
             };
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  日志辅助
+        // ═══════════════════════════════════════════════════
+
+        private static void Log(string message)
+        {
+            DebugLogger.Instance.LogDebug("Anchor", message);
+        }
+
+        private static void LogError(string context, Exception ex)
+        {
+            DebugLogger.Instance.LogError($"[Anchor] {context}", ex);
+        }
+
+        /// <summary>
+        /// 将文档中所有 ContentControl 的信息转储到日志，用于排查 RTF 冲突。
+        /// </summary>
+        private static void DumpAllContentControls(Document doc, string reason)
+        {
+            try
+            {
+                int count = doc.ContentControls.Count;
+                var sb = new StringBuilder();
+                sb.AppendLine($"CC 转储（{reason}）: 共 {count} 个 ContentControl");
+                for (int i = 1; i <= count; i++)
+                {
+                    var cc = doc.ContentControls[i];
+                    string tag = cc.Tag ?? "(null)";
+                    var r = cc.Range;
+                    sb.AppendLine($"  [{i}] Type={cc.Type}, Tag={tag}, Range=[{r.Start},{r.End}), " +
+                                  $"Title={cc.Title ?? "(null)"}");
+                }
+                Log(sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                Log($"CC 转储失败: {ex.Message}");
+            }
         }
     }
 }

@@ -56,43 +56,42 @@ namespace FuXing
             const float CmToPoints = 28.3465f;
 
             // ── 参数解析 ──
-            bool hasWidthCm = arguments["width_cm"] != null;
-            bool hasHeightCm = arguments["height_cm"] != null;
-            bool hasScale = arguments["scale_percent"] != null;
+            float? widthCm = OptionalNullableFloat(arguments, "width_cm");
+            float? heightCm = OptionalNullableFloat(arguments, "height_cm");
+            float? scalePct = OptionalNullableFloat(arguments, "scale_percent");
 
-            if (!hasWidthCm && !hasHeightCm && !hasScale)
+            if (!widthCm.HasValue && !heightCm.HasValue && !scalePct.HasValue)
                 return Task.FromResult(ToolExecutionResult.Fail(
                     "需要至少指定 width_cm、height_cm 或 scale_percent 之一"));
 
             float newWidth, newHeight;
 
-            if (hasScale)
+            if (scalePct.HasValue)
             {
                 // 等比缩放百分比
-                double percent = (double)arguments["scale_percent"];
-                if (percent <= 0 || percent > 1000)
+                if (scalePct.Value <= 0 || scalePct.Value > 1000)
                     return Task.FromResult(ToolExecutionResult.Fail("scale_percent 应在 1~1000 之间"));
 
-                float factor = (float)(percent / 100.0);
+                float factor = scalePct.Value / 100f;
                 newWidth = origWidth * factor;
                 newHeight = origHeight * factor;
             }
-            else if (hasWidthCm && hasHeightCm)
+            else if (widthCm.HasValue && heightCm.HasValue)
             {
                 // 自由缩放（同时指定宽高）
-                newWidth = (float)(double)arguments["width_cm"] * CmToPoints;
-                newHeight = (float)(double)arguments["height_cm"] * CmToPoints;
+                newWidth = widthCm.Value * CmToPoints;
+                newHeight = heightCm.Value * CmToPoints;
             }
-            else if (hasWidthCm)
+            else if (widthCm.HasValue)
             {
                 // 按宽度等比缩放
-                newWidth = (float)(double)arguments["width_cm"] * CmToPoints;
+                newWidth = widthCm.Value * CmToPoints;
                 newHeight = origHeight * (newWidth / origWidth);
             }
             else
             {
                 // 按高度等比缩放
-                newHeight = (float)(double)arguments["height_cm"] * CmToPoints;
+                newHeight = heightCm.Value * CmToPoints;
                 newWidth = origWidth * (newHeight / origHeight);
             }
 

@@ -1,112 +1,133 @@
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace FuXing
 {
-    /// <summary>对文档文本执行 AI 纠错（自动检测：有选中则纠错选中部分，否则纠错全文）</summary>
+    /// <summary>一条纠错建议（原文 → 建议）</summary>
+    public class CorrectionItem
+    {
+        public string Original { get; set; }
+        public string Replacement { get; set; }
+        public string Reason { get; set; }
+    }
+
+    /// <summary>
+    /// AI 原生设计：纯"应用修改"工具。
+    /// LLM 自行分析文本找出错误，然后调用此工具执行查找替换（审阅模式 + 批注原因）。
+    /// 纠错推理由主 Agent 或子智能体负责，本工具不做任何 LLM 调用。
+    /// </summary>
     public class CorrectTextTool : ToolBase
     {
         public override string Name => "correct_text";
-        public override string DisplayName => "文本纠错";
+        public override string DisplayName => "应用纠错";
         public override ToolCategory Category => ToolCategory.Editing;
 
         public override string Description =>
-            "AI proofreading: detect and fix typos/errors in Track Changes mode with explanatory comments. " +
-            "Operates on selection or entire document. " +
-            "PRIMARY tool for any proofreading/error-checking task — use this, not search_and_replace. No parameters.";
+            "Apply text corrections to the document in Track Changes mode. " +
+            "You provide a list of corrections (original→replacement with reason); " +
+            "the tool executes find-replace with revision tracking and adds comments for each correction. " +
+            "Use this AFTER you've analyzed the text and identified errors. " +
+            "scope: 'selection' (only within selected text) or 'all' (entire document, default). " +
+            "Each correction's 'original' must be an exact substring found in the document (max 255 chars).";
 
-        public override JObject Parameters => null;
-
-        public override async Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
+        public override JObject Parameters => new JObject
         {
+            ["type"] = "object",
+            ["properties"] = new JObject
+            {
+                ["corrections"] = new JObject
+                {
+                    ["type"] = "array",
+                    ["description"] = "纠错列表，每项包含 original/replacement/reason",
+                    ["items"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JObject
+                        {
+                            ["original"] = new JObject { ["type"] = "string", ["description"] = "原文中需修正的精确片段（必须能在文档中匹配到）" },
+                            ["replacement"] = new JObject { ["type"] = "string", ["description"] = "修正后的文本" },
+                            ["reason"] = new JObject { ["type"] = "string", ["description"] = "修正原因（中文说明，将作为批注添加）" }
+                        },
+                        ["required"] = new JArray("original", "replacement")
+                    }
+                },
+                ["scope"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray("all", "selection"),
+                    ["description"] = "修正范围：all=全文（默认），selection=仅选中区域"
+                }
+            },
+            ["required"] = new JArray("corrections")
+        };
+
+        public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
+        {
+            var doc = RequireActiveDocument(connect);
             var app = connect.WordApplication;
-            if (app.Documents.Count == 0)
-                return ToolExecutionResult.Fail("没有打开的文档");
 
-            var selection = app.Selection;
-            bool hasSelection = selection != null &&
-                                selection.Start < selection.End &&
-                                !string.IsNullOrEmpty(selection.Text?.Trim());
+            // ── 解析参数 ──
+            var correctionsArray = OptionalArray(arguments, "corrections");
+            if (correctionsArray == null || correctionsArray.Count == 0)
+                throw new ToolArgumentException("corrections 参数为空或缺失");
 
-            var mode = connect.CurrentCorrectionMode;
-            var service = TextCorrectionService.FromConfig();
+            string scope = OptionalString(arguments, "scope", "all");
 
-            if (hasSelection)
-                return await CorrectSelectedAsync(connect, app, service, mode);
+            // ── 确定修正范围 ──
+            int rangeStart, rangeEnd;
+            if (scope == "selection")
+            {
+                var selection = app.Selection;
+                if (selection == null || selection.Start >= selection.End)
+                    throw new ToolArgumentException("scope=selection 但没有选中文本");
+                rangeStart = selection.Start;
+                rangeEnd = selection.End;
+            }
             else
-                return await CorrectAllAsync(connect, app, service, mode);
-        }
-
-        private async Task<ToolExecutionResult> CorrectSelectedAsync(
-            Connect connect, NetOffice.WordApi.Application app,
-            TextCorrectionService service, CorrectionMode mode)
-        {
-            var selection = app.Selection;
-            string text = selection.Text.Trim();
-            int selStart = selection.Start;
-            int selEnd = selection.End;
-            var activeDoc = app.ActiveDocument;
-
-            connect.HighlightRangePublic(activeDoc, selStart, selEnd);
-
-            try
             {
-                var result = await service.CorrectTextAsync(text, mode);
-
-                if (!result.Success)
-                    return ToolExecutionResult.Fail($"纠错失败: {result.ErrorMessage}");
-
-                if (!result.HasCorrections)
-                    return ToolExecutionResult.Ok("未发现需要修改的内容，文本质量良好。");
-
-                int applied = connect.ApplyCorrectionsPublic(activeDoc, selStart, selEnd, result.Corrections);
-
-                var details = result.Corrections
-                    .Select(c => $"「{c.Original}」→「{c.Replacement}」（{c.Reason}）")
-                    .ToList();
-
-                string summary = $"共发现 {result.Corrections.Count} 处问题，已修改 {applied} 处（审阅模式）。\n"
-                    + string.Join("\n", details);
-
-                if (!string.IsNullOrEmpty(result.Summary))
-                    summary += $"\n总结: {result.Summary}";
-
-                return ToolExecutionResult.Ok(summary);
+                rangeStart = doc.Content.Start;
+                rangeEnd = doc.Content.End;
             }
-            finally
+
+            // ── 解析纠错列表 ──
+            var corrections = new List<CorrectionItem>();
+            foreach (var item in correctionsArray)
             {
-                connect.ClearHighlightPublic(activeDoc, selStart, selEnd);
+                string original = item["original"]?.ToString();
+                string replacement = item["replacement"]?.ToString();
+                string reason = item["reason"]?.ToString();
+
+                if (string.IsNullOrEmpty(original))
+                    continue;
+                if (replacement == null)
+                    replacement = "";
+
+                corrections.Add(new CorrectionItem
+                {
+                    Original = original,
+                    Replacement = replacement,
+                    Reason = reason ?? ""
+                });
             }
-        }
 
-        private async Task<ToolExecutionResult> CorrectAllAsync(
-            Connect connect, NetOffice.WordApi.Application app,
-            TextCorrectionService service, CorrectionMode mode)
-        {
-            var activeDoc = app.ActiveDocument;
-            string fullText = activeDoc.Content.Text?.Trim();
-            if (string.IsNullOrEmpty(fullText))
-                return ToolExecutionResult.Fail("文档内容为空");
+            if (corrections.Count == 0)
+                return Task.FromResult(ToolExecutionResult.Ok("纠错列表为空，无需修改。"));
 
-            var result = await service.CorrectTextAsync(fullText, mode);
+            // ── 应用修改（审阅模式） ──
+            int applied = connect.ApplyCorrectionsPublic(doc, rangeStart, rangeEnd, corrections);
 
-            if (!result.Success)
-                return ToolExecutionResult.Fail($"全文纠错失败: {result.ErrorMessage}");
+            // ── 构建结果摘要 ──
+            var details = new List<string>();
+            foreach (var c in corrections)
+                details.Add($"「{c.Original}」→「{c.Replacement}」（{c.Reason}）");
 
-            if (!result.HasCorrections)
-                return ToolExecutionResult.Ok("全文检查完成，未发现需要修改的内容。");
+            string summary = $"共提交 {corrections.Count} 处纠错，成功应用 {applied} 处（审阅模式）。";
+            if (applied < corrections.Count)
+                summary += $"\n{corrections.Count - applied} 处未在文档中匹配到原文。";
+            summary += "\n" + string.Join("\n", details);
 
-            int docStart = activeDoc.Content.Start;
-            int docEnd = activeDoc.Content.End;
-            int applied = connect.ApplyCorrectionsPublic(activeDoc, docStart, docEnd, result.Corrections);
-
-            string summary = $"全文纠错完成: 发现 {result.Corrections.Count} 处问题，已修改 {applied} 处（审阅模式）。";
-            if (!string.IsNullOrEmpty(result.Summary))
-                summary += $"\n{result.Summary}";
-
-            return ToolExecutionResult.Ok(summary);
+            return Task.FromResult(ToolExecutionResult.Ok(summary));
         }
     }
 }

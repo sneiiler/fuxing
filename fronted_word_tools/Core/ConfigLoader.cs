@@ -24,8 +24,8 @@ namespace FuXing
             /// <summary>上下文窗口限制（token 数），可选档位：32000 / 64000 / 128000</summary>
             public int ContextWindowLimit { get; set; } = 128000;
 
-            /// <summary>智能体最大迭代轮次（工具调用循环上限），可选档位：5 / 10 / 20 / 30</summary>
-            public int MaxToolRounds { get; set; } = 10;
+            /// <summary>智能体最大迭代轮次（工具调用循环上限），可选档位：10 / 20 / 50 / 100</summary>
+            public int MaxToolRounds { get; set; } = 50;
 
             /// <summary>危险操作审批：执行脚本、批量操作、删除章节等高风险工具前弹窗确认</summary>
             public bool RequireApprovalForDangerousTools { get; set; } = true;

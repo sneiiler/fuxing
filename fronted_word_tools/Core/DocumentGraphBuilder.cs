@@ -14,10 +14,10 @@ namespace FuXing.Core
     //  文档图构建器
     //
     //  职责：
-    //  1. 扫描文档段落，识别标题 → 创建 Section 节点（L1 骨架层）
-    //  2. 为每个节点创建 CC 锚点（通过 AnchorManager）
-    //  3. 建立 parent/child/prev/next 关系
-    //  4. 按需展开 Section 内部（L2 内容层：Table/Image/TextBlock/List）
+    //  1. 扫描文档段落，识别标题 → 创建 Section 节点
+    //  2. 一步到位发现所有内容元素（Heading/TextBlock/Table/Image/List/Preamble）
+    //  3. 为每个节点创建 CC 锚点（通过 AnchorManager）
+    //  4. 建立 parent/child/prev/next 关系
     //
     //  双路径：
     //  - 快速路径：从大纲级别程序化构建（无 LLM）
@@ -31,6 +31,8 @@ namespace FuXing.Core
     {
         private readonly AnchorManager _anchors;
         private int _sectionCounter;
+        private int _headingCounter;
+        private int _preambleCounter;
         private int _tableCounter;
         private int _imageCounter;
         private int _textBlockCounter;
@@ -43,14 +45,13 @@ namespace FuXing.Core
         }
 
         // ═══════════════════════════════════════════════════
-        //  L1 快速路径：从大纲级别构建骨架
+        //  快速路径：从大纲级别构建完整文档图
         // ═══════════════════════════════════════════════════
 
         /// <summary>
-        /// 从大纲级别快速构建文档图骨架（L1 层）。
-        /// 只包含标题 Section 节点，每个节点绑定一个 CC 锚点。
+        /// 从大纲级别构建完整文档图（Section + Heading + 内容元素一步到位）。
         /// </summary>
-        public DocumentGraph BuildSkeleton(Document doc)
+        public DocumentGraph BuildFull(Document doc)
         {
             var sw = Stopwatch.StartNew();
             ResetCounters();
@@ -62,64 +63,47 @@ namespace FuXing.Core
                 BuiltAt = DateTime.Now
             };
 
-            // 根节点（不创建 CC，代表整个文档）
-            var root = new DocNode
-            {
-                Id = "doc",
-                Type = DocNodeType.Document,
-                Title = doc.Name,
-                Level = 0,
-                AnchorLabel = null // 根节点不需要 CC
-            };
+            var root = CreateRootNode(doc);
             graph.Root = root;
             graph.AddNode(root);
 
-            // 扫描段落，提取标题
             var headings = ExtractHeadings(doc);
 
-            if (headings.Count == 0)
+            // 第一个标题之前的内容 → Preamble 节点
+            BuildPreamble(doc, graph, root, headings);
+
+            if (headings.Count > 0)
             {
-                sw.Stop();
-                Debug.WriteLine($"[GraphBuilder] 骨架构建完成: 0 个标题, 耗时 {sw.ElapsedMilliseconds}ms");
-                return graph;
+                BuildSectionHierarchy(doc, graph, root, headings);
+                BuildSiblingLinks(graph, root);
+
+                // 为每个 Section 立即发现内容元素（Heading + TextBlock + Table + Image + List）
+                DiscoverAllSectionContents(doc, graph);
             }
 
-            // 用栈算法构建层级关系 + 创建 CC 锚点
-            BuildSectionHierarchy(doc, graph, root, headings);
-
-            // 建立兄弟链（prev/next）
-            BuildSiblingLinks(graph, root);
-
             sw.Stop();
-            Debug.WriteLine($"[GraphBuilder] 骨架构建完成: {headings.Count} 个节点, " +
-                            $"耗时 {sw.ElapsedMilliseconds}ms");
+            DebugLogger.Instance.LogDebug("GraphBuilder", $"文档图构建完成: {graph.Index.Count} 个节点, 耗时 {sw.ElapsedMilliseconds}ms");
 
             return graph;
         }
 
         // ═══════════════════════════════════════════════════
-        //  L1 深度路径：LLM 推断标题
+        //  深度路径：LLM 推断标题
         // ═══════════════════════════════════════════════════
 
         /// <summary>
         /// 深度路径：全量段落提取 + LLM 推断标题，适用于不规范文档。
-        /// 核心标题推断逻辑委托给 DocumentAstBuilder（复用已有的 LLM 推断）后
-        /// 转化为图结构。
         /// </summary>
-        public async Task<DocumentGraph> BuildSkeletonDeepAsync(
+        public async Task<DocumentGraph> BuildFullDeepAsync(
             Document doc, CancellationToken cancellation = default)
         {
             var sw = Stopwatch.StartNew();
             ResetCounters();
 
-            // 使用已有的 DocumentStructureExtractor 提取段落元数据
             var rawStructure = DocumentStructureExtractor.Extract(doc);
-
-            // 使用已有的 AstBuilder 推断标题
             var astBuilder = new DocumentAstBuilder();
             var astRoot = await astBuilder.BuildAsync(rawStructure, cancellation);
 
-            // 将 AST 树转化为图
             var graph = new DocumentGraph
             {
                 DocumentName = doc.Name,
@@ -127,40 +111,33 @@ namespace FuXing.Core
                 BuiltAt = DateTime.Now
             };
 
-            var root = new DocNode
-            {
-                Id = "doc",
-                Type = DocNodeType.Document,
-                Title = doc.Name,
-                Level = 0,
-                AnchorLabel = null
-            };
+            var root = CreateRootNode(doc);
             graph.Root = root;
             graph.AddNode(root);
 
-            // 从 AST 树收集标题信息，然后走同样的骨架构建流程
             var headings = CollectHeadingsFromAst(astRoot);
+
+            BuildPreamble(doc, graph, root, headings);
 
             if (headings.Count > 0)
             {
                 BuildSectionHierarchy(doc, graph, root, headings);
                 BuildSiblingLinks(graph, root);
+                DiscoverAllSectionContents(doc, graph);
             }
 
             sw.Stop();
-            Debug.WriteLine($"[GraphBuilder] 深度骨架构建完成: {headings.Count} 个节点, " +
-                            $"耗时 {sw.ElapsedMilliseconds}ms");
+            DebugLogger.Instance.LogDebug("GraphBuilder", $"深度文档图构建完成: {graph.Index.Count} 个节点, 耗时 {sw.ElapsedMilliseconds}ms");
 
             return graph;
         }
 
         // ═══════════════════════════════════════════════════
-        //  L2 展开：发现 Section 内部元素
+        //  Section 已在 map 时完整展开，ExpandSection 仅做兼容
         // ═══════════════════════════════════════════════════
 
         /// <summary>
-        /// 展开一个 Section 节点的内部内容，发现其中的 Table/Image/TextBlock/List。
-        /// 新发现的节点作为该 Section 的子节点添加，各自创建 CC 锚点。
+        /// Section 节点已在构建时自动展开，此方法仅标记 Expanded 状态。
         /// </summary>
         public void ExpandSection(Document doc, DocumentGraph graph, string sectionNodeId)
         {
@@ -169,36 +146,11 @@ namespace FuXing.Core
                 throw new InvalidOperationException($"节点不存在: {sectionNodeId}");
             if (section.Type != DocNodeType.Section)
                 throw new InvalidOperationException($"只能展开 Section 节点，当前类型: {section.Type}");
-            if (section.Expanded)
-                return; // 已展开，无需重复
-
-            var sectionRange = GetNodeRange(doc, section);
-            int sectionStart = sectionRange.Start;
-            int sectionEnd = sectionRange.End;
-
-            // 已有的子 Section 的 ID 集合（不要覆盖）
-            var existingChildIds = new HashSet<string>(section.ChildIds);
-
-            // 扫描 section 范围内的段落，识别内容元素
-            var contentNodes = new List<DocNode>();
-            DiscoverContentElements(doc, graph, sectionStart, sectionEnd,
-                section, existingChildIds, contentNodes);
-
-            // 将新节点插入到子节点列表（在已有子 Section 之间穿插）
-            // 策略：按文档顺序合并
-            MergeContentNodesIntoSection(doc, graph, section, contentNodes);
-
-            // 重新建立该 section 下的兄弟链
-            RebuildSiblingLinks(graph, section);
-
-            section.Expanded = true;
-
-            Debug.WriteLine($"[GraphBuilder] 展开 {sectionNodeId}: " +
-                            $"发现 {contentNodes.Count} 个内容元素");
+            // Section 已在 map 时完整展开，无需额外操作
         }
 
         // ═══════════════════════════════════════════════════
-        //  L3 展开：发现 TextBlock 内部段落
+        //  展开 TextBlock 到段落级
         // ═══════════════════════════════════════════════════
 
         /// <summary>
@@ -265,8 +217,7 @@ namespace FuXing.Core
 
             block.Expanded = true;
 
-            Debug.WriteLine($"[GraphBuilder] 展开 TextBlock {textBlockNodeId}: " +
-                            $"发现 {paraNodes.Count} 个段落");
+            DebugLogger.Instance.LogDebug("GraphBuilder", $"展开 TextBlock {textBlockNodeId}: 发现 {paraNodes.Count} 个段落");
         }
 
         // ═══════════════════════════════════════════════════
@@ -292,6 +243,8 @@ namespace FuXing.Core
         private void ResetCounters()
         {
             _sectionCounter = 0;
+            _headingCounter = 0;
+            _preambleCounter = 0;
             _tableCounter = 0;
             _imageCounter = 0;
             _textBlockCounter = 0;
@@ -304,6 +257,8 @@ namespace FuXing.Core
             switch (prefix)
             {
                 case "s": return $"s{++_sectionCounter:D2}";
+                case "h": return $"h{++_headingCounter:D2}";
+                case "pre": return $"pre{++_preambleCounter:D2}";
                 case "t": return $"t{++_tableCounter:D2}";
                 case "i": return $"i{++_imageCounter:D2}";
                 case "b": return $"b{++_textBlockCounter:D2}";
@@ -383,11 +338,14 @@ namespace FuXing.Core
             {
                 var h = headings[i];
 
-                // 计算该 Section 的范围：从当前标题开始，到下一个同级或更高标题之前
-                int rangeStart = h.RangeStart;
+                // 从段落动态获取当前字符位置（CC 创建会插入控制字符导致偏移漂移，
+                // 因此不能使用 ExtractHeadings 时快照的 RangeStart 整数）
+                var headingPara = doc.Paragraphs[h.ParaIndex];
+                int headingStart = headingPara.Range.Start;
+                int bodyStart = headingPara.Range.End;
                 int rangeEnd;
                 if (i + 1 < headings.Count)
-                    rangeEnd = headings[i + 1].RangeStart;
+                    rangeEnd = doc.Paragraphs[headings[i + 1].ParaIndex].Range.Start;
                 else
                     rangeEnd = doc.Content.End - 1;
 
@@ -404,21 +362,22 @@ namespace FuXing.Core
                     AnchorLabel = anchorLabel,
                     Meta = new Dictionary<string, string>
                     {
-                        ["range_start"] = rangeStart.ToString(),
+                        ["heading_start"] = headingStart.ToString(),
+                        ["range_start"] = bodyStart.ToString(),
                         ["range_end"] = rangeEnd.ToString()
                     }
                 };
 
-                // 创建 CC 锚点（文档已有 ContentControl 时可能失败）
-                var sectionRange = doc.Range(rangeStart, rangeEnd);
-                if (_anchors.TryPlace(doc, sectionRange, anchorLabel) == null)
+                // CC 锚点仅覆盖正文区域（标题段落之后），编辑操作天然不会破坏标题
+                var bodyRange = doc.Range(bodyStart, rangeEnd);
+                if (_anchors.TryPlace(doc, bodyRange, anchorLabel) == null)
                 {
                     sectionNode.AnchorLabel = null;
-                    Debug.WriteLine($"[GraphBuilder] 节点 {nodeId} 无法创建 CC 锚点，使用位置回退");
+                    DebugLogger.Instance.LogDebug("GraphBuilder", $"节点 {nodeId} ({h.Title}) 无法创建 CC 锚点，使用位置回退, range=[{bodyStart},{rangeEnd})");
                 }
 
-                // 读取内容预览（标题后的第一行非空文本）
-                sectionNode.Preview = ExtractPreview(sectionRange, h.Title);
+                // 读取内容预览（正文第一行非空文本）
+                sectionNode.Preview = ExtractBodyPreview(bodyRange);
 
                 // 退栈到合适的父节点
                 while (stack.Count > 1 && stack.Peek().Level >= h.Level)
@@ -462,22 +421,13 @@ namespace FuXing.Core
             }
         }
 
-        /// <summary>提取内容预览（跳过标题文本本身）</summary>
-        private static string ExtractPreview(Range range, string headingTitle)
+        /// <summary>提取正文区域预览（第一行非空文本）</summary>
+        private static string ExtractBodyPreview(Range bodyRange)
         {
-            string text = range.Text ?? "";
-            // 去掉标题文本本身
-            int titleEnd = text.IndexOf('\r');
-            if (titleEnd >= 0 && titleEnd + 1 < text.Length)
-                text = text.Substring(titleEnd + 1);
-            else
-                return null;
-
-            // 取第一行非空文本
+            string text = bodyRange.Text ?? "";
             text = text.TrimStart('\r', '\n', '\a');
             if (string.IsNullOrWhiteSpace(text)) return null;
 
-            // 截断到第一个换行或 100 字符
             int lineEnd = text.IndexOf('\r');
             if (lineEnd >= 0) text = text.Substring(0, lineEnd);
             if (text.Length > 100) text = text.Substring(0, 100) + "…";
@@ -485,9 +435,144 @@ namespace FuXing.Core
             return text.Trim();
         }
 
-        // ═══════════════════════════════════════════════════
-        //  L2 内容元素发现
-        // ═══════════════════════════════════════════════════
+        /// <summary>创建根节点</summary>
+        private static DocNode CreateRootNode(Document doc)
+        {
+            return new DocNode
+            {
+                Id = "doc",
+                Type = DocNodeType.Document,
+                Title = doc.Name,
+                Level = 0,
+                AnchorLabel = null
+            };
+        }
+
+        /// <summary>
+        /// 为文档第一个标题之前的内容创建 Preamble 节点。
+        /// 如果第一个标题前有非空正文内容，则创建 Preamble 节点覆盖该区域。
+        /// </summary>
+        private void BuildPreamble(Document doc, DocumentGraph graph, DocNode root, List<HeadingEntry> headings)
+        {
+            int docStart = doc.Content.Start;
+            int firstHeadingStart;
+
+            if (headings.Count > 0)
+            {
+                // 重新从文档获取精确位置（CC 创建前）
+                firstHeadingStart = doc.Paragraphs[headings[0].ParaIndex].Range.Start;
+            }
+            else
+            {
+                // 无标题 → 整个文档作为 Preamble
+                firstHeadingStart = doc.Content.End - 1;
+            }
+
+            if (firstHeadingStart <= docStart) return;
+
+            // 检查是否有非空文本
+            var preambleRange = doc.Range(docStart, firstHeadingStart);
+            string text = preambleRange.Text ?? "";
+            if (string.IsNullOrWhiteSpace(text.TrimEnd('\r', '\n', '\a'))) return;
+
+            string nodeId = NextId("pre");
+            string anchorLabel = $"map:{nodeId}";
+
+            var node = new DocNode
+            {
+                Id = nodeId,
+                Type = DocNodeType.Preamble,
+                Title = "前言",
+                Preview = ExtractBodyPreview(preambleRange),
+                AnchorLabel = anchorLabel,
+                ParentId = root.Id,
+                Level = 0,
+                Meta = new Dictionary<string, string>
+                {
+                    ["range_start"] = docStart.ToString(),
+                    ["range_end"] = firstHeadingStart.ToString()
+                }
+            };
+
+            if (_anchors.TryPlace(doc, preambleRange, anchorLabel) == null)
+                node.AnchorLabel = null;
+
+            graph.AddNode(node);
+            root.ChildIds.Insert(0, nodeId);
+        }
+
+        /// <summary>
+        /// 遍历所有 Section 节点，为每个 Section 创建 Heading 子节点并发现内容元素。
+        /// </summary>
+        private void DiscoverAllSectionContents(Document doc, DocumentGraph graph)
+        {
+            var sections = graph.FindByType(DocNodeType.Section);
+            foreach (var section in sections)
+            {
+                // 1. 创建 Heading 子节点
+                CreateHeadingNode(doc, graph, section);
+
+                // 2. 发现直属内容元素（TextBlock / Table / Image / List）
+                var sectionRange = GetNodeRange(doc, section);
+                int sectionStart = sectionRange.Start;
+                int sectionEnd = sectionRange.End;
+
+                var existingChildIds = new HashSet<string>(section.ChildIds);
+                var contentNodes = new List<DocNode>();
+                DiscoverContentElements(doc, graph, sectionStart, sectionEnd,
+                    section, existingChildIds, contentNodes);
+
+                MergeContentNodesIntoSection(doc, graph, section, contentNodes);
+
+                section.Expanded = true;
+            }
+
+            // 重建所有兄弟链（因为子节点列表已变更）
+            BuildSiblingLinks(graph, graph.Root);
+        }
+
+        /// <summary>为 Section 节点创建对应的 Heading 子节点（CC 仅覆盖标题段落）</summary>
+        private void CreateHeadingNode(Document doc, DocumentGraph graph, DocNode section)
+        {
+            if (section.Meta == null || !section.Meta.TryGetValue("heading_start", out var hsStr))
+                return;
+
+            int headingStart = int.Parse(hsStr);
+            int headingEnd;
+            if (section.Meta.TryGetValue("range_start", out var rsStr))
+                headingEnd = int.Parse(rsStr);
+            else
+                return;
+
+            if (headingEnd <= headingStart) return;
+
+            string nodeId = NextId("h");
+            string anchorLabel = $"map:{nodeId}";
+
+            var headingRange = doc.Range(headingStart, headingEnd);
+
+            var node = new DocNode
+            {
+                Id = nodeId,
+                Type = DocNodeType.Heading,
+                Title = section.Title,
+                AnchorLabel = anchorLabel,
+                ParentId = section.Id,
+                Level = section.Level,
+                Meta = new Dictionary<string, string>
+                {
+                    ["range_start"] = headingStart.ToString(),
+                    ["range_end"] = headingEnd.ToString()
+                }
+            };
+
+            if (_anchors.TryPlace(doc, headingRange, anchorLabel) == null)
+                node.AnchorLabel = null;
+
+            graph.AddNode(node);
+            // Heading 始终是 Section 的第一个子节点
+            section.ChildIds.Insert(0, nodeId);
+        }
 
         /// <summary>扫描 section 范围内的段落，识别 Table/Image/TextBlock/List</summary>
         private void DiscoverContentElements(

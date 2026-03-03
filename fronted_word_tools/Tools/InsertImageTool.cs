@@ -39,15 +39,13 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string filePath = arguments["file_path"]?.ToString();
-            if (string.IsNullOrWhiteSpace(filePath))
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 file_path 参数"));
+            string filePath = RequireString(arguments, "file_path");
 
             if (!File.Exists(filePath))
                 return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail($"文件不存在: {filePath}"));
 
             var app = connect.WordApplication;
-            var doc = app.ActiveDocument;
+            var doc = RequireActiveDocument(connect);
             var sel = app.Selection;
 
             EnsureNewParagraphIfNeeded(app);
@@ -60,17 +58,15 @@ namespace FuXing
 
             // cm 参数优先于 pt 参数
             const float CmToPoints = 28.3465f;
-            bool hasWidthCm = arguments["width_cm"] != null;
-            bool hasHeightCm = arguments["height_cm"] != null;
-            bool hasWidth = hasWidthCm || arguments["width"] != null;
-            bool hasHeight = hasHeightCm || arguments["height"] != null;
+            float? widthCm = OptionalNullableFloat(arguments, "width_cm");
+            float? heightCm = OptionalNullableFloat(arguments, "height_cm");
+            float? widthPt = OptionalNullableFloat(arguments, "width");
+            float? heightPt = OptionalNullableFloat(arguments, "height");
 
-            float? targetWidth = hasWidthCm ? (float)(double)arguments["width_cm"] * CmToPoints
-                               : arguments["width"] != null ? (float)arguments["width"]
-                               : (float?)null;
-            float? targetHeight = hasHeightCm ? (float)(double)arguments["height_cm"] * CmToPoints
-                                : arguments["height"] != null ? (float)arguments["height"]
-                                : (float?)null;
+            float? targetWidth = widthCm.HasValue ? widthCm.Value * CmToPoints
+                               : widthPt;
+            float? targetHeight = heightCm.HasValue ? heightCm.Value * CmToPoints
+                                : heightPt;
 
             if (targetWidth.HasValue && targetHeight.HasValue)
             {
@@ -94,7 +90,7 @@ namespace FuXing
 
             // 清理图片所在段落格式：单倍行距、居中、无缩进，避免当前文本样式污染
             var paraFmt = shape.Range.ParagraphFormat;
-            string alignment = arguments["alignment"]?.ToString() ?? "center";
+            string alignment = OptionalString(arguments, "alignment", "center");
             paraFmt.Alignment = WordHelper.ParseAlignment(alignment);
             paraFmt.LineSpacingRule = NetOffice.WordApi.Enums.WdLineSpacing.wdLineSpaceSingle;
             paraFmt.LeftIndent = 0f;

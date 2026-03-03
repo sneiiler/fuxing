@@ -37,16 +37,11 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string label = arguments["label"]?.ToString();
-            string title = arguments["title"]?.ToString();
+            string label = RequireString(arguments, "label");
+            string title = RequireString(arguments, "title");
 
-            if (string.IsNullOrWhiteSpace(label))
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 label 参数"));
-            if (title == null)
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 title 参数"));
-
-            string positionArg = arguments["position"]?.ToString();
-            bool excludeLabel = arguments["exclude_label"] != null && (bool)arguments["exclude_label"];
+            string positionArg = OptionalString(arguments, "position");
+            bool excludeLabel = OptionalBool(arguments, "exclude_label", false);
 
             var app = connect.WordApplication;
             var doc = RequireActiveDocument(connect);

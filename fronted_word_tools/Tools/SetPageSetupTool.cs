@@ -46,10 +46,9 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            var app = connect.WordApplication;
-            var doc = app.ActiveDocument;
+            var doc = RequireActiveDocument(connect);
 
-            int? sectionIdx = arguments["section_index"] != null ? (int?)arguments["section_index"] : null;
+            int? sectionIdx = OptionalNullableInt(arguments, "section_index");
 
             if (sectionIdx.HasValue)
             {
@@ -69,23 +68,30 @@ namespace FuXing
 
         private void ApplyPageSetup(PageSetup ps, JObject args)
         {
-            if (args["top_margin"] != null) ps.TopMargin = (float)args["top_margin"];
-            if (args["bottom_margin"] != null) ps.BottomMargin = (float)args["bottom_margin"];
-            if (args["left_margin"] != null) ps.LeftMargin = (float)args["left_margin"];
-            if (args["right_margin"] != null) ps.RightMargin = (float)args["right_margin"];
-            if (args["gutter"] != null) ps.Gutter = (float)args["gutter"];
+            float? topMargin = OptionalNullableFloat(args, "top_margin");
+            float? bottomMargin = OptionalNullableFloat(args, "bottom_margin");
+            float? leftMargin = OptionalNullableFloat(args, "left_margin");
+            float? rightMargin = OptionalNullableFloat(args, "right_margin");
+            float? gutter = OptionalNullableFloat(args, "gutter");
 
-            if (args["orientation"] != null)
+            if (topMargin.HasValue) ps.TopMargin = topMargin.Value;
+            if (bottomMargin.HasValue) ps.BottomMargin = bottomMargin.Value;
+            if (leftMargin.HasValue) ps.LeftMargin = leftMargin.Value;
+            if (rightMargin.HasValue) ps.RightMargin = rightMargin.Value;
+            if (gutter.HasValue) ps.Gutter = gutter.Value;
+
+            string orientation = OptionalString(args, "orientation");
+            if (orientation != null)
             {
-                ps.Orientation = args["orientation"].ToString() == "landscape"
+                ps.Orientation = orientation == "landscape"
                     ? WdOrientation.wdOrientLandscape
                     : WdOrientation.wdOrientPortrait;
             }
 
-            if (args["paper_size"] != null)
+            string paperSize = OptionalString(args, "paper_size");
+            if (paperSize != null)
             {
-                string size = args["paper_size"].ToString();
-                switch (size.ToUpperInvariant())
+                switch (paperSize.ToUpperInvariant())
                 {
                     case "A3": ps.PaperSize = WdPaperSize.wdPaperA3; break;
                     case "A4": ps.PaperSize = WdPaperSize.wdPaperA4; break;
@@ -94,11 +100,13 @@ namespace FuXing
                     case "LEGAL": ps.PaperSize = WdPaperSize.wdPaperLegal; break;
                     case "CUSTOM":
                         ps.PaperSize = WdPaperSize.wdPaperCustom;
-                        if (args["page_width"] != null) ps.PageWidth = (float)args["page_width"];
-                        if (args["page_height"] != null) ps.PageHeight = (float)args["page_height"];
+                        float? pageWidth = OptionalNullableFloat(args, "page_width");
+                        float? pageHeight = OptionalNullableFloat(args, "page_height");
+                        if (pageWidth.HasValue) ps.PageWidth = pageWidth.Value;
+                        if (pageHeight.HasValue) ps.PageHeight = pageHeight.Value;
                         break;
                     default:
-                        throw new ArgumentException($"未知纸张大小: {size}");
+                        throw new ArgumentException($"未知纸张大小: {paperSize}");
                 }
             }
         }

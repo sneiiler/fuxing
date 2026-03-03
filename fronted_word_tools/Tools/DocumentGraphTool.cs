@@ -10,9 +10,9 @@ namespace FuXing
     // ═══════════════════════════════════════════════════════════════
     //  文档图工具（统一入口）
     //
-    //  万物皆节点：Section / Table / Image / TextBlock / List / Paragraph
-    //  逐层 expand 按需展开，所有节点都可被 AI 赋予 label 别名。
-    //  编辑工具通过 node_id 或 label 直接定位，行为一致。
+    //  万物皆节点：Section / Heading / Preamble / TextBlock / Table / Image / List / Paragraph
+    //  map 时一步到位构建完整文档图（Section + 内容元素），TextBlock 可进一步 expand 到段落级。
+    //  所有节点都可被 AI 赋予 label 别名，编辑工具通过 node_id 或 label 直接定位。
     //
     //  五个 action：map / expand / read / goto / label
     // ═══════════════════════════════════════════════════════════════
@@ -28,7 +28,8 @@ namespace FuXing
 
         public override string Description =>
             "Navigate document structure via graph model (万物皆节点). " +
-            "Actions: map (get L1 structure), expand (Section→tables/images/textblocks, TextBlock→paragraphs), " +
+            "Actions: map (get full structure with sections, headings, textblocks, tables, images), " +
+            "expand (TextBlock→paragraphs), " +
             "read (read node content), goto (move cursor to node), label (assign alias to node). " +
             "Each node is backed by a ContentControl — stable across edits. " +
             "Use node_id or label in edit/format/delete tools for precise positioning.";
@@ -43,8 +44,8 @@ namespace FuXing
                     ["type"] = "string",
                     ["enum"] = new JArray("map", "expand", "read", "goto", "label"),
                     ["description"] =
-                        "map: 获取文档图（L1 标题骨架）; " +
-                        "expand: 展开节点（Section→发现内部元素, TextBlock→段落）; " +
+                        "map: 获取完整文档图（标题 + 内容元素一步到位）; " +
+                        "expand: 展开 TextBlock 到段落级; " +
                         "read: 读取节点内容; " +
                         "goto: 光标跳到节点; " +
                         "label: 给节点赋予别名（多步操作中的稳定引用）"
@@ -131,7 +132,7 @@ namespace FuXing
         }
 
         // ═══════════════════════════════════════════════════
-        //  expand — 展开章节
+        //  expand — 展开 TextBlock 到段落级
         // ═══════════════════════════════════════════════════
 
         private ToolExecutionResult ActionExpand(Connect connect, JObject arguments)
@@ -139,16 +140,34 @@ namespace FuXing
             var doc = RequireActiveDocument(connect);
             string nodeIdOrLabel = RequireString(arguments, "node_id");
 
-            // 先获取图以解析 node_id（支持 "selected" 关键词）
             var graph = DocumentGraphCache.Instance.GetOrBuildAsync(doc).Result;
             var node = ResolveNodeOrSelection(graph, nodeIdOrLabel, connect);
             if (node == null)
                 throw new ToolArgumentException(
                     $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) 获取有效节点。");
 
+            // Section 已在 map 时完整展开，直接返回子节点
+            if (node.Type == DocNodeType.Section)
+            {
+                var sb2 = new StringBuilder();
+                sb2.AppendLine($"[{node.Id}] {node.Title} 已展开，包含 {node.ChildIds.Count} 个子元素：");
+                sb2.AppendLine();
+                foreach (var childId in node.ChildIds)
+                {
+                    var child = graph.GetById(childId);
+                    if (child == null) continue;
+                    string cIcon = GetTypeIcon(child.Type);
+                    string cExpandable = (child.Type == DocNodeType.TextBlock && !child.Expanded)
+                        ? " [可展开→段落]" : "";
+                    string cPreview = !string.IsNullOrEmpty(child.Preview)
+                        ? $" \"{child.Preview}\"" : "";
+                    sb2.AppendLine($"  [{child.Id}] {cIcon} {child.Title}{cExpandable}{cPreview}");
+                }
+                return ToolExecutionResult.Ok(sb2.ToString());
+            }
+
             DocumentGraphCache.Instance.ExpandNode(doc, node.Id);
 
-            // 重新获取节点（expand 后 ChildIds 已更新）
             node = graph.GetById(node.Id);
 
             var sb = new StringBuilder();
@@ -161,12 +180,10 @@ namespace FuXing
                 if (child == null) continue;
 
                 string icon = GetTypeIcon(child.Type);
-                string expandable = (child.Type == DocNodeType.TextBlock && !child.Expanded)
-                    ? " [可展开→段落]" : "";
                 string preview = !string.IsNullOrEmpty(child.Preview)
                     ? $" \"{child.Preview}\""
                     : "";
-                sb.AppendLine($"  [{child.Id}] {icon} {child.Title}{expandable}{preview}");
+                sb.AppendLine($"  [{child.Id}] {icon} {child.Title}{preview}");
             }
 
             return ToolExecutionResult.Ok(sb.ToString());
@@ -360,6 +377,14 @@ namespace FuXing
 
                 range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
                 targetDesc = $"[{node.Id}] {node.Title}";
+
+                // Section 节点的 CC 仅覆盖正文，goto(start) 导航到标题位置
+                if (position != "end" && node.Type == DocNodeType.Section
+                    && node.Meta != null && node.Meta.TryGetValue("heading_start", out var hs))
+                {
+                    doc.Range(int.Parse(hs), int.Parse(hs)).Select();
+                    return ToolExecutionResult.Ok($"已导航到「{targetDesc}」的开头");
+                }
             }
             else if (!string.IsNullOrWhiteSpace(headingName))
             {
@@ -460,10 +485,13 @@ namespace FuXing
             switch (type)
             {
                 case DocNodeType.Section: return "§";
+                case DocNodeType.Heading: return "H";
+                case DocNodeType.Preamble: return "📝";
                 case DocNodeType.Table: return "📋";
                 case DocNodeType.Image: return "🖼";
                 case DocNodeType.TextBlock: return "📝";
                 case DocNodeType.List: return "📌";
+                case DocNodeType.Paragraph: return "¶";
                 default: return "•";
             }
         }

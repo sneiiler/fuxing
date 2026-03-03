@@ -36,11 +36,11 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string action = arguments?["action"]?.ToString() ?? "insert";
-            string headingLevels = arguments?["heading_levels"]?.ToString() ?? "1-3";
+            string action = OptionalString(arguments, "action", "insert");
+            string headingLevels = OptionalString(arguments, "heading_levels", "1-3");
 
             var app = connect.WordApplication;
-            var doc = app.ActiveDocument;
+            var doc = RequireActiveDocument(connect);
 
             if (action == "update")
             {

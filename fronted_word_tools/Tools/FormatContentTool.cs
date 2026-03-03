@@ -79,6 +79,12 @@ namespace FuXing
                     ["type"] = "string",
                     ["description"] = "回车后切换到的下一个样式名"
                 },
+                ["style_type"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray("paragraph", "table"),
+                    ["description"] = "样式类型（默认 paragraph）"
+                },
 
                 // ── 通用格式参数 ──
                 ["font"] = new JObject
@@ -119,7 +125,7 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string action = arguments["action"]?.ToString() ?? "format";
+            string action = OptionalString(arguments, "action", "format");
             switch (action)
             {
                 case "format":
@@ -138,14 +144,14 @@ namespace FuXing
 
         private System.Threading.Tasks.Task<ToolExecutionResult> ExecuteFormat(Connect connect, JObject arguments)
         {
-            var targetObj = arguments["target"] as JObject;
+            var targetObj = OptionalObject(arguments, "target");
             if (targetObj == null)
                 return System.Threading.Tasks.Task.FromResult(
                     ToolExecutionResult.Fail("action=format 时缺少 target 参数"));
 
-            string styleName = arguments["style_name"]?.ToString();
-            var font = arguments["font"] as JObject;
-            var paragraph = arguments["paragraph"] as JObject;
+            string styleName = OptionalString(arguments, "style_name");
+            var font = OptionalObject(arguments, "font");
+            var paragraph = OptionalObject(arguments, "paragraph");
 
             if (string.IsNullOrWhiteSpace(styleName) && font == null && paragraph == null)
                 return System.Threading.Tasks.Task.FromResult(
@@ -240,39 +246,41 @@ namespace FuXing
 
         private System.Threading.Tasks.Task<ToolExecutionResult> ExecuteCreateStyle(Connect connect, JObject arguments)
         {
-            string styleName = arguments["name"]?.ToString();
+            string styleName = OptionalString(arguments, "name");
             if (string.IsNullOrWhiteSpace(styleName))
                 return System.Threading.Tasks.Task.FromResult(
                     ToolExecutionResult.Fail("action=create_style 时缺少 name 参数"));
 
-            string basedOn = arguments["based_on"]?.ToString() ?? "正文";
-            string nextStyle = arguments["next_style"]?.ToString();
+            string basedOn = OptionalString(arguments, "based_on", "正文");
+            string nextStyle = OptionalString(arguments, "next_style");
+            string styleType = OptionalString(arguments, "style_type", "paragraph");
 
             var app = connect.WordApplication;
             var doc = app.ActiveDocument;
 
-            var style = FindOrCreateStyle(doc, styleName);
+            dynamic comStyles = ((dynamic)doc.UnderlyingObject).Styles;
+            dynamic style = FindOrCreateStyle(comStyles, styleName, styleType);
 
             try
             {
                 if (Enum.TryParse<WdBuiltinStyle>(basedOn, ignoreCase: true, out var builtinBase))
-                    style.BaseStyle = doc.Styles[builtinBase];
+                    style.BaseStyle = comStyles[(int)builtinBase];
                 else
-                    style.BaseStyle = doc.Styles[basedOn];
+                    style.BaseStyle = comStyles[basedOn];
             }
             catch { /* 基础样式不存在时忽略 */ }
 
             if (!string.IsNullOrWhiteSpace(nextStyle))
             {
-                try { style.NextParagraphStyle = doc.Styles[nextStyle]; }
+                try { style.NextParagraphStyle = comStyles[nextStyle]; }
                 catch { /* 忽略 */ }
             }
 
-            var font = arguments["font"] as JObject;
+            var font = OptionalObject(arguments, "font");
             if (font != null) ApplyFont(style.Font, font);
 
-            var paragraph = arguments["paragraph"] as JObject;
-            if (paragraph != null) ApplyParagraph(style.ParagraphFormat, paragraph);
+            var paragraph = OptionalObject(arguments, "paragraph");
+            if (paragraph != null && styleType == "paragraph") ApplyParagraph(style.ParagraphFormat, paragraph);
 
             return System.Threading.Tasks.Task.FromResult(
                 ToolExecutionResult.Ok($"已创建/更新样式「{styleName}」"));
@@ -292,37 +300,37 @@ namespace FuXing
                 ApplyParagraph(range.ParagraphFormat, paragraph);
         }
 
-        private void ApplyFont(NetOffice.WordApi.Font f, JObject font)
+        private void ApplyFont(dynamic f, JObject font)
         {
             if (font["name"] != null) f.Name = font["name"].ToString();
             if (font["size"] != null) f.Size = (float)font["size"];
             if (font["bold"] != null) f.Bold = (bool)font["bold"] ? 1 : 0;
             if (font["italic"] != null) f.Italic = (bool)font["italic"] ? 1 : 0;
             if (font["underline"] != null)
-                f.Underline = (bool)font["underline"]
+                f.Underline = (int)((bool)font["underline"]
                     ? WdUnderline.wdUnderlineSingle
-                    : WdUnderline.wdUnderlineNone;
+                    : WdUnderline.wdUnderlineNone);
             if (font["strikethrough"] != null) f.StrikeThrough = (bool)font["strikethrough"] ? 1 : 0;
-            if (font["color"] != null) f.Color = WordHelper.ParseHexColor(font["color"].ToString());
+            if (font["color"] != null) f.Color = (int)WordHelper.ParseHexColor(font["color"].ToString());
         }
 
-        private void ApplyParagraph(ParagraphFormat pf, JObject paragraph)
+        private void ApplyParagraph(dynamic pf, JObject paragraph)
         {
             if (paragraph["alignment"] != null)
-                pf.Alignment = WordHelper.ParseAlignment(paragraph["alignment"].ToString());
+                pf.Alignment = (int)WordHelper.ParseAlignment(paragraph["alignment"].ToString());
             if (paragraph["spaceBefore"] != null)
                 pf.SpaceBefore = (float)paragraph["spaceBefore"];
             if (paragraph["spaceAfter"] != null)
                 pf.SpaceAfter = (float)paragraph["spaceAfter"];
             if (paragraph["lineSpacingMultiple"] != null)
             {
-                pf.LineSpacingRule = WdLineSpacing.wdLineSpaceMultiple;
+                pf.LineSpacingRule = (int)WdLineSpacing.wdLineSpaceMultiple;
                 pf.LineSpacing = (float)paragraph["lineSpacingMultiple"] * 12f;
             }
             if (paragraph["firstLineIndent"] != null)
                 pf.FirstLineIndent = (float)paragraph["firstLineIndent"];
             if (paragraph["outlineLevel"] != null)
-                pf.OutlineLevel = (WdOutlineLevel)((int)paragraph["outlineLevel"]);
+                pf.OutlineLevel = (int)paragraph["outlineLevel"];
         }
 
         private int FormatBySearch(Document doc, string searchText,
@@ -365,18 +373,22 @@ namespace FuXing
 
         private object ResolveStyleObject(Document doc, string styleName)
         {
+            dynamic comStyles = ((dynamic)doc.UnderlyingObject).Styles;
             if (Enum.TryParse<WdBuiltinStyle>(styleName, ignoreCase: true, out var builtinStyle))
-                return doc.Styles[builtinStyle];
-            return doc.Styles[styleName];
+                return comStyles[(int)builtinStyle];
+            return comStyles[styleName];
         }
 
-        private Style FindOrCreateStyle(Document doc, string name)
+        private dynamic FindOrCreateStyle(dynamic comStyles, string name, string styleType)
         {
-            foreach (Style s in doc.Styles)
+            try { return comStyles[name]; }
+            catch
             {
-                if (s.NameLocal == name) return s;
+                int type = (int)(styleType == "table"
+                    ? WdStyleType.wdStyleTypeTable
+                    : WdStyleType.wdStyleTypeParagraph);
+                return comStyles.Add(name, type);
             }
-            return doc.Styles.Add(name, WdStyleType.wdStyleTypeParagraph);
         }
 
         /// <summary>通过节点 ID 解析节点范围</summary>

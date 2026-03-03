@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Drawing;
@@ -21,10 +21,6 @@ namespace FuXing
     [ProgId("FuXing.TaskPaneControl")]
     public partial class TaskPaneControl : UserControl, NetOffice.WordApi.Tools.ITaskPane
     {
-        private const int WM_MOUSEWHEEL = 0x020A;
-        private const int WM_MOUSEHOVER = 0x02A1;
-        private const int WH_MOUSE_LL = 14;
-
         private NetOffice.WordApi.Application _application;
         private NetOffice.OfficeApi._CustomTaskPane _parentPane;
 
@@ -35,6 +31,11 @@ namespace FuXing
         // 网络助手实例
         private NetWorkHelper _networkHelper;
         private TableLayoutPanel _mainContainer;
+
+        // ── 会话管理 ──
+        private ChatSession _currentSession;
+        private SessionListPanel _sessionListPanel;
+        private AntdUI.Label _sessionTitleLabel;
 
         // 富文本聊天面板
         private RichChatPanel _richChatPanel;
@@ -59,6 +60,12 @@ namespace FuXing
         private AntdUI.Tag _selectionTag;
         private System.Windows.Forms.Timer _selectionTimer;
         private string _attachedSelectionText;
+
+        // ── 问候消息（隐藏提示词，重建历史时需跳过）──
+        private const string GreetingPrompt = "请用简洁友好的方式向用户打招呼，介绍你作为 Word 文档助手的核心能力（例如：文档编辑、格式调整、内容生成、纠错润色、文档分析等），然后询问用户想要做什么。控制在100字以内。";
+
+        // ── 会话标题生成 ──
+        private bool _titleGenerationTriggered;
 
         // ── 启动安全提示 ──
         // 约束："每次应用会话仅显示一次"。
@@ -123,21 +130,6 @@ namespace FuXing
                     System.Diagnostics.Debug.WriteLine($"TaskPane width set to: {_parentPane.Width}");
                 }
 
-                // 安装鼠标钩子以捕获滚轮消息
-                if (this.InvokeRequired)
-                {
-                    this.Invoke((MethodInvoker)delegate
-                    {
-                        this.InstallMouseHook();
-                        this.Invalidate();
-                    });
-                }
-                else
-                {
-                    InstallMouseHook();
-                    this.Invalidate();
-                }
-
                 // 启动 Word 选区轮询监视器
                 StartSelectionMonitor();
             }
@@ -158,10 +150,6 @@ namespace FuXing
                     _selectionTimer.Dispose();
                     _selectionTimer = null;
                 }
-
-                // 卸载鼠标钩子
-                UninstallMouseHook();
-                _instance = null;
 
                 if (_application != null)
                 {
@@ -359,7 +347,9 @@ namespace FuXing
         {
             if (_hasRequestedGreeting) return;
             _hasRequestedGreeting = true;
-            RequestGreetingAsync();
+
+            // 延迟到 UI 线程空闲时再发起问候，确保面板先完成首次绘制
+            BeginInvoke((MethodInvoker)delegate { RequestGreetingAsync(); });
         }
 
         private async void RequestGreetingAsync()
@@ -377,8 +367,7 @@ namespace FuXing
                     "你是'福星'，一个集成在 Microsoft Word 中的智能文档助手。请用中文回复。");
 
                 // 添加隐藏的用户消息（不在聊天面板显示），驱动 LLM 生成问候
-                string greetingPrompt = "请用简洁友好的方式向用户打招呼，介绍你作为 Word 文档助手的核心能力（例如：文档编辑、格式调整、内容生成、纠错润色、文档分析等），然后询问用户想要做什么。控制在100字以内。";
-                memory.AddUserMessage(greetingPrompt);
+                memory.AddUserMessage(GreetingPrompt);
 
                 // 在聊天面板添加 AI 消息占位
                 var aiAvatar = GetAIAvatar();
@@ -638,6 +627,8 @@ namespace FuXing
 
         private void CreateChatInterface()
         {
+            SuspendLayout();
+
             // 主容器使用 TableLayoutPanel 实现真正的flex布局
             var mainContainer = new TableLayoutPanel
             {
@@ -647,7 +638,7 @@ namespace FuXing
                 Padding = new Padding(0),
                 Margin = new Padding(0),
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 6,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None
             };
 
@@ -656,18 +647,19 @@ namespace FuXing
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                 ?.SetValue(mainContainer, true, null);
 
-            // 设置行的大小类型：状态栏-功能区-聊天-上下文条-输入
-            mainContainer.RowCount = 5;
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));  // 状态栏固定高度
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));  // 顶部功能区固定高度
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // 聊天区域自适应
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));   // 上下文条（默认隐藏）
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // 底部输入区（可自适应）
+            // 设置行的大小类型：会话栏-状态栏-功能区-聊天-上下文条-输入
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));  // Row0: 会话工具栏
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));  // Row1: 状态栏
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));  // Row2: 顶部功能区
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // Row3: 聊天区域自适应
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));   // Row4: 上下文条（默认隐藏）
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // Row5: 底部输入区（可自适应）
 
             // 设置列宽为100%
             mainContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            // 创建五个区域
+            // 创建六个区域
+            var sessionBar = CreateSessionToolbar();
             var statusBar = CreateStatusBar();
             var topPanel = CreateTopControlsPanel();
             var chatPanel = CreateRichChatPanel();
@@ -675,6 +667,7 @@ namespace FuXing
             var bottomPanel = CreateBottomInputPanel();
 
             // 设置每个面板的停靠方式
+            sessionBar.Dock = DockStyle.Fill;
             statusBar.Dock = DockStyle.Fill;
             topPanel.Dock = DockStyle.Fill;
             chatPanel.Dock = DockStyle.Fill;
@@ -682,14 +675,323 @@ namespace FuXing
             bottomPanel.Dock = DockStyle.Fill;
 
             // 按顺序添加到表格布局中
-            mainContainer.Controls.Add(statusBar, 0, 0);      // 第1行：状态栏
-            mainContainer.Controls.Add(topPanel, 0, 1);       // 第2行：功能区
-            mainContainer.Controls.Add(chatPanel, 0, 2);      // 第3行：聊天区
-            mainContainer.Controls.Add(contextBar, 0, 3);     // 第4行：上下文条
-            mainContainer.Controls.Add(bottomPanel, 0, 4);    // 第5行：输入区
+            mainContainer.SuspendLayout();
+            mainContainer.Controls.Add(sessionBar, 0, 0);     // 第0行：会话工具栏
+            mainContainer.Controls.Add(statusBar, 0, 1);      // 第1行：状态栏
+            mainContainer.Controls.Add(topPanel, 0, 2);       // 第2行：功能区
+            mainContainer.Controls.Add(chatPanel, 0, 3);      // 第3行：聊天区
+            mainContainer.Controls.Add(contextBar, 0, 4);     // 第4行：上下文条
+            mainContainer.Controls.Add(bottomPanel, 0, 5);    // 第5行：输入区
+            mainContainer.ResumeLayout(false);
 
             _mainContainer = mainContainer;
             Controls.Add(mainContainer);
+            ResumeLayout(true);
+
+            // ── 初始化会话列表面板（覆盖在聊天区域上方，默认隐藏）──
+            _sessionListPanel = new SessionListPanel { Visible = false };
+            _sessionListPanel.SessionSelected += OnSessionSelected;
+            _sessionListPanel.SessionDeleted += OnSessionDeleted;
+            _sessionListPanel.BackRequested += () => ShowSessionList(false);
+            Controls.Add(_sessionListPanel);
+            _sessionListPanel.BringToFront();
+
+            // 保持 SessionListPanel 覆盖整个面板
+            this.Resize += (s, e) =>
+            {
+                if (_sessionListPanel.Visible)
+                    _sessionListPanel.Bounds = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
+            };
+
+            // ── 创建初始会话 ──
+            _currentSession = SessionManager.Instance.CreateSession();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  会话工具栏（Row 0）
+        // ═══════════════════════════════════════════════════════════
+
+        /// <summary>创建顶部会话工具栏：[+ 新对话] 标题 [≡ 历史]</summary>
+        private AntdUI.Panel CreateSessionToolbar()
+        {
+            var bar = new AntdUI.Panel
+            {
+                Back = Color.White,
+                Name = "SessionToolbar",
+                Padding = new Padding(0),
+                BorderWidth = 0
+            };
+
+            var newChatBtn = new AntdUI.Button
+            {
+                Text = "+ 新对话",
+                Size = new Size(72, 26),
+                Location = new Point(6, 5),
+                Type = AntdUI.TTypeMini.Primary,
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                Radius = 6
+            };
+            newChatBtn.Click += (s, e) => StartNewSession();
+
+            _sessionTitleLabel = new AntdUI.Label
+            {
+                Text = "新对话",
+                Font = new Font("Microsoft YaHei UI", 9F),
+                ForeColor = Color.FromArgb(75, 85, 99),
+                Location = new Point(84, 8),
+                Size = new Size(200, 22),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+
+            var historyBtn = new AntdUI.Button
+            {
+                Text = "≡",
+                Size = new Size(36, 26),
+                Location = new Point(300, 5),
+                Type = AntdUI.TTypeMini.Default,
+                Font = new Font("Microsoft YaHei UI", 12F),
+                Radius = 6
+            };
+            historyBtn.Click += (s, e) => ShowSessionList(true);
+
+            // 响应式布局
+            bar.Resize += (s, e) =>
+            {
+                int pw = bar.ClientSize.Width;
+                historyBtn.Left = pw - historyBtn.Width - 6;
+                int titleLeft = newChatBtn.Right + 6;
+                int titleWidth = historyBtn.Left - titleLeft - 6;
+                _sessionTitleLabel.SetBounds(titleLeft, 8, Math.Max(40, titleWidth), 22);
+            };
+
+            // 底部分隔线
+            bar.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(229, 231, 235)))
+                    e.Graphics.DrawLine(pen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
+            };
+
+            bar.Controls.AddRange(new Control[] { newChatBtn, _sessionTitleLabel, historyBtn });
+            return bar;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  会话管理操作
+        // ═══════════════════════════════════════════════════════════
+
+        /// <summary>新建对话：保存当前会话，创建新会话，清空聊天面板</summary>
+        private void StartNewSession()
+        {
+            if (_isAssistantRunning) return;
+
+            // 保存当前会话
+            SaveCurrentSession();
+
+            // 创建新会话
+            _currentSession = SessionManager.Instance.CreateSession();
+            _titleGenerationTriggered = false;
+
+            // 重置 UI
+            Memory.Clear();
+            _richChatPanel?.ClearAll();
+            _hasRequestedGreeting = false;
+            UpdateSessionTitleLabel();
+
+            // 重新请求问候
+            CheckAndRequestGreeting();
+        }
+
+        /// <summary>切换到指定会话</summary>
+        private void SwitchToSession(string sessionId)
+        {
+            if (_isAssistantRunning) return;
+            if (_currentSession?.Id == sessionId) { ShowSessionList(false); return; }
+
+            // 保存当前会话
+            SaveCurrentSession();
+
+            // 加载目标会话
+            var session = SessionManager.Instance.LoadSession(sessionId);
+            if (session == null) return;
+
+            _currentSession = session;
+            _titleGenerationTriggered = !string.IsNullOrEmpty(session.Title) && session.Title != "新对话";
+
+            // 重建 ChatMemory
+            Memory.Clear();
+            Memory.ImportMessages(session.Messages);
+
+            // 重建聊天面板 UI
+            RebuildChatPanelFromMemory();
+            UpdateSessionTitleLabel();
+            ShowSessionList(false);
+
+            // 不需要再请求问候（历史会话已有内容）
+            _hasRequestedGreeting = true;
+        }
+
+        /// <summary>删除指定会话</summary>
+        private void DeleteSession(string sessionId)
+        {
+            // 如果删除的是当前会话，先新建一个
+            bool isDeletingCurrent = _currentSession?.Id == sessionId;
+
+            SessionManager.Instance.DeleteSession(sessionId);
+
+            if (isDeletingCurrent)
+            {
+                _currentSession = SessionManager.Instance.CreateSession();
+                _titleGenerationTriggered = false;
+                Memory.Clear();
+                _richChatPanel?.ClearAll();
+                _hasRequestedGreeting = false;
+                UpdateSessionTitleLabel();
+                CheckAndRequestGreeting();
+            }
+
+            // 刷新列表
+            RefreshSessionListPanel();
+        }
+
+        /// <summary>保存当前会话到磁盘</summary>
+        private void SaveCurrentSession()
+        {
+            if (_currentSession == null) return;
+            try
+            {
+                SessionManager.Instance.SaveSession(_currentSession, Memory);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SaveCurrentSession error: {ex.Message}");
+            }
+        }
+
+        /// <summary>显示/隐藏会话列表面板</summary>
+        private void ShowSessionList(bool show)
+        {
+            if (InvokeRequired) { Invoke((MethodInvoker)delegate { ShowSessionList(show); }); return; }
+
+            if (show)
+            {
+                // 保存当前会话，确保列表数据最新
+                SaveCurrentSession();
+                RefreshSessionListPanel();
+            }
+
+            _sessionListPanel.Visible = show;
+
+            if (show)
+            {
+                // 覆盖在主容器上方，占据整个面板
+                _sessionListPanel.BringToFront();
+                _sessionListPanel.Bounds = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
+            }
+        }
+
+        /// <summary>刷新会话列表面板数据</summary>
+        private void RefreshSessionListPanel()
+        {
+            var sessions = SessionManager.Instance.ListSessions();
+            _sessionListPanel.RefreshList(sessions, _currentSession?.Id);
+        }
+
+        /// <summary>更新会话标题 Label 显示</summary>
+        private void UpdateSessionTitleLabel()
+        {
+            if (_sessionTitleLabel == null) return;
+            if (InvokeRequired) { Invoke((MethodInvoker)UpdateSessionTitleLabel); return; }
+
+            string title = _currentSession?.Title;
+            _sessionTitleLabel.Text = string.IsNullOrEmpty(title) ? "新对话" : title;
+        }
+
+        /// <summary>从 Memory 重建聊天面板中的消息气泡</summary>
+        private void RebuildChatPanelFromMemory()
+        {
+            if (_richChatPanel == null) return;
+            _richChatPanel.ClearAll();
+
+            var messages = Memory.ExportMessages();
+            if (messages == null) return;
+
+            var aiAvatar = GetAIAvatar();
+            var userAvatar = CreateAvatarImage("用户", Color.FromArgb(34, 197, 94));
+
+            foreach (var msg in messages)
+            {
+                // 跳过系统消息和工具结果消息
+                if (msg.Role == ChatMessageRole.System || msg.Role == ChatMessageRole.Tool)
+                    continue;
+
+                if (msg.Role == ChatMessageRole.User)
+                {
+                    // 跳过隐藏的问候触发消息
+                    if (msg.Content == GreetingPrompt) continue;
+                    _richChatPanel.AddMessage("用户", userAvatar, ChatRole.User, msg.Content ?? "");
+                }
+                else if (msg.Role == ChatMessageRole.Assistant && !string.IsNullOrEmpty(msg.Content))
+                {
+                    string displayText = StripThinkBlock(msg.Content);
+                    if (!string.IsNullOrEmpty(displayText))
+                        _richChatPanel.AddMessage("AI福星", aiAvatar, ChatRole.AI, displayText);
+                }
+            }
+        }
+
+        /// <summary>会话列表：用户点击了某条会话</summary>
+        private void OnSessionSelected(string sessionId)
+        {
+            SwitchToSession(sessionId);
+        }
+
+        /// <summary>会话列表：用户点击了删除按钮</summary>
+        private void OnSessionDeleted(string sessionId)
+        {
+            DeleteSession(sessionId);
+        }
+
+        /// <summary>
+        /// 触发 LLM 标题生成（fire-and-forget）。
+        /// 在第一轮用户+AI 对话完成后调用一次。
+        /// </summary>
+        private async void TriggerTitleGeneration()
+        {
+            if (_titleGenerationTriggered || _currentSession == null) return;
+            _titleGenerationTriggered = true;
+
+            try
+            {
+                // 从 Memory 中提取前几条消息作为摘要
+                var messages = Memory.ExportMessages();
+                if (messages == null || messages.Count < 2) return;
+
+                var sb = new StringBuilder();
+                int count = 0;
+                foreach (var m in messages)
+                {
+                    if (m.Role == ChatMessageRole.System || m.Role == ChatMessageRole.Tool) continue;
+                    string role = m.Role == ChatMessageRole.User ? "用户" : "AI";
+                    string content = m.Content ?? "";
+                    // 去除 <think> 块，标题生成只需要正文
+                    content = StripThinkBlock(content);
+                    if (content.Length > 200) content = content.Substring(0, 200) + "...";
+                    sb.AppendLine($"{role}: {content}");
+                    if (++count >= 4) break;
+                }
+
+                string title = await _networkHelper.GenerateTitleAsync(sb.ToString(), CancellationToken.None);
+                if (string.IsNullOrEmpty(title)) return;
+
+                _currentSession.Title = title;
+                SessionManager.Instance.UpdateTitle(_currentSession.Id, title);
+                UpdateSessionTitleLabel();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"TriggerTitleGeneration error: {ex.Message}");
+            }
         }
 
 
@@ -1009,7 +1311,7 @@ namespace FuXing
             // 展开上下文条行
             if (_mainContainer != null)
             {
-                _mainContainer.RowStyles[3].Height = 34f;
+                _mainContainer.RowStyles[4].Height = 34f;
                 _mainContainer.PerformLayout();
             }
         }
@@ -1024,7 +1326,7 @@ namespace FuXing
             // 收起上下文条行
             if (_mainContainer != null)
             {
-                _mainContainer.RowStyles[3].Height = 0f;
+                _mainContainer.RowStyles[4].Height = 0f;
                 _mainContainer.PerformLayout();
             }
         }
@@ -1038,6 +1340,9 @@ namespace FuXing
                 // COM 工具执行中不更新，避免 COM 冲突
                 // 注意：等待用户输入（ask_user）期间允许轮询，因为 COM 未被占用
                 if (_isComBusy) return;
+
+                // TaskPane 不可见时跳过 COM 轮询，节省资源
+                try { if (_parentPane != null && !_parentPane.Visible) return; } catch { return; }
 
                 try
                 {
@@ -1132,9 +1437,9 @@ namespace FuXing
                         var textSize = g.MeasureString(text, inputTextBox.Font, Math.Max(1, inputTextBox.Width - 16));
                         int lineCount = Math.Max(1, (int)Math.Ceiling(textSize.Height / inputTextBox.Font.GetHeight(g)));
                         int desiredPanelH = Math.Max(68, Math.Min(160, lineCount * 24 + 28));
-                        if (Math.Abs(_mainContainer.RowStyles[4].Height - desiredPanelH) > 2)
+                        if (Math.Abs(_mainContainer.RowStyles[5].Height - desiredPanelH) > 2)
                         {
-                            _mainContainer.RowStyles[4].Height = desiredPanelH;
+                            _mainContainer.RowStyles[5].Height = desiredPanelH;
                             _mainContainer.PerformLayout();
                         }
                     }
@@ -1784,6 +2089,10 @@ namespace FuXing
                 // 清除光标快照，本轮助手回合结束
                 try { var c = Connect.CurrentInstance; if (c != null) c.SelectionSnapshot = null; } catch { }
                 SetAssistantRunning(false);
+
+                // ── 会话自动保存 & 标题生成 ──
+                SaveCurrentSession();
+                TriggerTitleGeneration();
             }
         }
 
@@ -1831,14 +2140,20 @@ namespace FuXing
             sb.AppendLine("  - `[光标位置上下文]`：包含光标周围的段落。请利用前文/后文推断用户想在何处补充或修改什么。");
             sb.AppendLine();
 
-            // 5. 工具使用策略
+            // 5. 工具使用策略（动态生成工具列表，避免硬编码工具名）
+            var readOnlyTools = toolRegistry.GetToolNamesByCategory(ToolCategory.Query);
+            var dangerousTools = toolRegistry.GetDangerousToolNames();
+            string readOnlyList = string.Join(", ", readOnlyTools);
+            string dangerousList = string.Join(", ", dangerousTools);
+
             sb.AppendLine("### 工具与最佳实践策略");
-            sb.AppendLine("- **“先看后动”原则**：优先使用只读工具（get_document_info、document_graph 等）获取状态，避免盲目修改。");
+            sb.AppendLine($"- **“先看后动”原则**：优先使用只读工具（{readOnlyList} 等）获取状态，避免盲目修改。");
             sb.AppendLine("- **最小破坏原则**：");
-            sb.AppendLine("  - 优先用 edit_document_text、format_content。");
-            sb.AppendLine("  - 危险工具（execute_word_script、batch_operations、delete_section）需极为谨慎；执行大范围修改前，用 `ask_user` 询问确认。");
-            sb.AppendLine("- **审核场景**：推荐用 add_comment、toggle_track_changes 代替直接编辑，保留追踪痕迹。");
-            sb.AppendLine("- **Skill（技能）先行**：应对复杂操作时，优先 `load_skill` 检查是否有现成实践经验。");
+            sb.AppendLine("  - 优先用轻量编辑工具（edit_document_text、format_content 等）。");
+            sb.AppendLine("  - 当要写入的内容包含 Markdown 语法（如 #、-、*、```、表格）时，仍调用 edit_document_text，工具会自动解析 Markdown 并按默认格式写入文档。");
+            sb.AppendLine($"  - 危险工具（{dangerousList}）需极为谨慎；执行大范围修改前，用 `ask_user` 询问确认。");
+            sb.AppendLine("- **审核场景**：推荐用批注和修订追踪代替直接编辑，保留追踪痕迹。");
+            sb.AppendLine("- **Skill（技能）先行**：应对复杂操作时，优先检查是否有现成实践经验可加载。");
             sb.AppendLine("- **委派子智能体（run_sub_agent）**：");
             sb.AppendLine("  - 面对大量阅读、多处交叉比对的高负载任务，为防止上下文撑爆，委派给子智能体。");
             sb.AppendLine("  - 必须为子智能体设定明确的 system_prompt（指派其专有角色和输出要求），并收紧 allowed_tools 只给必要工具。");
@@ -1891,9 +2206,6 @@ namespace FuXing
 
                 switch (functionName)
                 {
-                    case "ai_text_correction_btn":
-                        connectInstance.ai_text_correction_btn_Click(null);
-                        break;
                     // CheckStandardValidityButton 已迁移到 AI 对话流程，不再通过 TriggerWordFunction 调用
                     case "setting_btn":
                         connectInstance.setting_btn_Click(null);
@@ -2100,87 +2412,7 @@ namespace FuXing
             }
         }
 
-        // 鼠标钩子相关
-        private static IntPtr _mouseHookHandle = IntPtr.Zero;
-        private static LowLevelMouseProc _mouseProc;
-        private static TaskPaneControl _instance;
 
-        /// <summary>
-        /// 安装鼠标钩子以捕获滚轮消息
-        /// </summary>
-        private void InstallMouseHook()
-        {
-            if (_mouseHookHandle != IntPtr.Zero) return;
-
-            _instance = this;
-            _mouseProc = MouseHookCallback;
-            using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
-            using (var curModule = curProcess.MainModule)
-            {
-                _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-
-        /// <summary>
-        /// 卸载鼠标钩子
-        /// </summary>
-        private void UninstallMouseHook()
-        {
-            if (_mouseHookHandle != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_mouseHookHandle);
-                _mouseHookHandle = IntPtr.Zero;
-            }
-        }
-
-        private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            if (nCode >= 0 && _instance != null && _instance._richChatPanel != null)
-            {
-                // WM_MOUSEWHEEL = 0x020A
-                if (wParam == (IntPtr)WM_MOUSEWHEEL)
-                {
-                    var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                    // 检查鼠标位置是否在 TaskPane 区域内
-                    if (_instance.IsMouseInTaskPane(hookStruct.pt.x, hookStruct.pt.y))
-                    {
-                        short delta = unchecked((short)((hookStruct.mouseData >> 16) & 0xFFFF));
-                        IntPtr forwardedWParam = (IntPtr)(delta << 16);
-                        IntPtr forwardedLParam = MakeMouseLParam(hookStruct.pt.x, hookStruct.pt.y);
-                        // 将消息转发到 RichChatPanel
-                        PostMessage(_instance._richChatPanel.Handle, WM_MOUSEWHEEL, forwardedWParam, forwardedLParam);
-                        return (IntPtr)1; // 拦截消息
-                    }
-                }
-            }
-            return CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
-        }
-
-        private static IntPtr MakeMouseLParam(int x, int y)
-        {
-            int packed = ((y & 0xFFFF) << 16) | (x & 0xFFFF);
-            return (IntPtr)packed;
-        }
-
-        /// <summary>
-        /// 检查鼠标是否在 TaskPane 区域内
-        /// </summary>
-        private bool IsMouseInTaskPane(int x, int y)
-        {
-            if (!IsHandleCreated) return false;
-            var pt = PointToClient(new Point(x, y));
-            return ClientRectangle.Contains(pt);
-        }
-
-        // P/Invoke 声明
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
         /// <summary>
         /// 将 TaskCompletionSource 结果与 CancellationToken 关联，使 Stop 按钮可中断等待。
@@ -2195,29 +2427,5 @@ namespace FuXing
             }
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool PostMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
-
-        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int x;
-            public int y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MSLLHOOKSTRUCT
-        {
-            public POINT pt;
-            public uint mouseData;
-            public uint flags;
-            public uint time;
-            public IntPtr dwExtraInfo;
-        }
     }
 }

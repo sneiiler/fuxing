@@ -53,12 +53,12 @@ namespace FuXing
         private readonly List<OperationRecord> _operationHistory = new List<OperationRecord>();
         private const int MaxHistorySize = 100;
 
-        /// <summary>只读工具不产生文档修改，不记入操作历史</summary>
-        private static readonly HashSet<string> ReadOnlyTools = new HashSet<string>
+        /// <summary>只读工具不产生文档修改，不记入操作历史（基于 Category.Query 和 Category.System 自动判定）</summary>
+        private bool IsReadOnly(string toolName)
         {
-            "get_document_info", "document_graph", "get_selected_text",
-            "read_table", "list_files", "load_skill"
-        };
+            if (!_tools.TryGetValue(toolName, out var tool)) return false;
+            return tool.Category == ToolCategory.Query || tool.Category == ToolCategory.System;
+        }
 
         /// <summary>分类名称映射（用于 system prompt 中的分类标题）</summary>
         private static readonly Dictionary<ToolCategory, string> CategoryNames
@@ -87,14 +87,36 @@ namespace FuXing
             var toolInterface = typeof(ITool);
             var assembly = Assembly.GetExecutingAssembly();
 
-            foreach (var type in assembly.GetTypes())
+            // GetTypes() 在部分类型加载失败时抛出 ReflectionTypeLoadException，
+            // 但其 .Types 属性仍包含已成功加载的类型（失败的为 null）。
+            Type[] types;
+            try
             {
+                types = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types;
+                foreach (var le in ex.LoaderExceptions ?? Array.Empty<Exception>())
+                    DebugLogger.Instance.LogError("ToolRegistry", $"类型加载失败: {le?.Message}");
+            }
+
+            foreach (var type in types)
+            {
+                if (type == null) continue;
                 if (!toolInterface.IsAssignableFrom(type)) continue;
                 if (type.IsInterface || type.IsAbstract) continue;
                 if (type.GetConstructor(Type.EmptyTypes) == null) continue;
 
-                var tool = (ITool)Activator.CreateInstance(type);
-                _tools[tool.Name] = tool;
+                try
+                {
+                    var tool = (ITool)Activator.CreateInstance(type);
+                    _tools[tool.Name] = tool;
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Instance.LogError("ToolRegistry", $"工具实例化失败 [{type.Name}]: {ex.Message}");
+                }
             }
 
             DebugLogger.Instance.LogInfo(
@@ -135,6 +157,27 @@ namespace FuXing
             return definitions;
         }
 
+        /// <summary>获取指定分类的工具名称列表（用于 system prompt 动态生成）</summary>
+        public List<string> GetToolNamesByCategory(params ToolCategory[] categories)
+        {
+            var allowed = new HashSet<ToolCategory>(categories);
+            return _tools.Values
+                .Where(t => allowed.Contains(t.Category))
+                .Select(t => t.Name)
+                .OrderBy(n => n)
+                .ToList();
+        }
+
+        /// <summary>获取需要用户审批的危险工具名称列表</summary>
+        public List<string> GetDangerousToolNames()
+        {
+            return _tools.Values
+                .Where(t => t.RequiresApproval)
+                .Select(t => t.Name)
+                .OrderBy(n => n)
+                .ToList();
+        }
+
         /// <summary>
         /// 执行指定的工具调用。
         /// 在 UI 线程上运行（由调用方保证 Invoke），因为 Word COM 必须在 STA 线程。
@@ -153,7 +196,7 @@ namespace FuXing
                 var result = await tool.ExecuteAsync(connect, arguments);
 
                 // 记录成功的文档修改操作到历史
-                if (result.Success && !ReadOnlyTools.Contains(functionName))
+                if (result.Success && !IsReadOnly(functionName))
                 {
                     RecordOperation(functionName, tool.DisplayName, result.Output);
                 }

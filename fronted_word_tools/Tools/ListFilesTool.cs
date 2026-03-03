@@ -44,7 +44,7 @@ namespace FuXing
 
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string folderPath = arguments?["folder_path"]?.ToString();
+            string folderPath = OptionalString(arguments, "folder_path");
 
             // folder_path 为空时，默认使用当前打开文档所在目录
             if (string.IsNullOrWhiteSpace(folderPath))
@@ -64,7 +64,7 @@ namespace FuXing
             if (!Directory.Exists(folderPath))
                 return Task.FromResult(ToolExecutionResult.Fail($"目录不存在: {folderPath}"));
 
-            string extensionFilter = arguments?["extension_filter"]?.ToString();
+            string extensionFilter = OptionalString(arguments, "extension_filter");
             HashSet<string> extensions = null;
             if (!string.IsNullOrWhiteSpace(extensionFilter))
             {
@@ -73,7 +73,7 @@ namespace FuXing
                     StringComparer.OrdinalIgnoreCase);
             }
 
-            bool recursive = arguments?["recursive"]?.Value<bool>() == true;
+            bool recursive = OptionalBool(arguments, "recursive", false);
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             var lines = new List<string> { $"目录: {folderPath}{(recursive ? "（递归搜索）" : "")}", "" };

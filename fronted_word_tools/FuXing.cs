@@ -9,6 +9,7 @@ using System.IO;
 using System.Reflection;
 using System.Linq;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using FuXing.UI;
 using NetOffice;
 using NetOffice.Tools;
@@ -63,11 +64,30 @@ namespace FuXing
 
     public class Connect : NetOffice.WordApi.Tools.COMAddin
     {
+        // ── Word 是非托管宿主，不读取 FuXing.dll.config 中的 bindingRedirect ──
+        // ── 必须在任何类型首次使用前通过 AssemblyResolve 手动解析依赖 ──
+        static Connect()
+        {
+            var addinDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                var name = new AssemblyName(args.Name);
+                var candidate = Path.Combine(addinDir, name.Name + ".dll");
+                if (File.Exists(candidate))
+                {
+                    try { return Assembly.LoadFrom(candidate); }
+                    catch { /* 加载失败回退到默认行为 */ }
+                }
+                return null;
+            };
+        }
+
         private NetOffice.WordApi.Application _wordApplication;
         private NetWorkHelper _networkHelper;
         private string _savedUserName;
         private string _savedUserInitials;
         private ConfigLoader _configLoader;
+        private readonly HashSet<string> _fxStyleInitializedDocKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // 静态实例引用，供TaskPane控件调用
         public static Connect CurrentInstance { get; private set; }
@@ -81,10 +101,6 @@ namespace FuXing
 
         // RibbonUI 属性
         internal new NetOffice.OfficeApi.IRibbonUI RibbonUI { get; private set; }
-
-        /// <summary>当前纠错模式</summary>
-        public CorrectionMode CurrentCorrectionMode => _correctionMode;
-        private CorrectionMode _correctionMode = CorrectionMode.Typo;
 
         /// <summary>
         /// 会话记忆管理器 —— 动态返回当前活动窗口的 ChatMemory。
@@ -213,6 +229,7 @@ namespace FuXing
 
                 if (null != _wordApplication)
                     _wordApplication.Dispose();
+                _fxStyleInitializedDocKeys.Clear();
 
                 CurrentInstance = null;
             }
@@ -227,6 +244,118 @@ namespace FuXing
         {
             // 使用CustomPane特性时，任务窗格会自动创建
             // 这里可以添加其他UI初始化代码
+        }
+
+        private void InitializeDefaultStyleSkillAndStyles()
+        {
+            string documentDir = "";
+            try
+            {
+                var doc = _wordApplication?.ActiveDocument;
+                if (doc != null && !string.IsNullOrEmpty(doc.Path))
+                    documentDir = doc.Path;
+            }
+            catch
+            {
+                // 无活动文档时允许继续（仍可激活内置 skill）
+            }
+
+            SkillManager.LoadFromDocumentDir(documentDir);
+
+            if (!SkillManager.HasSkill("load_default_style"))
+                throw new InvalidOperationException("未找到内置 skill: load_default_style");
+
+            if (!SkillManager.GetActivatedSkillNames().Contains("load_default_style", StringComparer.OrdinalIgnoreCase))
+                SkillManager.ActivateSkill("load_default_style");
+
+            EnsureFxStylesInActiveDocument();
+            DebugLogger.Instance.LogInfo("默认样式技能已自动激活，fx_样式已完成初始化");
+        }
+
+        private void EnsureFxStylesInActiveDocument()
+        {
+            NetOffice.WordApi.Document doc;
+            try { doc = _wordApplication?.ActiveDocument; }
+            catch { return; } // Word 启动时可能尚无活动文档，ActiveDocument 抛 COM 异常
+            if (doc == null) return;
+
+            string docKey = BuildDocumentInitKey(doc);
+            if (_fxStyleInitializedDocKeys.Contains(docKey))
+                return;
+
+            string addinDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string profilePath = Path.Combine(addinDir, "skills", "load_default_style", "default_style_profile.json");
+            if (!File.Exists(profilePath))
+                throw new InvalidOperationException($"默认样式配置文件不存在: {profilePath}");
+
+            var profile = JObject.Parse(File.ReadAllText(profilePath));
+
+            string bodyStyle = profile["body_style"]?.ToString();
+            string bodySeed = profile["body_seed_from"]?.ToString();
+
+            var headingStyles = profile["heading_styles"] as JObject;
+            var headingSeed = profile["heading_seed_from"] as JObject;
+
+            var captionObj = profile["caption"] as JObject;
+            string captionStyle = captionObj?["style_name"]?.ToString();
+            string captionSeed = captionObj?["seed_from_style_name"]?.ToString();
+
+            var tableObj = profile["table"] as JObject;
+            string tableStyle = tableObj?["style_name"]?.ToString();
+            string tableSeed = tableObj?["seed_from_style_name"]?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(bodyStyle) && !string.IsNullOrWhiteSpace(bodySeed))
+                CreateOrUpdateStyleByTool(bodyStyle, bodySeed, "fx_正文", "paragraph");
+
+            if (headingStyles != null && headingSeed != null)
+            {
+                for (int i = 1; i <= 6; i++)
+                {
+                    string key = "h" + i;
+                    string target = headingStyles[key]?.ToString();
+                    string seed = headingSeed[key]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(target) && !string.IsNullOrWhiteSpace(seed))
+                        CreateOrUpdateStyleByTool(target, seed, bodyStyle, "paragraph");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(captionStyle) && !string.IsNullOrWhiteSpace(captionSeed))
+                CreateOrUpdateStyleByTool(captionStyle, captionSeed, bodyStyle, "paragraph");
+
+            if (!string.IsNullOrWhiteSpace(tableStyle) && !string.IsNullOrWhiteSpace(tableSeed))
+                CreateOrUpdateStyleByTool(tableStyle, tableSeed, null, "table");
+
+            _fxStyleInitializedDocKeys.Add(docKey);
+            DebugLogger.Instance.LogInfo($"fx_样式初始化完成: {docKey}");
+        }
+
+        private static string BuildDocumentInitKey(NetOffice.WordApi.Document doc)
+        {
+            string fullName = "";
+            string name = "";
+            try { fullName = doc.FullName ?? ""; } catch { }
+            try { name = doc.Name ?? ""; } catch { }
+            return string.IsNullOrWhiteSpace(fullName)
+                ? $"unsaved::{name}::{doc.GetHashCode()}"
+                : fullName;
+        }
+
+        private void CreateOrUpdateStyleByTool(string targetStyle, string basedOn, string nextStyle, string styleType)
+        {
+            var args = new JObject
+            {
+                ["action"] = "create_style",
+                ["name"] = targetStyle,
+                ["based_on"] = basedOn,
+                ["style_type"] = styleType
+            };
+
+            if (!string.IsNullOrWhiteSpace(nextStyle) && styleType == "paragraph")
+                args["next_style"] = nextStyle;
+
+            var result = ToolRegistry.ExecuteAsync("format_content", args).GetAwaiter().GetResult();
+            if (!result.Success)
+                throw new InvalidOperationException($"创建默认样式失败: {targetStyle} -> {result.Output}");
         }
 
         private void RemoveUserInterface()
@@ -517,235 +646,6 @@ namespace FuXing
             }
         }
 
-        public async void ai_text_correction_btn_Click(NetOffice.OfficeApi.IRibbonControl control)
-        {
-            try
-            {
-                var selection = _wordApplication.Selection;
-                bool hasSelection = selection != null &&
-                                    selection.Start < selection.End &&
-                                    !string.IsNullOrEmpty(selection.Text?.Trim());
-
-                if (hasSelection)
-                {
-                    await CorrectSelectedTextAsync();
-                }
-                else
-                {
-                    if (_wordApplication.Documents.Count == 0)
-                    {
-                        MessageBox.Show("没有打开的文档", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        return;
-                    }
-
-                    var confirm = MessageBox.Show(
-                        "未选中文本，是否对全文进行纠错？\n\n注意：全文纠错可能需要较长时间。",
-                        "全文纠错确认",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Question);
-
-                    if (confirm == DialogResult.Yes)
-                        await CorrectAllTextAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("AI文本纠错时错误: " + ex.Message, "福星错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _wordApplication.StatusBar = "纠错失败！";
-            }
-        }
-
-        private static string GetCorrectionModeName(CorrectionMode mode)
-        {
-            switch (mode)
-            {
-                case CorrectionMode.Typo: return "错别字";
-                case CorrectionMode.Semantic: return "语义";
-                case CorrectionMode.Consistency: return "一致性";
-                default: throw new ArgumentOutOfRangeException(nameof(mode));
-            }
-        }
-
-        private async System.Threading.Tasks.Task CorrectSelectedTextAsync()
-        {
-            var selection = _wordApplication.Selection;
-            string originalText = selection.Text;
-            int selStart = selection.Start;
-            int selEnd = selection.End;
-
-            var chat = EnsureTaskPaneVisible();
-            if (chat == null)
-            {
-                MessageBox.Show("无法打开AI福星面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            string modeName = GetCorrectionModeName(_correctionMode);
-            var toolCard = chat.AddToolCallMessage($"选中文本纠错（{modeName}）", "正在初始化...");
-
-            var activeDoc = _wordApplication.ActiveDocument;
-            HighlightRange(activeDoc, selStart, selEnd);
-
-            try
-            {
-                var service = TextCorrectionService.FromConfig();
-
-                chat.UpdateToolCall(UI.ToolCallStatus.Running, "AI 正在分析选中文本...");
-                _wordApplication.StatusBar = "AI 正在分析选中文本...";
-
-                var result = await service.CorrectTextAsync(originalText, _correctionMode, msg =>
-                {
-                    chat.UpdateToolCall(UI.ToolCallStatus.Running, msg);
-                    _wordApplication.StatusBar = msg;
-                });
-
-                if (!result.Success)
-                {
-                    chat.UpdateToolCall(UI.ToolCallStatus.Error, $"纠错失败：{result.ErrorMessage}");
-                    _wordApplication.StatusBar = "纠错失败";
-                    return;
-                }
-
-                if (!result.HasCorrections)
-                {
-                    chat.UpdateToolCall(UI.ToolCallStatus.Success, "未发现需要修改的内容，文本质量良好！");
-                    _wordApplication.StatusBar = "纠错完成，未发现问题";
-                    return;
-                }
-
-                chat.UpdateToolCall(UI.ToolCallStatus.Running, "正在应用修改...");
-                int applied = ApplyCorrections(activeDoc, selStart, selEnd, result.Corrections);
-
-                var details = new List<string>();
-                foreach (var c in result.Corrections)
-                    details.Add($"\"{c.Original}\" → \"{c.Replacement}\"");
-                chat.UpdateToolCall(UI.ToolCallStatus.Success,
-                    $"共发现 {result.Corrections.Count} 处问题，已修改 {applied} 处（审阅模式）",
-                    details);
-
-                if (!string.IsNullOrEmpty(result.Summary))
-                    chat.AppendResultText($"**总结：**{result.Summary}");
-
-                var correctionDetails = string.Join("\n", result.Corrections.Select(c => $"「{c.Original}」→「{c.Replacement}」"));
-                Memory.RecordPluginAction("选中文本纠错",
-                    $"对选中的 {originalText.Length} 字符文本进行纠错（{modeName}）",
-                    $"发现 {result.Corrections.Count} 处问题，已修改 {applied} 处。\n{correctionDetails}");
-
-                _wordApplication.StatusBar = $"纠错完成，已修改 {applied} 处";
-            }
-            finally
-            {
-                ClearHighlight(activeDoc, selStart, selEnd);
-            }
-        }
-
-        private async System.Threading.Tasks.Task CorrectAllTextAsync()
-        {
-            var activeDoc = _wordApplication.ActiveDocument;
-            string fullText = activeDoc.Content.Text;
-
-            if (string.IsNullOrEmpty(fullText?.Trim()))
-            {
-                MessageBox.Show("文档内容为空", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            var chat = EnsureTaskPaneVisible();
-            if (chat == null)
-            {
-                MessageBox.Show("无法打开AI福星面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            // 将全文按段落分块
-            var paragraphs = new List<ParagraphChunk>();
-            foreach (NetOffice.WordApi.Paragraph para in activeDoc.Paragraphs)
-            {
-                var range = para.Range;
-                string paraText = range.Text;
-                if (!string.IsNullOrWhiteSpace(paraText) && paraText.Trim().Length > 1)
-                {
-                    paragraphs.Add(new ParagraphChunk
-                    {
-                        Text = paraText,
-                        Start = range.Start,
-                        End = range.End
-                    });
-                }
-            }
-
-            if (paragraphs.Count == 0)
-            {
-                MessageBox.Show("文档中无有效文本段落", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            var chunks = MergeIntoChunks(paragraphs, 5000);
-
-            string modeName = GetCorrectionModeName(_correctionMode);
-            var toolCard = chat.AddToolCallMessage($"全文纠错（{modeName}）", $"共 {chunks.Count} 个文本段，准备开始...");
-
-            int totalApplied = 0;
-            var service = TextCorrectionService.FromConfig();
-
-            for (int i = 0; i < chunks.Count; i++)
-            {
-                var chunk = chunks[i];
-
-                HighlightRange(activeDoc, chunk.Start, chunk.End);
-
-                string statusMsg = $"正在分析第 {i + 1}/{chunks.Count} 段（约 {chunk.Text.Length} 字）...";
-                chat.UpdateToolCall(UI.ToolCallStatus.Running, statusMsg, new List<string>
-                {
-                    $"进度：第 {i + 1}/{chunks.Count} 段",
-                    $"已发现问题：{totalApplied} 处"
-                });
-                _wordApplication.StatusBar = statusMsg;
-
-                var result = await service.CorrectTextAsync(chunk.Text, _correctionMode, msg =>
-                {
-                    chat.UpdateToolCall(UI.ToolCallStatus.Running, msg, new List<string>
-                    {
-                        $"进度：第 {i + 1}/{chunks.Count} 段",
-                        $"已发现问题：{totalApplied} 处"
-                    });
-                });
-
-                ClearHighlight(activeDoc, chunk.Start, chunk.End);
-
-                if (result.Success && result.HasCorrections)
-                {
-                    chat.UpdateToolCall(UI.ToolCallStatus.Running, $"正在应用第 {i + 1} 段的修改...", new List<string>
-                    {
-                        $"进度：第 {i + 1}/{chunks.Count} 段",
-                        $"已发现问题：{totalApplied} 处"
-                    });
-                    int applied = ApplyCorrections(activeDoc, chunk.Start, chunk.End, result.Corrections);
-                    totalApplied += applied;
-                }
-            }
-
-            if (totalApplied > 0)
-            {
-                chat.UpdateToolCall(UI.ToolCallStatus.Success,
-                    $"共分析 {chunks.Count} 段文本，发现并修改 {totalApplied} 处问题",
-                    new List<string> { "已开启审阅模式，请查看修订内容和批注" });
-            }
-            else
-            {
-                chat.UpdateToolCall(UI.ToolCallStatus.Success,
-                    $"共分析 {chunks.Count} 段文本",
-                    new List<string> { "全文质量良好，未发现需要修改的内容！" });
-            }
-
-            Memory.RecordPluginAction("全文纠错",
-                $"对全文 {fullText.Length} 字符进行纠错（{modeName}）",
-                $"共分析 {chunks.Count} 段文本，修改 {totalApplied} 处");
-
-            _wordApplication.StatusBar = $"全文纠错完成，已修改 {totalApplied} 处";
-        }
-
         // ── TaskPane 辅助方法 ──
 
         /// <summary>
@@ -870,6 +770,9 @@ namespace FuXing
             {
                 ctx.Width = 500;
                 ctx.Visible = true;
+                // 设计要求：仅在用户打开 TaskPane 时初始化默认样式技能与 fx_样式
+                // 延迟到 UI 线程空闲时执行，避免阻塞 TaskPane 首次绘制
+                ctx.Control.BeginInvoke((MethodInvoker)delegate { InitializeDefaultStyleSkillAndStyles(); });
             }
             // 确保启动安全提示和 LLM 问候健康检查已触发
             ctx.Control.ShowStartupWarningIfNeeded();
@@ -1001,38 +904,6 @@ namespace FuXing
             return applied;
         }
 
-        // ── 段落分块辅助 ──
-
-        private class ParagraphChunk
-        {
-            public string Text { get; set; }
-            public int Start { get; set; }
-            public int End { get; set; }
-        }
-
-        private List<ParagraphChunk> MergeIntoChunks(List<ParagraphChunk> paragraphs, int maxChars)
-        {
-            var chunks = new List<ParagraphChunk>();
-            var current = new ParagraphChunk { Text = "", Start = paragraphs[0].Start, End = paragraphs[0].End };
-
-            foreach (var para in paragraphs)
-            {
-                if (current.Text.Length + para.Text.Length > maxChars && current.Text.Length > 0)
-                {
-                    chunks.Add(current);
-                    current = new ParagraphChunk { Text = "", Start = para.Start, End = para.End };
-                }
-
-                current.Text += para.Text;
-                current.End = para.End;
-            }
-
-            if (current.Text.Length > 0)
-                chunks.Add(current);
-
-            return chunks;
-        }
-
 
 
         /// <summary>防重入标志，防止 Ribbon 回调在同一次点击中被多次触发</summary>
@@ -1058,6 +929,16 @@ namespace FuXing
                 // 面板变为可见时确保安全提示 + LLM 问候健康检查
                 if (newVisible)
                 {
+                    // 设计要求：仅在用户打开 TaskPane 时初始化默认样式技能与 fx_样式
+                    // 延迟到 UI 线程空闲时执行，避免阻塞 TaskPane 首次绘制
+                    ctx.Control.BeginInvoke((MethodInvoker)delegate
+                    {
+                        try { InitializeDefaultStyleSkillAndStyles(); }
+                        catch (Exception ex)
+                        {
+                            DebugLogger.Instance.LogError("默认样式初始化", ex);
+                        }
+                    });
                     ctx.Control.ShowStartupWarningIfNeeded();
                     ctx.Control.CheckAndRequestGreeting();
                 }
@@ -1240,34 +1121,6 @@ namespace FuXing
         public void OnLoadRibbonUI(NetOffice.OfficeApi.IRibbonUI ribbonUI)
         {
             RibbonUI = ribbonUI;
-        }
-
-        public void CorrectionMode_Click(NetOffice.OfficeApi.IRibbonControl control, bool pressed)
-        {
-            switch (control.Id)
-            {
-                case "mode_typo_btn": _correctionMode = CorrectionMode.Typo; break;
-                case "mode_semantic_btn": _correctionMode = CorrectionMode.Semantic; break;
-                case "mode_consistency_btn": _correctionMode = CorrectionMode.Consistency; break;
-            }
-            // 刷新所有 toggleButton 的选中状态（实现单选效果）
-            if (RibbonUI != null)
-            {
-                RibbonUI.InvalidateControl("mode_typo_btn");
-                RibbonUI.InvalidateControl("mode_semantic_btn");
-                RibbonUI.InvalidateControl("mode_consistency_btn");
-            }
-        }
-
-        public bool CorrectionMode_GetPressed(NetOffice.OfficeApi.IRibbonControl control)
-        {
-            switch (control.Id)
-            {
-                case "mode_typo_btn": return _correctionMode == CorrectionMode.Typo;
-                case "mode_semantic_btn": return _correctionMode == CorrectionMode.Semantic;
-                case "mode_consistency_btn": return _correctionMode == CorrectionMode.Consistency;
-                default: return false;
-            }
         }
 
         #endregion

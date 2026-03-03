@@ -65,17 +65,12 @@ namespace FuXing
                 deleteRange = range;
                 targetDesc = $"[{node.Id}] {node.Title}";
 
-                // 如仅删除内容不含标题，需跳过标题段
-                if (!includeHeading && node.Type == DocNodeType.Section)
+                // Section 节点的 CC 仅覆盖正文，如果要连标题一起删除需扩展范围
+                if (includeHeading && node.Type == DocNodeType.Section
+                    && node.Meta != null && node.Meta.TryGetValue("heading_start", out var hs))
                 {
-                    // 标题段到第一个换行后的位置 = 内容区域起始
-                    string text = range.Text ?? "";
-                    int firstLineEnd = text.IndexOf('\r');
-                    if (firstLineEnd >= 0 && firstLineEnd + 1 < text.Length)
-                    {
-                        int contentStart = range.Start + firstLineEnd + 1;
-                        deleteRange = doc.Range(contentStart, range.End);
-                    }
+                    int headingStart = int.Parse(hs);
+                    deleteRange = doc.Range(headingStart, range.End);
                 }
             }
             else if (!string.IsNullOrWhiteSpace(headingName))

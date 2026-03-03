@@ -60,21 +60,15 @@ namespace FuXing
 
         public override System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string findText = arguments["find_text"]?.ToString();
-            string replaceText = arguments["replace_text"]?.ToString();
+            string findText = RequireString(arguments, "find_text");
+            string replaceText = RequireString(arguments, "replace_text");
 
-            if (string.IsNullOrEmpty(findText))
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 find_text 参数"));
-            if (replaceText == null)
-                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail("缺少 replace_text 参数"));
+            bool matchCase = OptionalBool(arguments, "match_case", false);
+            bool matchWholeWord = OptionalBool(arguments, "match_whole_word", false);
+            bool useWildcards = OptionalBool(arguments, "use_wildcards", false);
+            string scope = OptionalString(arguments, "scope", "all");
 
-            bool matchCase = arguments["match_case"] != null && (bool)arguments["match_case"];
-            bool matchWholeWord = arguments["match_whole_word"] != null && (bool)arguments["match_whole_word"];
-            bool useWildcards = arguments["use_wildcards"] != null && (bool)arguments["use_wildcards"];
-            string scope = arguments["scope"]?.ToString() ?? "all";
-
-            var app = connect.WordApplication;
-            var doc = app.ActiveDocument;
+            var doc = RequireActiveDocument(connect);
 
             // 如果目标文本存在于 ContentControl 占位符中，拒绝操作并引导正确做法
             if (IsContentControlPlaceholder(doc, findText))

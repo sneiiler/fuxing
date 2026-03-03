@@ -8,8 +8,8 @@ namespace FuXing
 {
     /// <summary>
     /// 开发者调试日志 — 当 DeveloperMode 开启时，将对话和工具调用信息写入文件。
-    /// 日志路径: %USERPROFILE%\.fuxing\logs\fuxing_YYYY-MM-DD.log
-    /// 每天自动创建新的日志文件，保留最近 30 天的日志。
+    /// 日志路径: %USERPROFILE%\.fuxing\logs\fuxing_YYYY-MM-DD_HHmmss.log
+    /// 每个会话创建独立的日志文件，保留最近 30 个会话日志。
     /// </summary>
     public sealed class DebugLogger
     {
@@ -17,7 +17,7 @@ namespace FuXing
         //  常量
         // ═══════════════════════════════════════════════════════════════
 
-        private const int MaxRetainDays = 30;
+        private const int MaxRetainFiles = 30;
         private const string LogFilePrefix = "fuxing_";
         private const string LogFileExtension = ".log";
 
@@ -39,9 +39,8 @@ namespace FuXing
         private readonly object _lock = new object();
         private readonly string _logDir;
 
-        /// <summary>当前日志文件路径（按日期变化）</summary>
+        /// <summary>当前日志文件路径（按会话变化）</summary>
         private string _currentLogPath;
-        private string _currentDate;
 
         /// <summary>是否启用（由外部设置，通常在加载配置后调用）</summary>
         public bool Enabled { get; set; }
@@ -54,24 +53,29 @@ namespace FuXing
         }
 
         /// <summary>获取当前日志文件的完整路径</summary>
-        public string CurrentLogPath
-        {
-            get
-            {
-                EnsureCurrentLogPath();
-                return _currentLogPath;
-            }
-        }
+        public string CurrentLogPath => _currentLogPath;
 
         // ═══════════════════════════════════════════════════════════════
         //  公共日志方法：会话生命周期
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>记录新会话开始（醒目分隔，便于定位）</summary>
+        /// <summary>开始新会话 — 创建独立的日志文件</summary>
         public void LogSessionStart()
         {
+            if (!Enabled) return;
+
+            lock (_lock)
+            {
+                EnsureDirectory();
+
+                // 每次新会话生成唯一的日志文件
+                string now = DateTime.Now.ToString("yyyy-MM-dd_HHmmss");
+                _currentLogPath = Path.Combine(_logDir, $"{LogFilePrefix}{now}{LogFileExtension}");
+
+                CleanOldLogs();
+            }
+
             var sb = new StringBuilder();
-            sb.AppendLine();
             sb.AppendLine(SeparatorHeavy);
             sb.AppendLine($"  新会话  {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             sb.AppendLine(SeparatorHeavy);
@@ -226,6 +230,12 @@ namespace FuXing
             Write("INFO", message);
         }
 
+        /// <summary>记录内部组件调试信息（AnchorManager / GraphBuilder / GraphCache 等）</summary>
+        public void LogDebug(string component, string message)
+        {
+            Write("DEBUG", $"  [{component}] {message}");
+        }
+
         // ═══════════════════════════════════════════════════════════════
         //  公共日志方法：LLM 请求/响应完整记录
         // ═══════════════════════════════════════════════════════════════
@@ -296,9 +306,7 @@ namespace FuXing
             {
                 lock (_lock)
                 {
-                    EnsureDirectory();
-                    EnsureCurrentLogPath();
-                    CleanOldLogsIfNeeded();
+                    if (_currentLogPath == null) return;
 
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     var sb = new StringBuilder();
@@ -325,8 +333,8 @@ namespace FuXing
             {
                 lock (_lock)
                 {
-                    EnsureDirectory();
-                    EnsureCurrentLogPath();
+                    if (_currentLogPath == null) return;
+
                     File.AppendAllText(_currentLogPath, text, Encoding.UTF8);
                 }
             }
@@ -347,36 +355,18 @@ namespace FuXing
                 Directory.CreateDirectory(_logDir);
         }
 
-        /// <summary>确保日志文件路径与当前日期一致</summary>
-        private void EnsureCurrentLogPath()
+        /// <summary>清理超出保留数量的旧日志文件，按创建时间从旧到新排序，保留最近 MaxRetainFiles 个</summary>
+        private void CleanOldLogs()
         {
-            string today = DateTime.Now.ToString("yyyy-MM-dd");
-            if (_currentDate != today || _currentLogPath == null)
-            {
-                _currentDate = today;
-                _currentLogPath = Path.Combine(_logDir, $"{LogFilePrefix}{today}{LogFileExtension}");
-            }
-        }
-
-        /// <summary>清理超过保留天数的旧日志（每天只检查一次）</summary>
-        private string _lastCleanDate;
-        private void CleanOldLogsIfNeeded()
-        {
-            string today = DateTime.Now.ToString("yyyy-MM-dd");
-            if (_lastCleanDate == today) return;
-            _lastCleanDate = today;
-
             try
             {
-                var cutoff = DateTime.Now.AddDays(-MaxRetainDays);
-                var logFiles = Directory.GetFiles(_logDir, $"{LogFilePrefix}*{LogFileExtension}");
+                var logFiles = Directory.GetFiles(_logDir, $"{LogFilePrefix}*{LogFileExtension}")
+                    .Select(f => new FileInfo(f))
+                    .OrderByDescending(f => f.CreationTime)
+                    .ToArray();
 
-                foreach (var file in logFiles)
-                {
-                    var fi = new FileInfo(file);
-                    if (fi.LastWriteTime < cutoff)
-                        fi.Delete();
-                }
+                for (int i = MaxRetainFiles; i < logFiles.Length; i++)
+                    logFiles[i].Delete();
             }
             catch
             {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -21,7 +22,7 @@ namespace FuXing
         //  数据结构
         // ═══════════════════════════════════════════════════════════════
 
-        public enum SkillSource { Global, Document }
+        public enum SkillSource { Global, Builtin, Document }
 
         public class Skill
         {
@@ -78,7 +79,10 @@ namespace FuXing
                 ScanSkillRoot(docSkills, SkillSource.Document);
             }
 
-            // 2. 扫描全局目录（高优先级，同名覆盖文档级）
+            // 2. 扫描插件内置目录（中优先级）
+            ScanSkillRoot(GetBuiltinSkillsDirectory(), SkillSource.Builtin);
+
+            // 3. 扫描全局目录（高优先级，同名覆盖文档级/内置）
             ScanSkillRoot(GetGlobalSkillsDirectory(), SkillSource.Global);
 
             DebugLogger.Instance.LogInfo($"[SkillManager] 发现 {_skills.Count} 个 skill: {string.Join(", ", GetSkillNames())}");
@@ -102,7 +106,9 @@ namespace FuXing
             foreach (var name in names)
             {
                 if (!_skills.TryGetValue(NormalizeName(name), out var skill)) continue;
-                string sourceTag = skill.Source == SkillSource.Global ? " [全局]" : "";
+                string sourceTag = skill.Source == SkillSource.Global
+                    ? " [全局]"
+                    : (skill.Source == SkillSource.Builtin ? " [内置]" : "");
                 string desc = skill.Description.Length > 200
                     ? skill.Description.Substring(0, 200) + "..."
                     : skill.Description;
@@ -208,6 +214,12 @@ namespace FuXing
             return dir;
         }
 
+        public static string GetBuiltinSkillsDirectory()
+        {
+            string addinDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            return Path.Combine(addinDir, "skills");
+        }
+
         // ═══════════════════════════════════════════════════════════════
         //  内部实现
         // ═══════════════════════════════════════════════════════════════
@@ -300,12 +312,24 @@ namespace FuXing
             var key = NormalizeName(skill.Name);
             if (_skills.TryGetValue(key, out var existing))
             {
-                // 全局 > 文档级覆盖
-                if (skill.Source == SkillSource.Global && existing.Source == SkillSource.Document)
+                int Priority(SkillSource source)
+                {
+                    switch (source)
+                    {
+                        case SkillSource.Global: return 3;
+                        case SkillSource.Builtin: return 2;
+                        default: return 1;
+                    }
+                }
+
+                if (Priority(skill.Source) > Priority(existing.Source))
+                {
                     _skills[key] = skill;
+                }
                 else if (skill.Source == existing.Source)
-                    _skills[key] = skill; // 同源：后扫描覆盖
-                // 文档级不能覆盖全局 — 忽略
+                {
+                    _skills[key] = skill;
+                }
             }
             else
             {

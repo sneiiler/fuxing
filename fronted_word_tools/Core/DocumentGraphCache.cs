@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -77,12 +76,12 @@ namespace FuXing.Core
             {
                 if (deep && !cached.IsDeepPerception)
                 {
-                    Debug.WriteLine($"[GraphCache] 缓存命中但需升级到深度感知: {docKey}");
+                    DebugLogger.Instance.LogDebug("GraphCache", $"缓存命中但需升级到深度感知: {docKey}");
                     // 继续重建
                 }
                 else
                 {
-                    Debug.WriteLine($"[GraphCache] 缓存命中: {docKey}");
+                    DebugLogger.Instance.LogDebug("GraphCache", $"缓存命中: {docKey}");
                     return cached;
                 }
             }
@@ -101,13 +100,13 @@ namespace FuXing.Core
 
             if (deep)
             {
-                Debug.WriteLine($"[GraphCache] 构建深度图: {docKey}");
-                graph = await builder.BuildSkeletonDeepAsync(doc, cancellation);
+                DebugLogger.Instance.LogDebug("GraphCache", $"构建深度图: {docKey}");
+                graph = await builder.BuildFullDeepAsync(doc, cancellation);
             }
             else
             {
-                Debug.WriteLine($"[GraphCache] 构建快速图: {docKey}");
-                graph = builder.BuildSkeleton(doc);
+                DebugLogger.Instance.LogDebug("GraphCache", $"构建快速图: {docKey}");
+                graph = builder.BuildFull(doc);
             }
 
             graph.ContentHash = contentHash;
@@ -121,7 +120,7 @@ namespace FuXing.Core
                     if (node != null)
                     {
                         graph.SetLabel(kv.Value, kv.Key);
-                        Debug.WriteLine($"[GraphCache] 迁移 label: {kv.Key} → {kv.Value}");
+                        DebugLogger.Instance.LogDebug("GraphCache", $"迁移 label: {kv.Key} → {kv.Value}");
                     }
                 }
             }
@@ -129,11 +128,11 @@ namespace FuXing.Core
             _cache[docKey] = graph;
             _builders[docKey] = builder; // 缓存 builder，后续 expand 复用
 
-            Debug.WriteLine($"[GraphCache] 图已缓存: {graph.Index.Count} 个节点");
+            DebugLogger.Instance.LogDebug("GraphCache", $"图已缓存: {graph.Index.Count} 个节点");
             return graph;
         }
 
-        /// <summary>展开节点的内部内容（Section→L2, TextBlock→L3）</summary>
+        /// <summary>展开节点的内部内容（TextBlock→段落）</summary>
         public void ExpandNode(
             NetOffice.WordApi.Document doc, string nodeId)
         {
@@ -155,14 +154,14 @@ namespace FuXing.Core
             switch (node.Type)
             {
                 case DocNodeType.Section:
-                    builder.ExpandSection(doc, graph, nodeId);
+                    // Section 已在 map 时完整展开，无需额外操作
                     break;
                 case DocNodeType.TextBlock:
                     builder.ExpandTextBlock(doc, graph, nodeId);
                     break;
                 default:
                     throw new System.InvalidOperationException(
-                        $"节点类型 {node.Type} 不支持展开。只有 Section 和 TextBlock 可以展开。");
+                        $"节点类型 {node.Type} 不支持展开。只有 TextBlock 可以展开到段落级。");
             }
         }
 
@@ -177,7 +176,7 @@ namespace FuXing.Core
             if (_cache.TryGetValue(docKey, out var graph))
             {
                 graph.ContentHash = doc.Content.Text.GetHashCode();
-                Debug.WriteLine($"[GraphCache] 已刷新 hash: {docKey}");
+                DebugLogger.Instance.LogDebug("GraphCache", $"已刷新 hash: {docKey}");
             }
         }
 
@@ -188,7 +187,7 @@ namespace FuXing.Core
             CleanupOldAnchors(doc);
             _cache.Remove(docKey);
             _builders.Remove(docKey);
-            Debug.WriteLine($"[GraphCache] 已失效: {docKey}");
+            DebugLogger.Instance.LogDebug("GraphCache", $"已失效: {docKey}");
         }
 
         /// <summary>使指定文档的缓存失效（按路径）</summary>
@@ -196,7 +195,7 @@ namespace FuXing.Core
         {
             _cache.Remove(docFullName);
             _builders.Remove(docFullName);
-            Debug.WriteLine($"[GraphCache] 已失效: {docFullName}");
+            DebugLogger.Instance.LogDebug("GraphCache", $"已失效: {docFullName}");
         }
 
         /// <summary>清除所有缓存</summary>
@@ -204,7 +203,7 @@ namespace FuXing.Core
         {
             _cache.Clear();
             _builders.Clear();
-            Debug.WriteLine("[GraphCache] 全部缓存已清除");
+            DebugLogger.Instance.LogDebug("GraphCache", "全部缓存已清除");
         }
 
         /// <summary>清理文档中由图构建器创建的 map 锚点（保留用户自定义锚点）</summary>
@@ -224,7 +223,7 @@ namespace FuXing.Core
                 }
             }
             if (cleaned > 0)
-                Debug.WriteLine($"[GraphCache] 清理了 {cleaned} 个 map 锚点");
+                DebugLogger.Instance.LogDebug("GraphCache", $"清理了 {cleaned} 个 map 锚点");
         }
     }
 }

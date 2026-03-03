@@ -84,7 +84,7 @@ namespace FuXing
                 ["max_rounds"] = new JObject
                 {
                     ["type"] = "integer",
-                    ["description"] = "子智能体最大对话轮次（含工具调用循环，默认 5，推荐 3-8）"
+                    ["description"] = "子智能体最大对话轮次（含工具调用循环，默认取设置中最大轮次的较小值，上限受全局配置约束）"
                 }
             },
             ["required"] = new JArray("system_prompt", "task_instruction")
@@ -96,7 +96,10 @@ namespace FuXing
             string agentName = OptionalString(arguments, "agent_name", "SubAgent");
             string systemPrompt = RequireString(arguments, "system_prompt");
             string taskInstruction = RequireString(arguments, "task_instruction");
-            int maxRounds = OptionalInt(arguments, "max_rounds", 5);
+            int configMaxRounds = new ConfigLoader().LoadConfig().MaxToolRounds;
+            int maxRounds = OptionalInt(arguments, "max_rounds", Math.Min(configMaxRounds, 20));
+            if (maxRounds > configMaxRounds)
+                maxRounds = configMaxRounds;
             bool includeDocText = OptionalBool(arguments, "include_document_text", false);
 
             // 解析工具白名单

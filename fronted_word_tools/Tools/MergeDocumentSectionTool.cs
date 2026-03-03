@@ -55,24 +55,17 @@ namespace FuXing
 
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string sourceFilePath = arguments?["source_file_path"]?.ToString();
-            string targetHeading = arguments?["target_heading"]?.ToString();
-            string sourceHeading = arguments?["source_heading"]?.ToString();
-            bool replaceExisting = arguments?["replace_existing"]?.Value<bool>() ?? true;
-            bool excludeSourceHeading = arguments?["exclude_source_heading"]?.Value<bool>() ?? true;
+            string sourceFilePath = RequireString(arguments, "source_file_path");
+            string targetHeading = RequireString(arguments, "target_heading");
+            string sourceHeading = OptionalString(arguments, "source_heading");
+            bool replaceExisting = OptionalBool(arguments, "replace_existing", true);
+            bool excludeSourceHeading = OptionalBool(arguments, "exclude_source_heading", true);
 
-            if (string.IsNullOrWhiteSpace(sourceFilePath))
-                return Task.FromResult(ToolExecutionResult.Fail("缺少 source_file_path 参数"));
-            if (string.IsNullOrWhiteSpace(targetHeading))
-                return Task.FromResult(ToolExecutionResult.Fail("缺少 target_heading 参数"));
             if (!System.IO.File.Exists(sourceFilePath))
                 return Task.FromResult(ToolExecutionResult.Fail($"源文件不存在: {sourceFilePath}"));
 
             var app = connect.WordApplication;
-            if (app.Documents.Count == 0)
-                return Task.FromResult(ToolExecutionResult.Fail("没有打开的文档"));
-
-            var mainDoc = app.ActiveDocument;
+            var mainDoc = RequireActiveDocument(connect);
 
             // 在主文档中定位目标章节末尾
             int insertPos = FindSectionEnd(mainDoc, targetHeading, out int targetLevel);

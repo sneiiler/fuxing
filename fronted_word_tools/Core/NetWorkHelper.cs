@@ -187,8 +187,8 @@ namespace FuXing
                 
                 var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
 
-                var chatUpdates = chatClient.CompleteChatStreaming(messages, chatOptions, cancellationToken);
-                foreach (var update in chatUpdates)
+                var chatUpdates = chatClient.CompleteChatStreamingAsync(messages, chatOptions, cancellationToken);
+                await foreach (var update in chatUpdates)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
@@ -283,22 +283,6 @@ namespace FuXing
             }
         }
 
-        // 将前端模式转换为后端API期望的模式
-        private string ConvertToBackendMode(string frontendMode)
-        {
-            switch (frontendMode)
-            {
-                case "问答":
-                    return "chat";
-                case "编辑":
-                    return "edit";
-                case "审核":
-                    return "review";
-                default:
-                    return "chat";
-            }
-        }
-
         // 文件上传响应类
         public class FileUploadResponse
         {
@@ -353,38 +337,48 @@ namespace FuXing
             }
         }
 
-        // 根据模式和知识库生成系统消息
-        private string GetSystemMessage(string mode, string knowledgeBase)
+        /// <summary>
+        /// 调用 LLM 为会话生成一个简短标题（5-10 字）。
+        /// 使用非流式请求，fire-and-forget 不阻塞 UI。
+        /// </summary>
+        public async Task<string> GenerateTitleAsync(string conversationSummary, CancellationToken cancellationToken = default)
         {
-            var baseMessage = "你是一个专业的AI助手，专门帮助用户处理Word文档相关的任务。";
-            
-            switch (mode)
-            {
-                case "问答":
-                    baseMessage += "你的主要任务是回答用户的问题，提供准确和有用的信息。";
-                    break;
-                case "编辑":
-                    baseMessage += "你的主要任务是帮助用户编辑和改进文本内容，包括语法纠错、表达优化、格式调整等。";
-                    break;
-                case "审核":
-                    baseMessage += "你的主要任务是审核文档内容，检查是否符合标准规范，发现潜在问题。";
-                    break;
-            }
+            if (string.IsNullOrWhiteSpace(_baseUrl) || string.IsNullOrWhiteSpace(_modelName))
+                return null;
 
-            switch (knowledgeBase)
+            try
             {
-                case "遥感通用知识库":
-                    baseMessage += "你具备遥感技术相关的专业知识。";
-                    break;
-                case "质量库":
-                    baseMessage += "你熟悉质量管理和质量控制的相关标准。";
-                    break;
-                case "型号库":
-                    baseMessage += "你了解各种产品型号和技术规格。";
-                    break;
-            }
+                var options = new OpenAIClientOptions { Endpoint = new Uri(_baseUrl) };
+                var openaiClient = new OpenAIClient(new ApiKeyCredential(_apiKey ?? "dummy"), options);
+                var chatClient = openaiClient.GetChatClient(_modelName);
 
-            return baseMessage;
+                var messages = new List<ChatMessage>
+                {
+                    new SystemChatMessage("用5-10个中文字概括以下对话的主题。直接输出标题文本，不要加引号、序号或任何解释。"),
+                    new UserChatMessage(conversationSummary)
+                };
+
+                var chatOptions = new ChatCompletionOptions { Temperature = 0.3f };
+                var completion = await chatClient.CompleteChatAsync(messages, chatOptions, cancellationToken);
+                string title = completion.Value?.Content?.Count > 0
+                    ? completion.Value.Content[0].Text?.Trim()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(title)) return null;
+
+                // 去除模型可能输出的 <think> 块
+                title = Regex.Replace(title, @"<think>[\s\S]*?</think>", "", RegexOptions.IgnoreCase).Trim();
+                if (string.IsNullOrWhiteSpace(title)) return null;
+
+                // 截取前 20 字，防止 LLM 输出过长
+                if (title.Length > 20) title = title.Substring(0, 20);
+                return title;
+            }
+            catch
+            {
+                return null;
+            }
         }
+
     }
 }

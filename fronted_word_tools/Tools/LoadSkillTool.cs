@@ -34,9 +34,7 @@ namespace FuXing
 
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string skillName = arguments["skill_name"]?.ToString();
-            if (string.IsNullOrWhiteSpace(skillName))
-                return Task.FromResult(ToolExecutionResult.Fail("缺少 skill_name 参数"));
+            string skillName = RequireString(arguments, "skill_name");
 
             var skillManager = connect.SkillManager;
 
@@ -63,7 +61,10 @@ namespace FuXing
             // 构建返回消息
             var sb = new StringBuilder();
             sb.AppendLine($"Skill \"{skill.Name}\" 已激活。其 SKILL.md 指令已注入系统上下文，本次会话中持续生效。");
-            sb.AppendLine($"来源: {(skill.Source == SkillManager.SkillSource.Global ? "全局" : "文档级")}");
+            string sourceText = skill.Source == SkillManager.SkillSource.Global
+                ? "全局"
+                : (skill.Source == SkillManager.SkillSource.Builtin ? "内置" : "文档级");
+            sb.AppendLine($"来源: {sourceText}");
             sb.AppendLine($"技能目录: {skill.Directory}");
 
             if (skill.SupportFiles.Count > 0)

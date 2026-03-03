@@ -46,7 +46,7 @@ namespace FuXing
 
         public override async System.Threading.Tasks.Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            var operations = arguments["operations"] as JArray;
+            var operations = OptionalArray(arguments, "operations");
             if (operations == null || operations.Count == 0)
                 return ToolExecutionResult.Fail("缺少 operations 参数或为空数组");
 

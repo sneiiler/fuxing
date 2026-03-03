@@ -62,9 +62,7 @@ namespace FuXing
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
             // 该工具实际不会被直接执行，TaskPaneControl 会拦截并走专用路径
-            string question = arguments?["question"]?.ToString();
-            if (string.IsNullOrWhiteSpace(question))
-                return Task.FromResult(ToolExecutionResult.Fail("Missing required parameter: question"));
+            string question = RequireString(arguments, "question");
 
             return Task.FromResult(ToolExecutionResult.Ok("(waiting for user response)"));
         }

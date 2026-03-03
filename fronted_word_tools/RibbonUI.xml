@@ -10,31 +10,6 @@
                             onAction='toggle_taskpane_btn_Click'
                             screentip='显示/隐藏AI福星'
                             supertip='打开或关闭AI福星对话窗口'/>
-					<splitButton id='TextCorrectionSplitButton' size='large'>
-						<button id='ai_text_correction_btn'
-                                label='文本纠错'
-                                getImage='GetButtonImage'
-                                onAction='ai_text_correction_btn_Click'
-                                screentip='AI文本纠错'
-                                supertip='智能检测：选中文本则纠错选中部分，未选中则纠错全文（需确认）'/>
-						<menu id='TextCorrectionMenu'>
-							<toggleButton id='mode_typo_btn'
-                                           label='只检查错别字'
-                                           screentip='仅检查汉字错别字、同音字混淆等基础错误'
-                                           onAction='CorrectionMode_Click'
-                                           getPressed='CorrectionMode_GetPressed'/>
-							<toggleButton id='mode_semantic_btn'
-                                           label='检查语义级别错误'
-                                           screentip='检查语法、用词、搭配等语义层面的错误'
-                                           onAction='CorrectionMode_Click'
-                                           getPressed='CorrectionMode_GetPressed'/>
-							<toggleButton id='mode_consistency_btn'
-                                           label='检查前后表述一致性'
-                                           screentip='检查文档中前后术语、表述是否一致'
-                                           onAction='CorrectionMode_Click'
-                                           getPressed='CorrectionMode_GetPressed'/>
-						</menu>
-					</splitButton>
 					<button id='CheckStandardValidityButton'
                             label='校验引用标准'
                             size='large'

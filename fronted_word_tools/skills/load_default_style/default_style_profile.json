@@ -1,0 +1,63 @@
+{
+  "heading_styles": {
+    "h1": "fx_标题1",
+    "h2": "fx_标题2",
+    "h3": "fx_标题3",
+    "h4": "fx_标题4",
+    "h5": "fx_标题5",
+    "h6": "fx_标题6"
+  },
+  "heading_seed_from": {
+    "h1": "标题 1",
+    "h2": "标题 2",
+    "h3": "标题 3",
+    "h4": "标题 4",
+    "h5": "标题 5",
+    "h6": "标题 6"
+  },
+  "body_style": "fx_正文",
+  "body_seed_from": "正文",
+  "body_font": {
+    "name": "宋体",
+    "size_pt": 12,
+    "alignment": "justify",
+    "line_spacing_rule": "single"
+  },
+  "table": {
+    "style_name": "fx_表格",
+    "seed_from_style_name": "网格型",
+    "font_name": "宋体",
+    "font_size": 10.5,
+    "alignment": "center",
+    "header": {
+      "bold": true,
+      "font_size": 10.5,
+      "alignment": "center"
+    },
+    "borders": {
+      "inside_line_style": "single",
+      "outside_line_style": "single"
+    }
+  },
+  "image": {
+    "alignment": "center",
+    "default_width_cm": 12
+  },
+  "caption": {
+    "style_name": "fx_题注",
+    "seed_from_style_name": "题注",
+    "font_name": "宋体",
+    "font_size": 10.5,
+    "alignment": "center",
+    "labels": {
+      "image": "图",
+      "table": "表",
+      "equation": "公式"
+    },
+    "default_position": {
+      "image": "below",
+      "table": "above",
+      "equation": "below"
+    }
+  }
+}

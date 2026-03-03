@@ -123,8 +123,7 @@ namespace FuXing
                         (nodeCustomStyle ? "（自定义样式）" : "（默认样式）")));
             }
 
-            int? idx = arguments?["table_index"]?.Type == JTokenType.Integer
-                ? (int?)arguments["table_index"] : null;
+            int? idx = OptionalNullableInt(arguments, "table_index");
 
             bool hasCustomStyle = arguments?["font"] != null
                 || arguments?["alignment"] != null
@@ -174,8 +173,7 @@ namespace FuXing
             var borders = OptionalObject(arguments, "borders");
             var header = OptionalObject(arguments, "header");
             string shadingBg = OptionalString(arguments, "shading_bg_color");
-            float? rowHeight = arguments?["row_height"]?.Type == JTokenType.Float || arguments?["row_height"]?.Type == JTokenType.Integer
-                ? (float?)arguments["row_height"].Value<float>() : null;
+            float? rowHeight = OptionalNullableFloat(arguments, "row_height");
 
             // ── 1. 表格正文字体 ──
             if (font != null)

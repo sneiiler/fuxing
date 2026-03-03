@@ -8,10 +8,9 @@ namespace FuXing.Core
     //  文档图（Document Graph）模型  ——  “万物皆节点”
     //
     //  每个可寻址的文档元素都是图中的 DocNode，由 CC 锚定。
-    //  三层粒度，逐层 expand：
-    //  - L1 骨架层：Section 节点（标题），map 时自动创建
-    //  - L2 内容层：Table / Image / TextBlock / List，expand(section) 时创建
-    //  - L3 段落层：Paragraph，expand(textblock) 时创建
+    //  两层粒度：
+    //  - 骨架+内容层：map 时一次性建立 Section / Heading / TextBlock / Table / Image / List / Preamble
+    //  - 段落层：Paragraph，expand(textblock) 时创建
     //
     //  节点可被 AI 赋予 label 别名，用于多步操作中的稳定引用。
     //  所有编辑工具统一接受 node_id（或 label）定位。
@@ -23,8 +22,14 @@ namespace FuXing.Core
         /// <summary>根节点，代表整个文档</summary>
         Document,
 
-        /// <summary>标题章节（标题 + 其直属内容区域）</summary>
+        /// <summary>章节容器（CC 覆盖标题后的正文区域）</summary>
         Section,
+
+        /// <summary>标题段落（CC 仅覆盖标题段落本身）</summary>
+        Heading,
+
+        /// <summary>文档第一个标题之前的内容</summary>
+        Preamble,
 
         /// <summary>表格</summary>
         Table,
@@ -38,7 +43,7 @@ namespace FuXing.Core
         /// <summary>列表块（连续的列表项段落）</summary>
         List,
 
-        /// <summary>单个段落（L3 粒度，expand TextBlock 时创建）</summary>
+        /// <summary>单个段落（expand TextBlock 时创建）</summary>
         Paragraph,
     }
 
@@ -211,10 +216,17 @@ namespace FuXing.Core
             {
                 if (node.Type == DocNodeType.Document) continue;
                 if (node.Meta == null) continue;
-                if (!node.Meta.TryGetValue("range_start", out var rs) ||
-                    !node.Meta.TryGetValue("range_end", out var re)) continue;
+                if (!node.Meta.TryGetValue("range_end", out var re)) continue;
 
-                int start = int.Parse(rs);
+                // Section 节点使用 heading_start（覆盖标题+正文），其他节点使用 range_start
+                int start;
+                if (node.Meta.TryGetValue("heading_start", out var hs))
+                    start = int.Parse(hs);
+                else if (node.Meta.TryGetValue("range_start", out var rs))
+                    start = int.Parse(rs);
+                else
+                    continue;
+
                 int end = int.Parse(re);
 
                 if (position >= start && position <= end)
@@ -331,7 +343,7 @@ namespace FuXing.Core
             sb.AppendLine();
             sb.AppendLine("═══ 导航指令 ═══");
             sb.AppendLine("• document_graph(read, node_id) — 读取节点内容");
-            sb.AppendLine("• document_graph(expand, node_id) — 展开节点（Section→表格/图片/文本块, TextBlock→段落）");
+            sb.AppendLine("• document_graph(expand, node_id) — 展开 TextBlock 到段落级");
             sb.AppendLine("• document_graph(goto, node_id) — 光标跳到节点");
             sb.AppendLine("• document_graph(label, node_id, label) — 给节点赋予别名");
             sb.AppendLine("• 编辑工具支持 node_id 或 label 参数直接定位");
@@ -357,8 +369,8 @@ namespace FuXing.Core
 
             sb.AppendLine($"{pad}[{node.Id}] {icon} {levelStr}{node.Title}{preview}");
 
-            // 未展开的 Section/TextBlock 提示
-            if ((node.Type == DocNodeType.Section || node.Type == DocNodeType.TextBlock)
+            // 未展开的 TextBlock 提示
+            if (node.Type == DocNodeType.TextBlock
                 && !node.Expanded && node.ChildIds.Count == 0)
             {
                 // 不显示任何子内容（等待 expand）
@@ -373,6 +385,8 @@ namespace FuXing.Core
             switch (type)
             {
                 case DocNodeType.Section: return "§";
+                case DocNodeType.Heading: return "H";
+                case DocNodeType.Preamble: return "📝";
                 case DocNodeType.Table: return "📋";
                 case DocNodeType.Image: return "🖼";
                 case DocNodeType.TextBlock: return "📝";

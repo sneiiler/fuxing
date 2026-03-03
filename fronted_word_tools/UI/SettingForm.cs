@@ -250,8 +250,8 @@ namespace FuXing
                 Font = new Font("Microsoft YaHei UI", 9F),
                 Name = "MaxToolRoundsSelect"
             };
-            maxToolRoundsSelect.Items.AddRange(new object[] { "5", "10", "20", "30" });
-            maxToolRoundsSelect.SelectedIndex = 1; // 默认 10
+            maxToolRoundsSelect.Items.AddRange(new object[] { "10", "20", "50", "100" });
+            maxToolRoundsSelect.SelectedIndex = 2; // 默认 50
 
             var divider4 = new System.Windows.Forms.Panel
             {
@@ -477,7 +477,7 @@ namespace FuXing
             modelNameInput.Text = "";
             devModeSwitch.Checked = false;
             contextWindowSelect.SelectedIndex = 2; // 128K
-            maxToolRoundsSelect.SelectedIndex = 1; // 10
+            maxToolRoundsSelect.SelectedIndex = 2; // 50
             approvalSwitch.Checked = true;
             startupWarningSwitch.Checked = true;
             AntdUI.Notification.info(this, "提示", "已重置为默认设置", autoClose: 2);
@@ -505,10 +505,10 @@ namespace FuXing
             // 最大迭代轮次
             switch (config.MaxToolRounds)
             {
-                case 5: maxToolRoundsSelect.SelectedIndex = 0; break;
-                case 20: maxToolRoundsSelect.SelectedIndex = 2; break;
-                case 30: maxToolRoundsSelect.SelectedIndex = 3; break;
-                default: maxToolRoundsSelect.SelectedIndex = 1; break; // 10
+                case 10: maxToolRoundsSelect.SelectedIndex = 0; break;
+                case 20: maxToolRoundsSelect.SelectedIndex = 1; break;
+                case 100: maxToolRoundsSelect.SelectedIndex = 3; break;
+                default: maxToolRoundsSelect.SelectedIndex = 2; break; // 50
             }
         }
 
@@ -582,13 +582,13 @@ namespace FuXing
             }
 
             // 解析最大迭代轮次
-            int maxToolRounds = 10;
+            int maxToolRounds = 50;
             switch (maxToolRoundsSelect.SelectedIndex)
             {
-                case 0: maxToolRounds = 5; break;
-                case 1: maxToolRounds = 10; break;
-                case 2: maxToolRounds = 20; break;
-                case 3: maxToolRounds = 30; break;
+                case 0: maxToolRounds = 10; break;
+                case 1: maxToolRounds = 20; break;
+                case 2: maxToolRounds = 50; break;
+                case 3: maxToolRounds = 100; break;
             }
 
             var config = new ConfigLoader.Config

@@ -71,8 +71,7 @@ namespace FuXing
             }
             else
             {
-            int? idx = arguments?["table_index"]?.Type == JTokenType.Integer
-                ? (int?)arguments["table_index"] : null;
+            int? idx = OptionalNullableInt(arguments, "table_index");
 
             if (idx.HasValue)
             {

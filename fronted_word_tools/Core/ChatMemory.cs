@@ -204,6 +204,73 @@ namespace FuXing
             _history.Clear();
         }
 
+        // ── 会话持久化 ──
+
+        /// <summary>导出历史消息为持久化格式（不含 System Prompt）</summary>
+        public List<SessionMessage> ExportMessages()
+        {
+            var result = new List<SessionMessage>();
+            foreach (var msg in _history)
+            {
+                var sm = new SessionMessage
+                {
+                    Role = msg.Role,
+                    Content = msg.Content,
+                    ToolCallId = msg.ToolCallId,
+                    ToolName = msg.ToolName
+                };
+                if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
+                {
+                    sm.ToolCalls = new List<SessionToolCall>();
+                    foreach (var tc in msg.ToolCalls)
+                    {
+                        sm.ToolCalls.Add(new SessionToolCall
+                        {
+                            Id = tc.Id,
+                            FunctionName = tc.FunctionName,
+                            ArgumentsJson = tc.Arguments?.ToString(Newtonsoft.Json.Formatting.None) ?? "{}"
+                        });
+                    }
+                }
+                result.Add(sm);
+            }
+            return result;
+        }
+
+        /// <summary>从持久化格式导入历史消息（先清空当前历史）</summary>
+        public void ImportMessages(List<SessionMessage> messages)
+        {
+            _history.Clear();
+            if (messages == null) return;
+            foreach (var sm in messages)
+            {
+                var msg = new MemoryMessage
+                {
+                    Role = sm.Role,
+                    Content = sm.Content,
+                    ToolCallId = sm.ToolCallId,
+                    ToolName = sm.ToolName
+                };
+                if (sm.ToolCalls != null && sm.ToolCalls.Count > 0)
+                {
+                    msg.ToolCalls = new List<ToolCallRequest>();
+                    foreach (var tc in sm.ToolCalls)
+                    {
+                        Newtonsoft.Json.Linq.JObject args;
+                        try { args = Newtonsoft.Json.Linq.JObject.Parse(tc.ArgumentsJson ?? "{}"); }
+                        catch { args = new Newtonsoft.Json.Linq.JObject(); }
+                        msg.ToolCalls.Add(new ToolCallRequest
+                        {
+                            Id = tc.Id,
+                            FunctionName = tc.FunctionName,
+                            Arguments = args
+                        });
+                    }
+                }
+                _history.Add(msg);
+            }
+        }
+
         // ── 上下文准备（发送给 API 前调用） ──
 
         /// <summary>

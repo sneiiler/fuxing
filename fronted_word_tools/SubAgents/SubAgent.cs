@@ -101,7 +101,16 @@ namespace FuXing.SubAgents
                 {
                     memory.AddAssistantMessage(llm.Content, llm.ToolCalls);
 
-                    foreach (var tc in llm.ToolCalls)
+                    // 单轮工具调用数量限制，防止 LLM 一次性生成过多工具调用
+                    const int MaxToolCallsPerRound = 8;
+                    var toolCalls = llm.ToolCalls;
+                    if (toolCalls.Count > MaxToolCallsPerRound)
+                    {
+                        Debug.WriteLine($"[{agentLabel}] 单轮工具调用数 {toolCalls.Count} 超过限制 {MaxToolCallsPerRound}，截断处理");
+                        toolCalls = toolCalls.GetRange(0, MaxToolCallsPerRound);
+                    }
+
+                    foreach (var tc in toolCalls)
                     {
                         Debug.WriteLine($"[{agentLabel}] 调用工具: {tc.FunctionName} (id={tc.Id})");
                         DebugLogger.Instance.LogToolCall(tc.FunctionName, tc.Id, tc.Arguments);

@@ -124,6 +124,22 @@ namespace FuXing
             return args?[key] as JObject;
         }
 
+        /// <summary>提取可选的 nullable int 参数（未提供时返回 null）</summary>
+        protected static int? OptionalNullableInt(JObject args, string key)
+        {
+            var token = args?[key];
+            if (token == null || token.Type == JTokenType.Null) return null;
+            return token.Value<int>();
+        }
+
+        /// <summary>提取可选的 nullable float 参数（未提供时返回 null）</summary>
+        protected static float? OptionalNullableFloat(JObject args, string key)
+        {
+            var token = args?[key];
+            if (token == null || token.Type == JTokenType.Null) return null;
+            return token.Value<float>();
+        }
+
         // ═══════════════════════════════════════════════════════════════        //  插入位置守卫
         // ═════════════════════════════════════════════════════════════
 

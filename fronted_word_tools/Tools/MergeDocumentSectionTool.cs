@@ -2,8 +2,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Threading.Tasks;
 
-using Missing = System.Type;
-
 namespace FuXing
 {
     /// <summary>将外部文档（或其中某个章节）合入当前文档的指定位置</summary>
@@ -126,7 +124,7 @@ namespace FuXing
             return Task.FromResult(
                 ToolExecutionResult.Ok(
                     $"已将整个文件合入主文档「{mainDocName}」（插入位置: {insertPos}，插入字符数: {insertedChars}）。{extra}\n" +
-                    $"源文件: {System.IO.Path.GetFileName(sourceFilePath)}（源文件已关闭，后续操作请始终基于当前活动文档「{mainDocName}」）"));
+                    $"源文件: {System.IO.Path.GetFileName(sourceFilePath)}"));
         }
 
         /// <summary>合入源文件中指定章节（通过 Copy/Paste 保留格式）</summary>
@@ -139,9 +137,8 @@ namespace FuXing
             bool excludeSourceHeading,
             int deletedChars)
         {
-            // 以只读不可见方式打开源文档
-            var m = Missing.Missing;
-            var sourceDoc = app.Documents.Open(sourceFilePath, false, true, false, m, m, m, m, m, m, m, false);
+            var (sourceDoc, shouldCloseSourceDoc) = DocumentHelper.GetOrOpenReadOnly(app, sourceFilePath);
+
             try
             {
                 // 在源文档中定位章节范围
@@ -175,15 +172,16 @@ namespace FuXing
                 return Task.FromResult(
                     ToolExecutionResult.Ok(
                         $"已将章节「{sourceHeading}」合入主文档「{mainDocName}」（插入位置: {insertPos}，章节字符数: {sectionLength}）。{skipNote}{extra}\n" +
-                        $"源文件: {System.IO.Path.GetFileName(sourceFilePath)}（源文件已关闭，后续操作请始终基于当前活动文档「{mainDocName}」）"));
+                        $"源文件: {System.IO.Path.GetFileName(sourceFilePath)}"));
             }
             finally
             {
-                sourceDoc.Close(NetOffice.WordApi.Enums.WdSaveOptions.wdDoNotSaveChanges);
-                // 显式激活主文档，防止 Word 焦点漂移
-                try { mainDoc.Activate(); } catch { }
+                if (shouldCloseSourceDoc)
+                    sourceDoc.Close(NetOffice.WordApi.Enums.WdSaveOptions.wdDoNotSaveChanges);
             }
         }
+
+
 
         /// <summary>在合入内容起始位置添加批注，标注合入时间和来源</summary>
         private void AddMergeComment(

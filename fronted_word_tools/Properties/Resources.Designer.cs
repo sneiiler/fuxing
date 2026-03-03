@@ -221,6 +221,16 @@ namespace FuXing.Properties {
         }
         
         /// <summary>
+        ///   查找 System.Drawing.Bitmap 类型的本地化资源。
+        /// </summary>
+        internal static System.Drawing.Bitmap fuxing_logo {
+            get {
+                object obj = ResourceManager.GetObject("fuxing_logo", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
         /// 获取图标的Base64编码字符串，用于Ribbon XML
         /// </summary>
         /// <param name="iconName">图标资源名称</param>

@@ -39,9 +39,9 @@ WizardStyle=modern
 DisableProgramGroupPage=yes
 ; 卸载时显示
 UninstallDisplayName={#MyAppName} Word 插件
-; 安装前关闭 Word
+; 安装前关闭 Word / WPS
 CloseApplications=force
-CloseApplicationsFilter=WINWORD.EXE
+CloseApplicationsFilter=WINWORD.EXE,wps.exe
 ; 架构
 ArchitecturesAllowed=x64compatible or x86compatible
 ; 版本限制：需要 Windows 7+
@@ -87,6 +87,20 @@ Root: HKCU; Subkey: "Software\Classes\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0";                             ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\ProgId";                                             ValueType: string; ValueName: "";               ValueData: "FuXing.Connect"
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\Implemented Categories\{{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}"; ValueType: none;                                                                                                        Flags: uninsdeletekey
+; Wow6432Node（32 位 WPS 兼容）
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}";                                        ValueType: string; ValueName: ""; ValueData: "FuXing.Connect";                                                               Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "";               ValueData: "mscoree.dll";                                                     Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "ThreadingModel";  ValueData: "Both"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "Class";           ValueData: "FuXing.Connect"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "Assembly";        ValueData: "FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "RuntimeVersion";  ValueData: "v4.0.30319"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32";                         ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0";                 ValueType: string; ValueName: "Class";           ValueData: "FuXing.Connect"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0";                 ValueType: string; ValueName: "Assembly";        ValueData: "FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0";                 ValueType: string; ValueName: "RuntimeVersion";  ValueData: "v4.0.30319"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\InprocServer32\1.0.0.0";                 ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\ProgId";                                 ValueType: string; ValueName: "";               ValueData: "FuXing.Connect"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}\Implemented Categories\{{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}"; ValueType: none;                                                                                            Flags: uninsdeletekey
 ; ProgId -> CLSID
 Root: HKCU; Subkey: "Software\Classes\FuXing.Connect";                                                                                     ValueType: string; ValueName: "";               ValueData: "FuXing.Connect";                                                  Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\FuXing.Connect\CLSID";                                                                               ValueType: string; ValueName: "";               ValueData: "{{C9F68F90-E8C4-4A8B-9A8B-5E6F7D8E9F0A}"
@@ -107,6 +121,20 @@ Root: HKCU; Subkey: "Software\Classes\CLSID\{{03326A51-B257-3623-917E-25A086B271
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0";                               ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\ProgId";                                               ValueType: string; ValueName: "";               ValueData: "FuXing.TaskPaneControl"
 Root: HKCU; Subkey: "Software\Classes\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\Implemented Categories\{{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}"; ValueType: none;                                                                                                        Flags: uninsdeletekey
+; Wow6432Node（32 位 WPS 兼容）
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}";                                          ValueType: string; ValueName: "";               ValueData: "FuXing.TaskPaneControl";                                          Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "";               ValueData: "mscoree.dll";                                                     Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "ThreadingModel";  ValueData: "Both"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "Class";           ValueData: "FuXing.TaskPaneControl"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "Assembly";        ValueData: "FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "RuntimeVersion";  ValueData: "v4.0.30319"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32";                           ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0";                   ValueType: string; ValueName: "Class";           ValueData: "FuXing.TaskPaneControl"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0";                   ValueType: string; ValueName: "Assembly";        ValueData: "FuXing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0";                   ValueType: string; ValueName: "RuntimeVersion";  ValueData: "v4.0.30319"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\InprocServer32\1.0.0.0";                   ValueType: string; ValueName: "CodeBase";        ValueData: "file:///{code:ConvertBackslash|{app}\FuXing.dll}"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\ProgId";                                   ValueType: string; ValueName: "";               ValueData: "FuXing.TaskPaneControl"
+Root: HKCU; Subkey: "Software\Classes\Wow6432Node\CLSID\{{03326A51-B257-3623-917E-25A086B271B0}\Implemented Categories\{{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}"; ValueType: none;                                                                                            Flags: uninsdeletekey
 ; ProgId -> CLSID
 Root: HKCU; Subkey: "Software\Classes\FuXing.TaskPaneControl";                                                                             ValueType: string; ValueName: "";               ValueData: "FuXing.TaskPaneControl";                                          Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\FuXing.TaskPaneControl\CLSID";                                                                       ValueType: string; ValueName: "";               ValueData: "{{03326A51-B257-3623-917E-25A086B271B0}"
@@ -117,6 +145,15 @@ Root: HKCU; Subkey: "Software\Classes\FuXing.TaskPaneControl\CLSID";            
 Root: HKCU; Subkey: "Software\Microsoft\Office\Word\Addins\FuXing.Connect"; ValueType: string; ValueName: "Description";    ValueData: "福星插件 - AI文本纠错、标准校验、表格格式化";  Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Microsoft\Office\Word\Addins\FuXing.Connect"; ValueType: string; ValueName: "FriendlyName";   ValueData: "福星"
 Root: HKCU; Subkey: "Software\Microsoft\Office\Word\Addins\FuXing.Connect"; ValueType: dword;  ValueName: "LoadBehavior";   ValueData: "3"
+
+; ============================================================
+; WPS 文字 Add-in 注册
+; ============================================================
+Root: HKCU; Subkey: "Software\Kingsoft\Office\WPS\Addins\FuXing.Connect"; ValueType: string; ValueName: "Description";    ValueData: "福星插件 - AI文本纠错、标准校验、表格格式化";  Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Kingsoft\Office\WPS\Addins\FuXing.Connect"; ValueType: string; ValueName: "FriendlyName";   ValueData: "福星"
+Root: HKCU; Subkey: "Software\Kingsoft\Office\WPS\Addins\FuXing.Connect"; ValueType: dword;  ValueName: "LoadBehavior";   ValueData: "3"
+; WPS 白名单（WPS 只加载白名单中的 Add-in）
+Root: HKCU; Subkey: "Software\Kingsoft\Office\WPS\AddinsWL"; ValueType: string; ValueName: "FuXing.Connect"; ValueData: ""
 
 [Icons]
 Name: "{group}\卸载{#MyAppName}"; Filename: "{uninstallexe}"
@@ -154,13 +191,13 @@ begin
   end;
 end;
 
-// 安装前关闭 Word（如果正在运行）
-procedure CloseWordIfRunning();
+// 安装前关闭 Word / WPS（如果正在运行）
+procedure CloseWordAndWpsIfRunning();
 var
   ResultCode: Integer;
 begin
   Exec('taskkill', '/f /im WINWORD.EXE', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  // 等待 Word 完全退出
+  Exec('taskkill', '/f /im wps.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1000);
 end;
 
@@ -168,11 +205,11 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
   begin
-    CloseWordIfRunning();
+    CloseWordAndWpsIfRunning();
   end;
 end;
 
-// 卸载前关闭 Word
+// 卸载前关闭 Word / WPS
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
@@ -180,6 +217,7 @@ begin
   if CurUninstallStep = usUninstall then
   begin
     Exec('taskkill', '/f /im WINWORD.EXE', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill', '/f /im wps.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(1000);
   end;
 end;

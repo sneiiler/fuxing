@@ -110,6 +110,14 @@ namespace FuXing
         /// <summary>Word 应用程序引用（供 ToolRegistry 调用）</summary>
         public NetOffice.WordApi.Application WordApplication => _wordApplication;
 
+        /// <summary>
+        /// 用户发送消息时的光标快照。
+        /// 工具执行期间用户可能移动光标，因此所有需要"当前光标位置"的工具
+        /// 应读取此快照而非实时 Selection。
+        /// 由 TaskPaneControl 在发送消息时设置，助手回合结束后清除。
+        /// </summary>
+        public CursorSnapshot SelectionSnapshot { get; set; }
+
         public Connect()
         {
             CurrentInstance = this;
@@ -1047,9 +1055,12 @@ namespace FuXing
 
                 ctx.Visible = newVisible;
 
-                // 面板变为可见时触发 LLM 问候健康检查
+                // 面板变为可见时确保安全提示 + LLM 问候健康检查
                 if (newVisible)
+                {
+                    ctx.Control.ShowStartupWarningIfNeeded();
                     ctx.Control.CheckAndRequestGreeting();
+                }
 
                 System.Diagnostics.Debug.WriteLine($"[toggle] After={ctx.Visible}");
             }

@@ -1,6 +1,8 @@
 using FuXing.SubAgents;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,10 +10,13 @@ using System.Threading.Tasks;
 namespace FuXing
 {
     /// <summary>
-    /// 主 Agent 可调用的子智能体工具。
-    /// 启动一个拥有独立上下文的子智能体，将文档数据注入后执行分析任务，
-    /// 完成后将结果作为 tool_result 返回给主 Agent。
-    /// 子智能体可复用主插件的只读工具获取更多文档信息。
+    /// 主 Agent 可调用的动态子智能体工具。
+    /// 主 Agent（大模型）自行决定何时启用子智能体，并动态生成：
+    ///   - agent_name: 子智能体名称（用于追踪）
+    ///   - system_prompt: 子智能体的角色和职责定义
+    ///   - task_instruction: 具体操作指令
+    ///   - allowed_tools: 授权给子智能体的工具白名单
+    /// 子智能体拥有独立上下文，完成后将结果作为 tool_result 返回给主 Agent。
     /// </summary>
     public class RunSubAgentTool : ToolBase
     {
@@ -21,105 +26,126 @@ namespace FuXing
         /// </summary>
         public static ISubAgentProgress ProgressSink { get; set; }
 
+        /// <summary>
+        /// 禁止子智能体接触的工具黑名单（防止递归调用或危险操作）。
+        /// </summary>
+        private static readonly HashSet<string> ForbiddenTools = new HashSet<string>
+        {
+            "run_sub_agent",          // 禁止子智能体递归创建子智能体
+            "execute_word_script",    // 危险：任意代码执行
+            "batch_operations",       // 危险：破坏性批量操作
+            "delete_section",         // 危险：删除章节
+        };
+
         public override string Name => "run_sub_agent";
         public override string DisplayName => "运行子智能体";
         public override ToolCategory Category => ToolCategory.Advanced;
 
         public override string Description =>
-            "Launch a read-only sub-agent for document analysis (separate context, cannot modify document). " +
-            "Tasks: analyze_structure (heading levels, formatting consistency), " +
-            "extract_key_info (data, dates, terms, cross-doc consistency), custom (describe in prompt).";
+            "Launch a sub-agent with isolated context for complex tasks (e.g. cross-checking data across 50+ paragraphs, " +
+            "structural analysis, exhaustive search). YOU dynamically define its role (system_prompt), task (task_instruction), " +
+            "and which tools it can use (allowed_tools). The sub-agent works independently and returns only the final result. " +
+            "Use this when a task requires extensive reading/searching that would bloat your main context.";
 
         public override JObject Parameters => new JObject
         {
             ["type"] = "object",
             ["properties"] = new JObject
             {
-                ["task"] = new JObject
+                ["agent_name"] = new JObject
                 {
                     ["type"] = "string",
-                    ["enum"] = new JArray("analyze_structure", "extract_key_info", "custom"),
-                    ["description"] = "任务类型：analyze_structure=结构分析, extract_key_info=关键信息提取, custom=自定义"
+                    ["description"] = "给子智能体起的名称（用于日志追踪，如 'AmountChecker', 'FormatAuditor'）"
                 },
-                ["prompt"] = new JObject
+                ["system_prompt"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "给子智能体的具体指令"
+                    ["description"] = "动态生成的系统提示词。必须明确定义：1) 角色（如'你是一个合同金额核实专家'）; " +
+                                      "2) 核心职责; 3) 输出格式要求。要求它只输出最终清洗后的结果，不要描述过程。"
                 },
-                ["include_structure"] = new JObject
+                ["task_instruction"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "发给子智能体的具体操作指令"
+                },
+                ["allowed_tools"] = new JObject
+                {
+                    ["type"] = "array",
+                    ["items"] = new JObject { ["type"] = "string" },
+                    ["description"] = "授权给子智能体使用的工具名称列表（建议只赋予只读工具如 " +
+                                      "document_graph, get_document_info, get_selected_text, read_table, search_text 等）。" +
+                                      "留空则为纯推理模式（不使用任何工具）。"
+                },
+                ["include_document_text"] = new JObject
                 {
                     ["type"] = "boolean",
-                    ["description"] = "注入文档结构元数据（默认 true）"
+                    ["description"] = "是否将文档全文（前 8000 字符）预注入到子智能体上下文中（默认 false，推荐让它自己用工具获取）"
                 },
-                ["include_text"] = new JObject
-                {
-                    ["type"] = "boolean",
-                    ["description"] = "注入文档全文（默认因task而异）"
-                },
-                ["max_text_chars"] = new JObject
+                ["max_rounds"] = new JObject
                 {
                     ["type"] = "integer",
-                    ["description"] = "文本最大字符数（默认 8000）"
+                    ["description"] = "子智能体最大对话轮次（含工具调用循环，默认 5，推荐 3-8）"
                 }
             },
-            ["required"] = new JArray("task")
+            ["required"] = new JArray("system_prompt", "task_instruction")
         };
 
         public override async Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
             // ── 参数解析 ──
-            string taskStr = RequireString(arguments, "task");
-            string prompt = OptionalString(arguments, "prompt", "");
+            string agentName = OptionalString(arguments, "agent_name", "SubAgent");
+            string systemPrompt = RequireString(arguments, "system_prompt");
+            string taskInstruction = RequireString(arguments, "task_instruction");
+            int maxRounds = OptionalInt(arguments, "max_rounds", 5);
+            bool includeDocText = OptionalBool(arguments, "include_document_text", false);
 
-            SubAgentTask task;
-            switch (taskStr)
+            // 解析工具白名单
+            var allowedToolNames = new List<string>();
+            var allowedToolsToken = arguments["allowed_tools"] as JArray;
+            if (allowedToolsToken != null)
             {
-                case "analyze_structure": task = SubAgentTask.AnalyzeStructure; break;
-                case "extract_key_info": task = SubAgentTask.ExtractKeyInfo; break;
-                case "custom": task = SubAgentTask.Custom; break;
-                default: throw new ToolArgumentException($"未知任务类型: {taskStr}");
+                foreach (var item in allowedToolsToken)
+                    allowedToolNames.Add(item.ToString());
             }
 
-            bool includeStructure = OptionalBool(arguments, "include_structure", true);
-            bool defaultIncludeText = task != SubAgentTask.AnalyzeStructure;
-            bool includeText = OptionalBool(arguments, "include_text", defaultIncludeText);
-            int maxTextChars = OptionalInt(arguments, "max_text_chars", 8000);
+            // 移除黑名单中的工具（静默过滤，不报错）
+            allowedToolNames.RemoveAll(name => ForbiddenTools.Contains(name));
 
-            // ── 文档数据提取（UI 线程，Word COM） ──
-            var app = connect.WordApplication;
-            if (app.Documents.Count == 0)
-                throw new ToolArgumentException("没有打开的文档");
-            var doc = app.ActiveDocument;
-
-            DocumentStructure structure = null;
-            if (includeStructure)
-                structure = DocumentStructureExtractor.Extract(doc);
-
-            string documentText = null;
-            if (includeText)
+            // ── 文档上下文注入（可选） ──
+            string documentContext = null;
+            if (includeDocText)
             {
-                string fullText = doc.Content.Text;
-                documentText = fullText.Length > maxTextChars
-                    ? TruncateAtParagraph(fullText, maxTextChars)
-                    : fullText;
+                var app = connect.WordApplication;
+                if (app.Documents.Count > 0)
+                {
+                    var doc = app.ActiveDocument;
+                    string fullText = doc.Content.Text;
+                    int maxChars = 8000;
+                    documentContext = fullText.Length > maxChars
+                        ? TruncateAtParagraph(fullText, maxChars)
+                        : fullText;
+                }
             }
 
-            // ── 准备工具共用：只读工具子集 ──
+            // ── 根据白名单过滤工具定义 ──
             var toolRegistry = connect.ToolRegistry;
-            JArray subAgentTools = toolRegistry.GetToolDefinitions(ToolCategory.Query);
+            JArray subAgentTools = null;
+            Func<string, JObject, Task<ToolExecutionResult>> toolExecutor = null;
 
-            // 工具执行委托：直接在当前（UI）线程上调用 ToolRegistry
-            Func<string, JObject, Task<ToolExecutionResult>> toolExecutor =
-                (name, args) => toolRegistry.ExecuteAsync(name, args);
+            if (allowedToolNames.Count > 0)
+            {
+                subAgentTools = toolRegistry.GetToolDefinitionsByName(allowedToolNames);
+                toolExecutor = (name, args) => toolRegistry.ExecuteAsync(name, args);
+            }
 
             // ── 启动子智能体（在 UI 线程上 async 运行，工具调用自然在 UI 线程） ──
             var request = new SubAgentRequest
             {
-                Task = task,
-                Prompt = prompt,
-                DocumentStructure = structure,
-                DocumentText = documentText,
-                MaxRounds = 5,
+                AgentName = agentName,
+                SystemPrompt = systemPrompt,
+                TaskInstruction = taskInstruction,
+                DocumentContext = documentContext,
+                MaxRounds = maxRounds,
                 ToolDefinitions = subAgentTools,
                 ToolExecutor = toolExecutor
             };
@@ -134,7 +160,7 @@ namespace FuXing
                     return ToolExecutionResult.Fail($"子智能体执行失败: {result.Output}");
 
                 var sb = new StringBuilder();
-                sb.AppendLine($"[子智能体分析完成] 任务={taskStr}, 轮次={result.RoundsUsed}, 估计token={result.EstimatedTokens}");
+                sb.AppendLine($"[子智能体 {agentName} 完成] 轮次={result.RoundsUsed}, 估计token={result.EstimatedTokens}");
                 sb.AppendLine();
                 sb.Append(result.Output);
 

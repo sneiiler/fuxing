@@ -6,7 +6,7 @@ namespace FuXing
 {
     /// <summary>
     /// Word 文档结构操作的公共辅助类。
-    /// 提取自 DeleteSectionTool / NavigateToHeadingTool / MergeDocumentSectionTool / ReadSectionTextTool
+    /// 提取自 DeleteSectionTool / FormatContentTool / DocumentGraphTool
     /// 中重复出现的标题查找和章节范围计算逻辑。
     /// </summary>
     public static class DocumentHelper
@@ -120,13 +120,26 @@ namespace FuXing
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// 以只读方式打开外部文档。调用方负责在不需要时关闭。
+        /// 获取已打开的文档或以只读方式临时打开。
+        /// 返回 (doc, shouldClose)：shouldClose=true 表示文档是本次临时打开的，调用方用完后应关闭。
         /// </summary>
-        public static Document OpenReadOnly(Application app, string filePath)
+        public static (Document Doc, bool ShouldClose) GetOrOpenReadOnly(Application app, string filePath)
         {
+            string targetPath = System.IO.Path.GetFullPath(filePath).TrimEnd('\\');
+
+            foreach (Document doc in app.Documents)
+            {
+                string openPath;
+                try { openPath = System.IO.Path.GetFullPath(doc.FullName).TrimEnd('\\'); }
+                catch { continue; }
+
+                if (string.Equals(openPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                    return (doc, false);
+            }
+
             var m = System.Type.Missing;
-            return app.Documents.Open(
-                filePath, false, true, false, m, m, m, m, m, m, m, false);
+            var opened = app.Documents.Open(filePath, false, true, false, m, m, m, m, m, m, m, false);
+            return (opened, true);
         }
     }
 }

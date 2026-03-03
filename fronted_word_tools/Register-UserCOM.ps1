@@ -29,33 +29,40 @@ function Register-ComClass {
         [string]$RuntimeVer,
         [string]$ManagedCATID
     )
-    $clsidRoot  = "HKCU:\Software\Classes\CLSID\$CLSID"
+
+    # 同时在普通路径和 Wow6432Node 路径注册，确保 32 位应用（WPS）也能发现
+    $clsidRoots = @(
+        "HKCU:\Software\Classes\CLSID\$CLSID",
+        "HKCU:\Software\Classes\Wow6432Node\CLSID\$CLSID"
+    )
     $progIdRoot = "HKCU:\Software\Classes\$ProgId"
 
-    # CLSID
-    New-Item -Path $clsidRoot -Force | Out-Null
-    Set-ItemProperty -Path $clsidRoot -Name "(Default)" -Value $ClassName
+    foreach ($clsidRoot in $clsidRoots) {
+        # CLSID
+        New-Item -Path $clsidRoot -Force | Out-Null
+        Set-ItemProperty -Path $clsidRoot -Name "(Default)" -Value $ClassName
 
-    $inproc = "$clsidRoot\InprocServer32"
-    New-Item -Path $inproc -Force | Out-Null
-    Set-ItemProperty -Path $inproc -Name "(Default)"       -Value "mscoree.dll"
-    Set-ItemProperty -Path $inproc -Name "ThreadingModel"   -Value "Both"
-    Set-ItemProperty -Path $inproc -Name "Class"            -Value $ClassName
-    Set-ItemProperty -Path $inproc -Name "Assembly"         -Value $AssemblyName
-    Set-ItemProperty -Path $inproc -Name "RuntimeVersion"   -Value $RuntimeVer
-    Set-ItemProperty -Path $inproc -Name "CodeBase"         -Value $CodeBase
+        $inproc = "$clsidRoot\InprocServer32"
+        New-Item -Path $inproc -Force | Out-Null
+        Set-ItemProperty -Path $inproc -Name "(Default)"       -Value "mscoree.dll"
+        Set-ItemProperty -Path $inproc -Name "ThreadingModel"   -Value "Both"
+        Set-ItemProperty -Path $inproc -Name "Class"            -Value $ClassName
+        Set-ItemProperty -Path $inproc -Name "Assembly"         -Value $AssemblyName
+        Set-ItemProperty -Path $inproc -Name "RuntimeVersion"   -Value $RuntimeVer
+        Set-ItemProperty -Path $inproc -Name "CodeBase"         -Value $CodeBase
 
-    $inprocVer = "$inproc\1.0.0.0"
-    New-Item -Path $inprocVer -Force | Out-Null
-    Set-ItemProperty -Path $inprocVer -Name "Class"          -Value $ClassName
-    Set-ItemProperty -Path $inprocVer -Name "Assembly"       -Value $AssemblyName
-    Set-ItemProperty -Path $inprocVer -Name "RuntimeVersion" -Value $RuntimeVer
-    Set-ItemProperty -Path $inprocVer -Name "CodeBase"       -Value $CodeBase
+        $inprocVer = "$inproc\1.0.0.0"
+        New-Item -Path $inprocVer -Force | Out-Null
+        Set-ItemProperty -Path $inprocVer -Name "Class"          -Value $ClassName
+        Set-ItemProperty -Path $inprocVer -Name "Assembly"       -Value $AssemblyName
+        Set-ItemProperty -Path $inprocVer -Name "RuntimeVersion" -Value $RuntimeVer
+        Set-ItemProperty -Path $inprocVer -Name "CodeBase"       -Value $CodeBase
 
-    New-Item -Path "$clsidRoot\ProgId" -Force | Out-Null
-    Set-ItemProperty -Path "$clsidRoot\ProgId" -Name "(Default)" -Value $ProgId
+        New-Item -Path "$clsidRoot\ProgId" -Force | Out-Null
+        Set-ItemProperty -Path "$clsidRoot\ProgId" -Name "(Default)" -Value $ProgId
 
-    New-Item -Path "$clsidRoot\Implemented Categories\$ManagedCATID" -Force | Out-Null
+        New-Item -Path "$clsidRoot\Implemented Categories\$ManagedCATID" -Force | Out-Null
+    }
 
     # ProgId -> CLSID
     New-Item -Path $progIdRoot -Force | Out-Null
@@ -78,12 +85,24 @@ Register-ComClass -CLSID "{03326A51-B257-3623-917E-25A086B271B0}" `
                   -CodeBase $CodeBase -AssemblyName $AssemblyName `
                   -RuntimeVer $RuntimeVer -ManagedCATID $ManagedCATID
 
-# 3. Office Add-in
+# 3. Office Add-in（Microsoft Word）
 $addinKey = "HKCU:\Software\Microsoft\Office\Word\Addins\FuXing.Connect"
 New-Item -Path $addinKey -Force | Out-Null
 Set-ItemProperty -Path $addinKey -Name "Description"    -Value ([string]::new([char[]]@(0x798F,0x661F,0x63D2,0x4EF6,0x0020,0x002D,0x0020,0x0041,0x0049,0x6587,0x672C,0x7EA0,0x9519,0x3001,0x6807,0x51C6,0x6821,0x9A8C,0x3001,0x8868,0x683C,0x683C,0x5F0F,0x5316)))
 Set-ItemProperty -Path $addinKey -Name "FriendlyName"   -Value ([string]::new([char[]]@(0x798F,0x661F)))
 Set-ItemProperty -Path $addinKey -Name "LoadBehavior"   -Value 3 -Type DWord
 
-Write-Host "  [OK] User-level COM registered"
+# 4. WPS 文字 Add-in
+$wpsAddinKey = "HKCU:\Software\Kingsoft\Office\WPS\Addins\FuXing.Connect"
+New-Item -Path $wpsAddinKey -Force | Out-Null
+Set-ItemProperty -Path $wpsAddinKey -Name "Description"    -Value ([string]::new([char[]]@(0x798F,0x661F,0x63D2,0x4EF6,0x0020,0x002D,0x0020,0x0041,0x0049,0x6587,0x672C,0x7EA0,0x9519,0x3001,0x6807,0x51C6,0x6821,0x9A8C,0x3001,0x8868,0x683C,0x683C,0x5F0F,0x5316)))
+Set-ItemProperty -Path $wpsAddinKey -Name "FriendlyName"   -Value ([string]::new([char[]]@(0x798F,0x661F)))
+Set-ItemProperty -Path $wpsAddinKey -Name "LoadBehavior"   -Value 3 -Type DWord
+
+# 5. WPS 白名单（WPS 只加载白名单中的 Add-in）
+$wpsWL = "HKCU:\Software\Kingsoft\Office\WPS\AddinsWL"
+New-Item -Path $wpsWL -Force | Out-Null
+New-ItemProperty -Path $wpsWL -Name "FuXing.Connect" -Value "" -PropertyType String -Force | Out-Null
+
+Write-Host "  [OK] User-level COM registered (Word + WPS)"
 Write-Host "       CodeBase = $CodeBase"

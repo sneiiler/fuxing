@@ -1,3 +1,4 @@
+using FuXing.Core;
 using Newtonsoft.Json.Linq;
 using System.Text;
 using NetOffice.WordApi;
@@ -15,7 +16,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Query;
 
         public override string Description =>
-            "Read table as structured Markdown or JSON. table_index: 1-based (omit = at cursor).";
+            "Read table as structured Markdown or JSON. table_index: 1-based (omit = at cursor). " +
+            "node_id: target Table node from document_graph (overrides table_index).";
 
         public override JObject Parameters => new JObject
         {
@@ -26,6 +28,11 @@ namespace FuXing
                 {
                     ["type"] = "integer",
                     ["description"] = "表格序号（从1开始），不指定则读取光标所在表格"
+                },
+                ["node_id"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "目标 Table 节点 ID（从 document_graph expand 获取，优先于 table_index）"
                 },
                 ["format"] = new JObject
                 {
@@ -45,11 +52,27 @@ namespace FuXing
                 throw new ToolArgumentException("文档中没有表格");
 
             string format = OptionalString(arguments, "format", "markdown");
-            int? idx = arguments?["table_index"]?.Type == JTokenType.Integer
-                ? (int?)arguments["table_index"] : null;
+            string nodeId = OptionalString(arguments, "node_id");
 
             Table table;
             int tableNum;
+
+            if (!string.IsNullOrWhiteSpace(nodeId))
+            {
+                // 通过图节点 ID 定位
+                table = ResolveTableByNodeId(doc, nodeId);
+                // 找到该表格的序号
+                tableNum = 0;
+                for (int i = 1; i <= tableCount; i++)
+                {
+                    if (doc.Tables[i].Range.Start == table.Range.Start)
+                    { tableNum = i; break; }
+                }
+            }
+            else
+            {
+            int? idx = arguments?["table_index"]?.Type == JTokenType.Integer
+                ? (int?)arguments["table_index"] : null;
 
             if (idx.HasValue)
             {
@@ -76,6 +99,7 @@ namespace FuXing
                     }
                 }
             }
+            } // end else (non-nodeId path)
 
             int rows = table.Rows.Count;
             int cols = table.Columns.Count;
@@ -175,6 +199,32 @@ namespace FuXing
                 arr.Add(row);
             }
             return arr.ToString(Newtonsoft.Json.Formatting.Indented);
+        }
+
+        /// <summary>通过节点 ID 定位表格</summary>
+        private Table ResolveTableByNodeId(Document doc, string nodeIdOrLabel)
+        {
+            var graph = DocumentGraphCache.Instance.GetOrBuildAsync(doc).Result;
+            var node = graph.ResolveNode(nodeIdOrLabel);
+            if (node == null)
+                throw new ToolArgumentException(
+                    $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) + expand 获取表格节点。");
+            if (node.Type != DocNodeType.Table)
+                throw new ToolArgumentException(
+                    $"节点 [{node.Id}] 类型为 {node.Type}，不是 Table 节点");
+            if (node.AnchorLabel == null)
+                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
+
+            var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+
+            foreach (Table table in doc.Tables)
+            {
+                if (table.Range.Start == range.Start)
+                    return table;
+            }
+
+            throw new ToolArgumentException(
+                $"无法定位节点 [{nodeIdOrLabel}] 对应的表格（可能文档已被编辑，请重建图）");
         }
     }
 }

@@ -1,8 +1,9 @@
 ﻿using AntdUI;
 using Newtonsoft.Json.Linq;
+using OpenAI;
 using System;
+using System.ClientModel;
 using System.Drawing;
-using System.Net.Http;
 using System.Windows.Forms;
 
 namespace FuXing
@@ -19,7 +20,6 @@ namespace FuXing
         private AntdUI.Select contextWindowSelect;
         private AntdUI.Select maxToolRoundsSelect;
         private System.Windows.Forms.ContextMenuStrip modelMenu;
-        private static readonly HttpClient _httpClient = new HttpClient();
 
         public event Action OnConfigUpdated;
 
@@ -64,17 +64,26 @@ namespace FuXing
                     e.Graphics.DrawLine(pen, 0, header.Height - 1, header.Width, header.Height - 1);
             };
 
+            var logoBox = new PictureBox
+            {
+                Image = new Bitmap(Properties.Resources.fuxing_logo, 28, 28),
+                SizeMode = PictureBoxSizeMode.CenterImage,
+                Size = new Size(28, 56),
+                Location = new Point(24, 0),
+                BackColor = Color.Transparent
+            };
             var titleLabel = new System.Windows.Forms.Label
             {
-                Text = "\u2699  插件设置",
+                Text = "插件设置",
                 Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold),
                 ForeColor = TITLE_FG,
                 AutoSize = false,
-                Size = new Size(300, 56),
-                Location = new Point(24, 0),
+                Size = new Size(260, 56),
+                Location = new Point(58, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
+            header.Controls.Add(logoBox);
             header.Controls.Add(titleLabel);
 
             // ═══════════════════════════════════
@@ -517,46 +526,38 @@ namespace FuXing
             fetchModelsBtn.Loading = true;
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/models");
-                if (!string.IsNullOrWhiteSpace(apiKey))
-                    request.Headers.Add("Authorization", $"Bearer {apiKey}");
+                var options = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
+                var openaiClient = new OpenAIClient(new ApiKeyCredential(apiKey ?? "dummy"), options);
+                var modelClient = openaiClient.GetOpenAIModelClient();
 
-                using (var response = await _httpClient.SendAsync(request))
+                var modelResult = await modelClient.GetModelsAsync();
+                var rawBody = modelResult.GetRawResponse().Content.ToString();
+                var root = JObject.Parse(rawBody);
+                var data = root["data"] as JArray;
+
+                modelMenu.Items.Clear();
+                if (data != null)
                 {
-                    if (!response.IsSuccessStatusCode)
+                    foreach (var item in data)
                     {
-                        AntdUI.Notification.warn(this, "提示", $"获取失败: HTTP {(int)response.StatusCode}", autoClose: 2);
-                        return;
-                    }
-
-                    var body = await response.Content.ReadAsStringAsync();
-                    var root = JObject.Parse(body);
-                    var data = root["data"] as JArray;
-
-                    modelMenu.Items.Clear();
-                    if (data != null)
-                    {
-                        foreach (var item in data)
+                        var modelId = item?["id"]?.ToString();
+                        if (!string.IsNullOrWhiteSpace(modelId))
                         {
-                            var modelId = item?["id"]?.ToString();
-                            if (!string.IsNullOrWhiteSpace(modelId))
-                            {
-                                var menuItem = new ToolStripMenuItem(modelId);
-                                menuItem.Click += (ms, me) => { modelNameInput.Text = modelId; };
-                                modelMenu.Items.Add(menuItem);
-                            }
+                            var menuItem = new ToolStripMenuItem(modelId);
+                            menuItem.Click += (ms, me) => { modelNameInput.Text = modelId; };
+                            modelMenu.Items.Add(menuItem);
                         }
                     }
+                }
 
-                    if (modelMenu.Items.Count == 0)
-                    {
-                        AntdUI.Notification.warn(this, "提示", "未获取到可用模型", autoClose: 2);
-                    }
-                    else
-                    {
-                        var location = modelNameInput.PointToScreen(new Point(0, modelNameInput.Height));
-                        modelMenu.Show(location);
-                    }
+                if (modelMenu.Items.Count == 0)
+                {
+                    AntdUI.Notification.warn(this, "提示", "未获取到可用模型", autoClose: 2);
+                }
+                else
+                {
+                    var location = modelNameInput.PointToScreen(new Point(0, modelNameInput.Height));
+                    modelMenu.Show(location);
                 }
             }
             catch (Exception ex)

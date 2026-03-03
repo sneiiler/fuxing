@@ -13,7 +13,10 @@ namespace FuXing
 
         public override string Description =>
             "Find and replace known text in the document. Supports wildcards (use_wildcards) and scope control (all/first). " +
-            "NOT for error detection/proofreading — use correct_text instead.";
+            "NOT for error detection/proofreading — use correct_text instead. " +
+            "NOTE: This tool operates on normal body text only. " +
+            "ContentControl placeholder text (e.g. \"单击或点击此处输入文字。\") cannot be replaced by this tool — " +
+            "use edit_document_text with insert_at_node/replace_node_content instead.";
 
         public override JObject Parameters => new JObject
         {
@@ -73,18 +76,36 @@ namespace FuXing
             var app = connect.WordApplication;
             var doc = app.ActiveDocument;
 
+            // 如果目标文本存在于 ContentControl 占位符中，拒绝操作并引导正确做法
+            if (IsContentControlPlaceholder(doc, findText))
+            {
+                return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Fail(
+                    $"「{findText}」是 ContentControl 的占位符文本，无法通过查找替换修改。" +
+                    "请使用 edit_document_text 的 replace_node_content 操作，通过 node_id 定位后直接写入内容。"));
+            }
+
             using (BeginTrackRevisions(connect))
             {
+                // wdFindStop：到达文档末尾即停止，不绕回。避免 CC 边界导致无限循环。
+                var range = doc.Content;
+                range.Find.ClearFormatting();
+                range.Find.Replacement.ClearFormatting();
+
+                var replaceMode = scope == "all" ? WdReplace.wdReplaceAll : WdReplace.wdReplaceOne;
+                bool found = range.Find.Execute(
+                    findText, matchCase, matchWholeWord, useWildcards,
+                    false, false, true, WdFindWrap.wdFindStop,
+                    false, replaceText, replaceMode);
+
                 if (scope == "all")
                 {
-                    int count = CountMatches(doc, findText, matchCase, matchWholeWord, useWildcards);
-                    ExecuteReplace(doc, findText, replaceText, matchCase, matchWholeWord, useWildcards, WdReplace.wdReplaceAll);
+                    // wdReplaceAll + wdFindStop 返回 true 表示至少替换了一处
                     return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok(
-                        $"已替换 {count} 处「{findText}」→「{replaceText}」"));
+                        found ? $"已替换所有「{findText}」→「{replaceText}」"
+                              : $"未找到「{findText}」，无替换"));
                 }
                 else
                 {
-                    bool found = ExecuteReplace(doc, findText, replaceText, matchCase, matchWholeWord, useWildcards, WdReplace.wdReplaceOne);
                     return System.Threading.Tasks.Task.FromResult(found
                         ? ToolExecutionResult.Ok($"已替换首个「{findText}」→「{replaceText}」")
                         : ToolExecutionResult.Fail($"未找到「{findText}」"));
@@ -92,47 +113,26 @@ namespace FuXing
             }
         }
 
-        private bool ExecuteReplace(Document doc, string findText, string replaceText,
-            bool matchCase, bool matchWholeWord, bool useWildcards, WdReplace replaceMode)
+        /// <summary>
+        /// 检查目标文本是否是某个 ContentControl 的占位符文本。
+        /// CC 占位符是结构化控件的默认显示文本，不能通过 Find/Replace 操作，
+        /// 必须通过 CC.Range.Text 赋值来写入真实内容。
+        /// </summary>
+        private static bool IsContentControlPlaceholder(Document doc, string findText)
         {
-            var range = doc.Content;
-            range.Find.ClearFormatting();
-            range.Find.Replacement.ClearFormatting();
-            // 使用全位置参数调用 Execute
-            return range.Find.Execute(
-                findText, matchCase, matchWholeWord, useWildcards,
-                false, false, true,
-                replaceMode == WdReplace.wdReplaceAll ? WdFindWrap.wdFindContinue : WdFindWrap.wdFindStop,
-                false, replaceText, replaceMode);
-        }
-
-        private int CountMatches(Document doc, string findText,
-            bool matchCase, bool matchWholeWord, bool useWildcards)
-        {
-            int count = 0;
-            var range = doc.Content;
-            range.Find.ClearFormatting();
-            range.Find.Text = findText;
-            range.Find.Forward = true;
-            range.Find.Wrap = WdFindWrap.wdFindStop;
-            range.Find.MatchCase = matchCase;
-            range.Find.MatchWholeWord = matchWholeWord;
-            range.Find.MatchWildcards = useWildcards;
-
-            while (range.Find.Execute())
+            foreach (ContentControl cc in doc.ContentControls)
             {
-                count++;
-                range.Start = range.End;
-                range.End = doc.Content.End;
-                range.Find.ClearFormatting();
-                range.Find.Text = findText;
-                range.Find.Forward = true;
-                range.Find.Wrap = WdFindWrap.wdFindStop;
-                range.Find.MatchCase = matchCase;
-                range.Find.MatchWholeWord = matchWholeWord;
-                range.Find.MatchWildcards = useWildcards;
+                if (!cc.ShowingPlaceholderText) continue;
+
+                // 跳过我们自己的 fxg 锚点 CC
+                string tag = cc.Tag;
+                if (tag != null && tag.StartsWith(FuXing.Core.AnchorManager.TagPrefix)) continue;
+
+                string ccText = cc.Range.Text;
+                if (ccText != null && ccText.Contains(findText))
+                    return true;
             }
-            return count;
+            return false;
         }
     }
 }

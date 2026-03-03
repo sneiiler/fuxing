@@ -18,7 +18,7 @@ namespace FuXing
         public override string Description =>
             "Execute multiple tool operations sequentially in one call to reduce round-trips. Stops on first failure. " +
             "Available tools: format_content, search_and_replace, edit_document_text, insert_table, insert_caption, " +
-            "insert_toc, insert_image, set_page_setup, set_header_footer, navigate_to_heading, delete_section";
+            "insert_toc, insert_image, set_page_setup, set_header_footer, document_graph, delete_section";
 
         public override JObject Parameters => new JObject
         {

@@ -1,3 +1,4 @@
+using FuXing.Core;
 using Newtonsoft.Json.Linq;
 using System.Text;
 using NetOffice.WordApi;
@@ -17,6 +18,7 @@ namespace FuXing
 
         public override string Description =>
             "Format document tables. table_index: 1-based (0=all, omit=at cursor). " +
+            "node_id: target Table node from document_graph (overrides table_index). " +
             "Customize font, alignment, row_height, borders, header style, shading. " +
             "No style params = default format (SimSun 12pt, centered, 0.5pt borders, bold gray header).";
 
@@ -29,6 +31,11 @@ namespace FuXing
                 {
                     ["type"] = "integer",
                     ["description"] = "表格序号（1开始），0=全部，不指定=光标所在表格"
+                },
+                ["node_id"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "目标 Table 节点 ID（从 document_graph expand 获取，优先于 table_index）"
                 },
                 ["font"] = new JObject
                 {
@@ -97,6 +104,24 @@ namespace FuXing
 
             if (tableCount == 0)
                 throw new ToolArgumentException("文档中没有表格");
+
+            string nodeId = OptionalString(arguments, "node_id");
+
+            // node_id 优先：通过图节点定位表格
+            if (!string.IsNullOrWhiteSpace(nodeId))
+            {
+                var table = ResolveTableByNodeId(doc, nodeId);
+                bool nodeCustomStyle = arguments?["font"] != null
+                    || arguments?["alignment"] != null
+                    || arguments?["row_height"] != null
+                    || arguments?["borders"] != null
+                    || arguments?["header"] != null
+                    || arguments?["shading_bg_color"] != null;
+                FormatSingleTable(connect, table, arguments, nodeCustomStyle);
+                return System.Threading.Tasks.Task.FromResult(
+                    ToolExecutionResult.Ok($"已格式化节点 [{nodeId}] 对应的表格" +
+                        (nodeCustomStyle ? "（自定义样式）" : "（默认样式）")));
+            }
 
             int? idx = arguments?["table_index"]?.Type == JTokenType.Integer
                 ? (int?)arguments["table_index"] : null;
@@ -249,6 +274,33 @@ namespace FuXing
             if (pt <= 3.00) return WdLineWidth.wdLineWidth300pt;
             if (pt <= 4.50) return WdLineWidth.wdLineWidth450pt;
             return WdLineWidth.wdLineWidth600pt;
+        }
+
+        /// <summary>通过节点 ID 定位表格</summary>
+        private Table ResolveTableByNodeId(Document doc, string nodeIdOrLabel)
+        {
+            var graph = DocumentGraphCache.Instance.GetOrBuildAsync(doc).Result;
+            var node = graph.ResolveNode(nodeIdOrLabel);
+            if (node == null)
+                throw new ToolArgumentException(
+                    $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) + expand 获取表格节点。");
+            if (node.Type != DocNodeType.Table)
+                throw new ToolArgumentException(
+                    $"节点 [{node.Id}] 类型为 {node.Type}，不是 Table 节点");
+            if (node.AnchorLabel == null)
+                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
+
+            var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+
+            // 在文档表格中找到该范围对应的表格
+            foreach (Table table in doc.Tables)
+            {
+                if (table.Range.Start == range.Start)
+                    return table;
+            }
+
+            throw new ToolArgumentException(
+                $"无法定位节点 [{nodeIdOrLabel}] 对应的表格（可能文档已被编辑，请重建图）");
         }
     }
 }

@@ -1,8 +1,11 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using OpenAI;
+using OpenAI.Chat;
 using System;
+using System.ClientModel;
 using System.Collections.Generic;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -56,11 +59,6 @@ namespace FuXing
             ServicePointManager.SecurityProtocol |=
                 SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11;
         }
-
-        private static readonly HttpClient _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(300)
-        };
 
         public TextCorrectionService(string baseUrl, string apiKey, string modelName)
         {
@@ -454,13 +452,11 @@ namespace FuXing
             return block.Substring(start, end - start).Trim();
         }
 
-        // ── HTTP 调用（普通 Chat Completion，不使用 tools） ──
+        // ── OpenAI SDK 调用（普通 Chat Completion，不使用 tools） ──
 
         private async Task<string> CallChatAsync(string text, string systemPrompt, CancellationToken cancellationToken = default)
         {
-            string url = $"{_baseUrl}/chat/completions";
-
-            var requestBody = new
+            var requestLogObj = new
             {
                 model = _modelName,
                 messages = new[]
@@ -472,49 +468,64 @@ namespace FuXing
                 max_tokens = 4096
             };
 
-            string json = JsonConvert.SerializeObject(requestBody);
+            string json = JsonConvert.SerializeObject(requestLogObj);
             System.Diagnostics.Debug.WriteLine($"纠错请求 JSON:\n{json}");
+            DebugLogger.Instance.LogLlmRequest("OpenAI.ChatClient.CompleteChatAsync", json);
 
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-
-            if (!string.IsNullOrEmpty(_apiKey))
-                request.Headers.Add("Authorization", $"Bearer {_apiKey}");
-
-            using (var response = await _httpClient.SendAsync(request, cancellationToken))
+            try
             {
-                string body = await response.Content.ReadAsStringAsync();
-                System.Diagnostics.Debug.WriteLine($"纠错响应 [{response.StatusCode}]:\n{body}");
+                var options = new OpenAIClientOptions { Endpoint = new Uri(_baseUrl) };
+                var openaiClient = new OpenAIClient(new ApiKeyCredential(_apiKey ?? "dummy"), options);
+                var chatClient = openaiClient.GetChatClient(_modelName);
 
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception($"HTTP {(int)response.StatusCode}: {body}");
+                var messages = new List<ChatMessage>
+                {
+                    new SystemChatMessage(systemPrompt ?? string.Empty),
+                    new UserChatMessage($"请检查并纠正以下文本：\n\n{text}")
+                };
 
-                var respObj = JsonConvert.DeserializeObject<ChatCompletionResponse>(body);
-                if (respObj?.Choices == null || respObj.Choices.Count == 0)
-                    throw new Exception("模型未返回有效响应");
+                var chatOptions = new ChatCompletionOptions
+                {
+                    Temperature = 0.1f,
+                    MaxOutputTokenCount = 4096
+                };
 
-                return respObj.Choices[0].Message?.Content ?? "";
+                var completionResult = await chatClient.CompleteChatAsync(messages, chatOptions, cancellationToken);
+                var completion = completionResult.Value;
+
+                string resultText = ExtractTextFromCompletion(completion);
+                var responseLogObj = new JObject
+                {
+                    ["finish_reason"] = completion.FinishReason.ToString(),
+                    ["content"] = resultText
+                };
+                DebugLogger.Instance.LogLlmResponse(responseLogObj.ToString(Formatting.None));
+
+                return resultText;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Instance.LogError("TextCorrectionService.CallChatAsync", ex);
+                throw;
             }
         }
 
-        // ── 最小化 Chat API 响应模型 ──
-
-        private class ChatMsg
+        private static string ExtractTextFromCompletion(ChatCompletion completion)
         {
-            [JsonProperty("content")]
-            public string Content { get; set; }
-        }
+            if (completion == null || completion.Content == null)
+                return string.Empty;
 
-        private class ChatChoice
-        {
-            [JsonProperty("message")]
-            public ChatMsg Message { get; set; }
-        }
-
-        private class ChatCompletionResponse
-        {
-            [JsonProperty("choices")]
-            public List<ChatChoice> Choices { get; set; }
+            var sb = new StringBuilder();
+            foreach (var part in completion.Content)
+            {
+                if (!string.IsNullOrEmpty(part.Text))
+                    sb.Append(part.Text);
+            }
+            return sb.ToString();
         }
     }
 

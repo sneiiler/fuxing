@@ -56,8 +56,8 @@ namespace FuXing
         /// <summary>只读工具不产生文档修改，不记入操作历史</summary>
         private static readonly HashSet<string> ReadOnlyTools = new HashSet<string>
         {
-            "get_document_info", "get_document_map", "get_selected_text",
-            "read_document_section", "read_table", "list_files", "load_skill"
+            "get_document_info", "document_graph", "get_selected_text",
+            "read_table", "list_files", "load_skill"
         };
 
         /// <summary>分类名称映射（用于 system prompt 中的分类标题）</summary>
@@ -118,6 +118,18 @@ namespace FuXing
             foreach (var tool in _tools.Values)
             {
                 if (allowed.Contains(tool.Category))
+                    definitions.Add(BuildToolDefinition(tool));
+            }
+            return definitions;
+        }
+
+        /// <summary>按工具名称白名单过滤的定义（用于动态子智能体的工具授权）</summary>
+        public JArray GetToolDefinitionsByName(IEnumerable<string> toolNames)
+        {
+            var definitions = new JArray();
+            foreach (var name in toolNames)
+            {
+                if (_tools.TryGetValue(name, out var tool))
                     definitions.Add(BuildToolDefinition(tool));
             }
             return definitions;

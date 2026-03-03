@@ -1,9 +1,10 @@
+using FuXing.Core;
 using Newtonsoft.Json.Linq;
 using System.Threading.Tasks;
 
 namespace FuXing
 {
-    /// <summary>删除文档中指定标题的整个章节（标题+内容）或仅删除标题下的内容</summary>
+    /// <summary>删除文档中指定章节（按标题名或节点 ID 定位）</summary>
     public class DeleteSectionTool : ToolBase
     {
         public override string Name => "delete_section";
@@ -12,7 +13,8 @@ namespace FuXing
         public override bool RequiresApproval => true;
 
         public override string Description =>
-            "Delete section by heading name. include_heading: true=delete all (default), false=clear body only. Track Changes mode.";
+            "Delete section by heading_name or node_id (from document_graph). " +
+            "include_heading: true=delete all (default), false=clear body only. Track Changes mode.";
 
         public override JObject Parameters => new JObject
         {
@@ -24,37 +26,83 @@ namespace FuXing
                     ["type"] = "string",
                     ["description"] = "要删除的章节标题名称（精确匹配）"
                 },
+                ["node_id"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "目标节点 ID（从 document_graph 获取，优先于 heading_name）"
+                },
                 ["include_heading"] = new JObject
                 {
                     ["type"] = "boolean",
                     ["description"] = "是否同时删除标题本身。true=删除标题和内容（默认），false=仅删除标题下的正文内容、保留标题"
                 }
-            },
-            ["required"] = new JArray("heading_name")
+            }
         };
 
         public override Task<ToolExecutionResult> ExecuteAsync(Connect connect, JObject arguments)
         {
-            string headingName = RequireString(arguments, "heading_name");
+            string nodeId = OptionalString(arguments, "node_id");
+            string headingName = OptionalString(arguments, "heading_name");
             bool includeHeading = OptionalBool(arguments, "include_heading", true);
 
             var doc = RequireActiveDocument(connect);
 
-            var heading = DocumentHelper.FindHeading(doc, headingName);
-            if (heading == null)
-                return Task.FromResult(ToolExecutionResult.Fail($"未找到标题: {headingName}"));
+            NetOffice.WordApi.Range deleteRange;
+            string targetDesc;
 
-            var (start, end) = DocumentHelper.GetSectionRange(doc, heading.Paragraph, heading.Level, includeHeading);
+            if (!string.IsNullOrWhiteSpace(nodeId))
+            {
+                // 按节点 ID 定位
+                var graph = DocumentGraphCache.Instance.GetOrBuildAsync(doc).Result;
+                var node = graph.ResolveNode(nodeId);
+                if (node == null)
+                    throw new ToolArgumentException(
+                        $"节点不存在: {nodeId}。请先调用 document_graph(map) 获取有效节点，或检查 label 是否正确。");
+                if (node.AnchorLabel == null)
+                    throw new ToolArgumentException($"节点 {node.Id} 无锚点");
 
-            if (start >= end)
+                var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+                deleteRange = range;
+                targetDesc = $"[{node.Id}] {node.Title}";
+
+                // 如仅删除内容不含标题，需跳过标题段
+                if (!includeHeading && node.Type == DocNodeType.Section)
+                {
+                    // 标题段到第一个换行后的位置 = 内容区域起始
+                    string text = range.Text ?? "";
+                    int firstLineEnd = text.IndexOf('\r');
+                    if (firstLineEnd >= 0 && firstLineEnd + 1 < text.Length)
+                    {
+                        int contentStart = range.Start + firstLineEnd + 1;
+                        deleteRange = doc.Range(contentStart, range.End);
+                    }
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(headingName))
+            {
+                // 按标题名定位（兼容无图场景）
+                var heading = DocumentHelper.FindHeading(doc, headingName);
+                if (heading == null)
+                    return Task.FromResult(ToolExecutionResult.Fail($"未找到标题: {headingName}"));
+
+                var (start, end) = DocumentHelper.GetSectionRange(
+                    doc, heading.Paragraph, heading.Level, includeHeading);
+                deleteRange = doc.Range(start, end);
+                targetDesc = headingName;
+            }
+            else
+            {
+                throw new ToolArgumentException("需要 node_id 或 heading_name 参数");
+            }
+
+            if (deleteRange.Start >= deleteRange.End)
             {
                 string msg = includeHeading
-                    ? "该标题下没有内容，且标题本身是零长度范围"
+                    ? "该目标范围为空"
                     : "该标题下没有内容可删除";
                 return Task.FromResult(ToolExecutionResult.Ok(msg));
             }
 
-            var deleteRange = doc.Range(start, end);
             int deletedChars = deleteRange.Text.Length;
 
             using (BeginTrackRevisions(connect))
@@ -62,9 +110,13 @@ namespace FuXing
                 deleteRange.Delete();
             }
 
+            // 删除后不重建图——CC 自动跟踪位置
+            // 但必须失效缓存，因为被删的节点对应的 CC 已不存在
+            DocumentGraphCache.Instance.Invalidate(doc);
+
             string scope = includeHeading ? "标题及其内容" : "标题下的内容（保留标题）";
             return Task.FromResult(
-                ToolExecutionResult.Ok($"已删除「{headingName}」的{scope}（删除字符数: {deletedChars}）"));
+                ToolExecutionResult.Ok($"已删除「{targetDesc}」的{scope}（删除字符数: {deletedChars}）"));
         }
     }
 }

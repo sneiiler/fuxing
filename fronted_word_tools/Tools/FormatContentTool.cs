@@ -1,3 +1,4 @@
+using FuXing.Core;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Text;
@@ -18,7 +19,8 @@ namespace FuXing
         public override ToolCategory Category => ToolCategory.Formatting;
 
         public override string Description =>
-            "Format text/paragraphs or create custom styles. action=\"format\": apply to target range (selection/search/heading/paragraph_index/heading_level); " +
+            "Format text/paragraphs or create custom styles. action=\"format\": apply to target range " +
+            "(selection/search/heading/node/heading_level); " +
             "can combine style_name with font/paragraph overrides. action=\"create_style\": create or update a named paragraph style. " +
             "Units: 1cm≈28.35pt, Chinese 2-char indent≈28pt.";
 
@@ -44,13 +46,13 @@ namespace FuXing
                         ["type"] = new JObject
                         {
                             ["type"] = "string",
-                            ["enum"] = new JArray("selection", "search", "heading", "paragraph_index", "heading_level"),
+                            ["enum"] = new JArray("selection", "search", "heading", "node", "heading_level"),
                             ["description"] = "定位方式"
                         },
                         ["value"] = new JObject
                         {
                             ["type"] = "string",
-                            ["description"] = "定位值：搜索文本/标题名/段落号/标题级别"
+                            ["description"] = "定位值：搜索文本/标题名/节点ID/标题级别"
                         }
                     },
                     ["required"] = new JArray("type")
@@ -191,16 +193,14 @@ namespace FuXing
                     summary.Append($"已格式化标题「{targetValue}」");
                     break;
 
-                case "paragraph_index":
-                    if (!int.TryParse(targetValue, out int paraIdx) || paraIdx < 1)
+                case "node":
+                    if (string.IsNullOrWhiteSpace(targetValue))
                         return System.Threading.Tasks.Task.FromResult(
-                            ToolExecutionResult.Fail("paragraph_index 需要正整数 value"));
-                    if (paraIdx > doc.Paragraphs.Count)
-                        return System.Threading.Tasks.Task.FromResult(
-                            ToolExecutionResult.Fail($"段落序号 {paraIdx} 超出范围（共 {doc.Paragraphs.Count} 段）"));
-                    ApplyAll(doc.Paragraphs[paraIdx].Range, styleObj, font, paragraph);
+                            ToolExecutionResult.Fail("node 模式需要 value 参数（节点 ID）"));
+                    var nodeRange = ResolveNodeRange(doc, targetValue);
+                    ApplyAll(nodeRange, styleObj, font, paragraph);
                     count = 1;
-                    summary.Append($"已格式化第 {paraIdx} 段");
+                    summary.Append($"已格式化节点 [{targetValue}]");
                     break;
 
                 case "heading_level":
@@ -377,6 +377,20 @@ namespace FuXing
                 if (s.NameLocal == name) return s;
             }
             return doc.Styles.Add(name, WdStyleType.wdStyleTypeParagraph);
+        }
+
+        /// <summary>通过节点 ID 解析节点范围</summary>
+        private Range ResolveNodeRange(Document doc, string nodeIdOrLabel)
+        {
+            var graph = DocumentGraphCache.Instance.GetOrBuildAsync(doc).Result;
+            var node = graph.ResolveNode(nodeIdOrLabel);
+            if (node == null)
+                throw new ToolArgumentException(
+                    $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) 获取有效节点，或检查 label 是否正确。");
+            if (node.AnchorLabel == null)
+                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
+
+            return DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
         }
     }
 }

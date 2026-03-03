@@ -10,19 +10,16 @@ using System.Threading.Tasks;
 namespace FuXing.SubAgents
 {
     // ═══════════════════════════════════════════════════════════════
-    //  文档 AST 构建器
+    //  文档 AST 构建器（深度路径专用）
     //
-    //  双路径：
-    //  1. 快速路径（BuildFromOutline）— 直接从大纲级别程序化构建，无 LLM
-    //  2. 深度路径（BuildAsync）— 证据收集 + LLM 裁定，适用于不规范文档
-    //
-    //  设计原则：
-    //  - 快速路径优先，保证响应速度
-    //  - 深度路径仅在用户明确要求时触发
+    //  仅被 DocumentGraphBuilder.BuildSkeletonDeepAsync 调用。
+    //  负责：证据收集（OutlineLevel + 单行候选）→ LLM 裁定标题层级。
+    //  返回 DocumentAstNode 根节点，由 GraphBuilder 转化为 DocNode 图。
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// 文档 AST 构建器。根据段落元数据构建树状文档结构。
+    /// 文档 AST 构建器（深度路径专用）。
+    /// 从段落元数据 + LLM 推断构建标题树，返回 DocumentAstNode 根节点。
     /// </summary>
     public class DocumentAstBuilder
     {
@@ -33,120 +30,15 @@ namespace FuXing.SubAgents
         private const int SingleLineCandidateMaxLength = 80;
 
         // ═══════════════════════════════════════════════════════════════
-        //  快速路径：从大纲级别直接构建（无 LLM）
-        // ═══════════════════════════════════════════════════════════════
-
-        /// <summary>
-        /// 从大纲级别提取结果直接构建 AST，纯程序化，不调用 LLM。
-        /// 适用于文档已使用标准标题样式（Heading 1~6）的场景。
-        /// </summary>
-        public DocumentMap BuildFromOutline(OutlineOnlyResult outline)
-        {
-            // 将 OutlineHeading 转换为 InferredHeading（复用树构建逻辑）
-            var headings = new List<InferredHeading>();
-            foreach (var h in outline.Headings)
-            {
-                headings.Add(new InferredHeading
-                {
-                    ParaIndex = h.ParaIndex,
-                    Level = h.Level,
-                    Title = h.Text
-                });
-            }
-
-            // 构建树（需要一个轻量的 position 查找结构）
-            var root = BuildTreeFromOutline(outline, headings);
-
-            // 构建索引
-            var index = new Dictionary<string, DocumentAstNode>();
-            BuildIndex(root, index);
-
-            // 计算段落统计
-            ComputeParaCounts(root, outline.TotalParagraphs);
-
-            return new DocumentMap
-            {
-                DocumentName = outline.DocumentName,
-                ContentHash = 0, // 由调用方（DocumentMapCache）设置
-                TotalParagraphs = outline.TotalParagraphs,
-                Root = root,
-                Index = index,
-                RawStructure = null, // 快速模式不需要完整段落数据
-                IsDeepPerception = false,
-                BuiltAt = DateTime.Now
-            };
-        }
-
-        /// <summary>从大纲标题列表构建 AST 树（快速路径专用）</summary>
-        private static DocumentAstNode BuildTreeFromOutline(
-            OutlineOnlyResult outline, List<InferredHeading> headings)
-        {
-            var root = new DocumentAstNode
-            {
-                NodeId = "root",
-                Type = AstNodeType.Root,
-                Level = 0,
-                Title = outline.DocumentName,
-                ParaStart = 1,
-                ParaEnd = outline.TotalParagraphs + 1,
-                CharStart = outline.Headings.Count > 0
-                    ? outline.Headings[0].StartPosition : 0,
-                CharEnd = -1
-            };
-
-            if (headings.Count == 0)
-                return root;
-
-            var stack = new Stack<DocumentAstNode>();
-            stack.Push(root);
-
-            for (int i = 0; i < headings.Count; i++)
-            {
-                var h = headings[i];
-                var outlineH = outline.Headings[i];
-
-                int nextParaIndex = (i + 1 < headings.Count)
-                    ? headings[i + 1].ParaIndex
-                    : outline.TotalParagraphs + 1;
-
-                int charEnd = (i + 1 < headings.Count)
-                    ? outline.Headings[i + 1].StartPosition
-                    : -1;
-
-                var node = new DocumentAstNode
-                {
-                    NodeId = DocumentAstNode.ComputeNodeId(h.Level, h.Title, h.ParaIndex),
-                    Type = AstNodeType.Section,
-                    Level = h.Level,
-                    Title = h.Title,
-                    ParaStart = h.ParaIndex,
-                    ParaEnd = nextParaIndex,
-                    CharStart = outlineH.StartPosition,
-                    CharEnd = charEnd,
-                    // 快速模式不读取正文段落，无法生成 ContentPreview
-                    ContentPreview = null
-                };
-
-                while (stack.Count > 1 && stack.Peek().Level >= h.Level)
-                    stack.Pop();
-
-                stack.Peek().Children.Add(node);
-                stack.Push(node);
-            }
-
-            return root;
-        }
-
-        // ═══════════════════════════════════════════════════════════════
         //  深度路径：证据收集 + LLM 裁定（含格式分析）
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// 深度路径：从段落元数据构建文档 AST。
+        /// 深度路径：从段落元数据构建文档 AST 根节点。
         /// 收集 OutlineLevel 提示和单行候选段落，交给 LLM 统一裁定标题层级。
-        /// 仅在用户明确请求深度感知时调用。
+        /// 返回 DocumentAstNode 根节点（不再包装为 DocumentMap）。
         /// </summary>
-        public async Task<DocumentMap> BuildAsync(
+        public async Task<DocumentAstNode> BuildAsync(
             DocumentStructure rawStructure,
             CancellationToken cancellation = default)
         {
@@ -181,24 +73,10 @@ namespace FuXing.SubAgents
             // 构建树
             var root = BuildTree(rawStructure, headings);
 
-            // 构建索引
-            var index = new Dictionary<string, DocumentAstNode>();
-            BuildIndex(root, index);
-
             // 计算段落统计
             ComputeParaCounts(root, rawStructure.TotalParagraphs);
 
-            return new DocumentMap
-            {
-                DocumentName = rawStructure.DocumentName,
-                ContentHash = 0, // 由调用方（DocumentMapCache）设置
-                TotalParagraphs = rawStructure.TotalParagraphs,
-                Root = root,
-                Index = index,
-                RawStructure = rawStructure,
-                IsDeepPerception = true,
-                BuiltAt = DateTime.Now
-            };
+            return root;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -322,8 +200,9 @@ namespace FuXing.SubAgents
 
             var request = new SubAgentRequest
             {
-                Task = SubAgentTask.Custom,
-                Prompt = prompt,
+                AgentName = "HeadingInference",
+                SystemPrompt = "你是一个文档标题层级推断专家。根据提供的段落格式特征（字号、加粗、对齐等）和大纲级别提示，判断哪些段落是标题，以及它们的层级。直接输出结果，不要解释过程。",
+                TaskInstruction = prompt,
                 MaxRounds = 1,
                 ToolDefinitions = null,
                 ToolExecutor = null
@@ -632,17 +511,8 @@ namespace FuXing.SubAgents
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  索引与统计
+        //  统计
         // ═══════════════════════════════════════════════════════════════
-
-        private static void BuildIndex(DocumentAstNode node, Dictionary<string, DocumentAstNode> index)
-        {
-            if (node.Type != AstNodeType.Root)
-                index[node.NodeId] = node;
-
-            foreach (var child in node.Children)
-                BuildIndex(child, index);
-        }
 
         /// <summary>递归计算每个节点的段落统计</summary>
         private static void ComputeParaCounts(DocumentAstNode node, int totalParagraphs)

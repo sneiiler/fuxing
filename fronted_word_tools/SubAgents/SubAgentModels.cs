@@ -6,45 +6,43 @@ using System.Threading.Tasks;
 namespace FuXing.SubAgents
 {
     // ═══════════════════════════════════════════════════════════════
-    //  子智能体公共模型
+    //  子智能体公共模型（动态编排模式）
+    //
+    //  核心设计：子智能体的 SystemPrompt / Task / 工具白名单
+    //  全部由主 Agent（大模型）动态生成，不硬编码任务类型。
     // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>子智能体任务类型</summary>
-    public enum SubAgentTask
-    {
-        /// <summary>分析文档结构（推断标题层级、检测格式不一致）</summary>
-        AnalyzeStructure,
-
-        /// <summary>提取文档关键信息（用于前后冲突检查）</summary>
-        ExtractKeyInfo,
-
-        /// <summary>自定义任务（由 prompt 描述）</summary>
-        Custom
-    }
-
-    /// <summary>子智能体执行请求</summary>
+    /// <summary>子智能体执行请求（由主 Agent 动态构造）</summary>
     public class SubAgentRequest
     {
-        /// <summary>任务类型</summary>
-        public SubAgentTask Task { get; set; }
+        /// <summary>子智能体名称（用于日志追踪和 UI 展示，如 "DateChecker"）</summary>
+        public string AgentName { get; set; }
 
-        /// <summary>用户 / 主 Agent 的具体指令</summary>
-        public string Prompt { get; set; }
+        /// <summary>
+        /// 动态生成的系统提示词。
+        /// 定义该子智能体的角色、核心职责、输出格式要求等。
+        /// 由主 Agent 根据当前任务意图自行生成。
+        /// </summary>
+        public string SystemPrompt { get; set; }
 
-        /// <summary>预注入的文档结构数据（由 DocumentStructureExtractor 生成）</summary>
-        public DocumentStructure DocumentStructure { get; set; }
+        /// <summary>发给子智能体的具体操作指令或当前问题</summary>
+        public string TaskInstruction { get; set; }
 
-        /// <summary>预注入的文档文本片段（用于关键信息提取等）</summary>
-        public string DocumentText { get; set; }
+        /// <summary>
+        /// 预注入的文档上下文文本（可选，用于减少子智能体的工具调用轮次）。
+        /// 由 RunSubAgentTool 自动根据 include_document_text 参数注入。
+        /// </summary>
+        public string DocumentContext { get; set; }
 
         /// <summary>最大对话轮次（含工具调用循环，防止无限循环）</summary>
         public int MaxRounds { get; set; } = 5;
 
-        // ── 工具共用（可选） ──
+        // ── 工具白名单（可选） ──
 
         /// <summary>
         /// 子智能体可用的工具定义（OpenAI tools 格式）。
-        /// null 表示不使用任何工具，纯推理模式。
+        /// null 或空表示不使用任何工具，纯推理模式。
+        /// 由 RunSubAgentTool 根据 allowed_tools 参数从 ToolRegistry 过滤生成。
         /// </summary>
         public JArray ToolDefinitions { get; set; }
 
@@ -97,10 +95,10 @@ namespace FuXing.SubAgents
     /// </summary>
     public interface ISubAgentProgress
     {
-        /// <summary>新一轮对话开始</summary>
-        void OnRoundStart(int round, int maxRounds);
+        /// <summary>LLM 正在生成回复（用于显示"正在思考"状态）</summary>
+        void OnLlmCallStart();
 
-        /// <summary>LLM 返回了思考/推理内容</summary>
+        /// <summary>LLM 返回了思考/推理内容（调用后自动替换"正在思考"状态）</summary>
         void OnThinking(string content);
 
         /// <summary>子智能体开始调用工具</summary>

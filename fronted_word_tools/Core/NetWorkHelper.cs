@@ -1,3 +1,6 @@
+using OpenAI;
+using OpenAI.Chat;
+using System.ClientModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -109,8 +112,7 @@ namespace FuXing
         }
 
         /// <summary>
-        /// 带上下文记忆的流式聊天请求。使用 ChatMemory 提供完整会话历史，
-        /// 支持 tool_calls 解析。
+        /// 带上下文记忆的流式聊天请求（已重构为使用官方 OpenAI SDK）
         /// </summary>
         public async Task<StreamChatResult> SendStreamChatWithMemoryAsync(
             ChatMemory memory,
@@ -131,117 +133,112 @@ namespace FuXing
 
             try
             {
-                string url = $"{_baseUrl}/chat/completions";
+                var options = new OpenAIClientOptions { Endpoint = new Uri(_baseUrl) };
+                var openaiClient = new OpenAIClient(new ApiKeyCredential(_apiKey ?? "dummy"), options);
+                var chatClient = openaiClient.GetChatClient(_modelName);
 
-                var requestObj = new JObject
+                var messages = new List<ChatMessage>();
+                foreach (var msg in memory.PrepareMessages())
                 {
-                    ["model"] = _modelName,
-                    ["messages"] = memory.BuildMessagesJson(),
-                    ["stream"] = true,
-                    ["temperature"] = 0.7
-                };
-
-                if (tools != null && tools.Count > 0)
-                    requestObj["tools"] = tools;
-
-                string jsonData = requestObj.ToString(Formatting.None);
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-                if (!string.IsNullOrEmpty(_apiKey))
-                    request.Headers.Add("Authorization", $"Bearer {_apiKey}");
-
-                var result = new StreamChatResult { Content = "", ToolCalls = new List<ToolCallRequest>() };
-
-                // 用于累积流式 tool_calls 的辅助类
-                var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
-
-                using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
-                {
-                    if (!response.IsSuccessStatusCode)
+                    if (msg.Role == ChatMessageRole.System)
+                        messages.Add(new SystemChatMessage(msg.Content));
+                    else if (msg.Role == ChatMessageRole.User)
+                        messages.Add(new UserChatMessage(msg.Content));
+                    else if (msg.Role == ChatMessageRole.Assistant)
                     {
-                        string errorBody = await response.Content.ReadAsStringAsync();
-                        onError?.Invoke($"请求失败: {response.StatusCode} - {errorBody}");
-                        return null;
-                    }
-
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var reader = new StreamReader(stream, Encoding.UTF8))
-                    {
-                        string line;
-                        while ((line = await reader.ReadLineAsync()) != null)
+                        if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            if (!line.StartsWith("data: "))
-                                continue;
-
-                            string data = line.Substring(6);
-                            if (data == "[DONE]")
-                                break;
-
-                            try
+                            var toolCallsParam = new List<ChatToolCall>();
+                            foreach (var tc in msg.ToolCalls)
                             {
-                                var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(data);
-                                if (chunk?.choices == null || chunk.choices.Length == 0)
-                                    continue;
-
-                                var delta = chunk.choices[0].delta;
-                                if (delta == null)
-                                    continue;
-
-                                // 文本内容
-                                if (delta.content != null)
-                                {
-                                    result.Content += delta.content;
-                                    onChunkReceived?.Invoke(delta.content);
-                                }
-
-                                // 工具调用（流式累积）
-                                if (delta.tool_calls != null)
-                                {
-                                    foreach (var tc in delta.tool_calls)
-                                    {
-                                        ToolCallAccumulator acc;
-                                        if (!toolCallAccumulators.TryGetValue(tc.index, out acc))
-                                        {
-                                            acc = new ToolCallAccumulator();
-                                            toolCallAccumulators[tc.index] = acc;
-                                        }
-
-                                        if (!string.IsNullOrEmpty(tc.id))
-                                            acc.Id = tc.id;
-                                        if (!string.IsNullOrEmpty(tc.function?.name))
-                                            acc.Name = tc.function.name;
-                                        if (!string.IsNullOrEmpty(tc.function?.arguments))
-                                            acc.Args.Append(tc.function.arguments);
-                                    }
-                                }
-
-                                // 检测结束原因
-                                var finishReason = chunk.choices[0].finish_reason;
-                                if (!string.IsNullOrEmpty(finishReason))
-                                {
-                                    result.FinishReason = finishReason;
-                                    if (finishReason == "tool_calls")
-                                    {
-                                        BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
-                                    }
-                                }
+                                toolCallsParam.Add(ChatToolCall.CreateFunctionToolCall(tc.Id, tc.FunctionName, BinaryData.FromString(tc.Arguments?.ToString(Formatting.None) ?? "{}")));
                             }
-                            catch (Exception ex)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"解析流式数据失败: {ex.Message}");
-                            }
+                            // Assuming parameterless or message param
+                            var asstMsg = new AssistantChatMessage(toolCallsParam);
+                            messages.Add(asstMsg);
+                        }
+                        else
+                        {
+                            messages.Add(new AssistantChatMessage(msg.Content ?? string.Empty));
+                        }
+                    }
+                    else if (msg.Role == ChatMessageRole.Tool)
+                    {
+                        messages.Add(new ToolChatMessage(msg.ToolCallId, msg.Content ?? string.Empty));
+                    }
+                }
+
+                var chatOptions = new ChatCompletionOptions() { Temperature = 0.7f };
+                if (tools != null)
+                {
+                    foreach (JToken tToken in tools)
+                    {
+                        if (tToken is JObject t)
+                        {
+                            string name = t["function"]?["name"]?.ToString() ?? "";
+                            string desc = t["function"]?["description"]?.ToString() ?? "";
+                            string paramStr = t["function"]?["parameters"]?.ToString(Formatting.None) ?? "{}";
+                            chatOptions.Tools.Add(ChatTool.CreateFunctionTool(name, desc, BinaryData.FromString(paramStr)));
                         }
                     }
                 }
 
-                // 如果 finish_reason 未触发但有累积的 tool_calls，也补充进去
-                if (result.ToolCalls.Count == 0 && toolCallAccumulators.Count > 0)
+                var result = new StreamChatResult { Content = "", ToolCalls = new List<ToolCallRequest>() };
+                
+                var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
+
+                var chatUpdates = chatClient.CompleteChatStreaming(messages, chatOptions, cancellationToken);
+                foreach (var update in chatUpdates)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Text updates
+                    if (update.ContentUpdate != null && update.ContentUpdate.Count > 0)
+                    {
+                        foreach (var part in update.ContentUpdate)
+                        {
+                            if (!string.IsNullOrEmpty(part.Text))
+                            {
+                                result.Content += part.Text;
+                                onChunkReceived?.Invoke(part.Text);
+                            }
+                        }
+                    }
+
+                    // Tool call updates
+                    if (update.ToolCallUpdates != null)
+                    {
+                        foreach (var tcUpdate in update.ToolCallUpdates)
+                        {
+                            if (!toolCallAccumulators.TryGetValue(tcUpdate.Index, out var acc))
+                            {
+                                acc = new ToolCallAccumulator();
+                                toolCallAccumulators[tcUpdate.Index] = acc;
+                            }
+                            
+                            if (!string.IsNullOrEmpty(tcUpdate.ToolCallId))
+                                acc.Id = tcUpdate.ToolCallId;
+                            
+                            if (!string.IsNullOrEmpty(tcUpdate.FunctionName))
+                                acc.Name += tcUpdate.FunctionName;
+                                
+                            if (tcUpdate.FunctionArgumentsUpdate != null)
+                                acc.Args.Append(tcUpdate.FunctionArgumentsUpdate.ToString());
+                        }
+                    }
+
+                    if (update.FinishReason != null)
+                    {
+                        result.FinishReason = update.FinishReason.Value.ToString();
+                    }
+                }
+                
+                if (toolCallAccumulators.Count > 0)
                 {
                     BuildToolCallsFromAccumulators(toolCallAccumulators, result.ToolCalls);
                 }
 
+                // 记录完整的流式响应结果到调试日志
                 return result;
             }
             catch (OperationCanceledException)

@@ -77,7 +77,7 @@ namespace FuXing.UI
             var canvas = g.High();
             foreach (var seg in GetSegments())
             {
-                var size = canvas.MeasureText(seg.Text, seg.Font, width);
+                var size = canvas.MeasureText(seg.Text, seg.Font, width, FormatFlags.Top | FormatFlags.Left);
                 totalH += size.Height + seg.ExtraSpacing;
             }
             return Math.Max(18, totalH);
@@ -92,7 +92,7 @@ namespace FuXing.UI
             foreach (var seg in GetSegments())
             {
                 var color = seg.IsSecondary ? Color.FromArgb(107, 114, 128) : fgColor;
-                var size = canvas.MeasureText(seg.Text, seg.Font, bounds.Width);
+                var size = canvas.MeasureText(seg.Text, seg.Font, bounds.Width, FormatFlags.Top | FormatFlags.Left);
                 canvas.DrawText(seg.Text, seg.Font, color,
                     new Rectangle(bounds.X, y, bounds.Width, size.Height),
                     FormatFlags.Top | FormatFlags.Left);
@@ -199,7 +199,7 @@ namespace FuXing.UI
         {
             if (string.IsNullOrEmpty(Text)) return 0;
             var canvas = g.High();
-            var size = canvas.MeasureText(Text, QuoteFont, width - PadLeft - 10);
+            var size = canvas.MeasureText(Text, QuoteFont, width - PadLeft - 10, FormatFlags.Top | FormatFlags.Left);
             return size.Height + PadVert * 2;
         }
 
@@ -275,7 +275,7 @@ namespace FuXing.UI
             if (string.IsNullOrEmpty(Code)) return 0;
             var canvas = g.High();
             int langExtra = string.IsNullOrEmpty(Language) ? 0 : LangH;
-            var size = canvas.MeasureText(Code, CodeFont, width - PadX * 2);
+            var size = canvas.MeasureText(Code, CodeFont, width - PadX * 2, FormatFlags.Top | FormatFlags.Left);
             return size.Height + PadY * 2 + langExtra;
         }
 
@@ -415,7 +415,7 @@ namespace FuXing.UI
             {
                 var font = (rowIdx == 0) ? HeaderFont : CellFont;
                 int textW = Math.Max(10, colWidths[c] - CellPadH * 2);
-                var size = canvas.MeasureText(row[c], font, textW);
+                var size = canvas.MeasureText(row[c], font, textW, FormatFlags.Top | FormatFlags.Left);
                 maxH = Math.Max(maxH, size.Height);
             }
             return maxH + CellPadV * 2;
@@ -518,7 +518,7 @@ namespace FuXing.UI
         {
             if (!IsExpanded) return HeaderHeight;
             var canvas = g.High();
-            var size = canvas.MeasureText(Text ?? "", ContentFont, width - 20);
+            var size = canvas.MeasureText(Text ?? "", ContentFont, width - 20, FormatFlags.Top | FormatFlags.Left);
             return HeaderHeight + size.Height + 16;
         }
 
@@ -676,14 +676,14 @@ namespace FuXing.UI
             if (!string.IsNullOrEmpty(CodeSnippet))
             {
                 h += 4; // 间距
-                var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16);
+                var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16, FormatFlags.Top | FormatFlags.Left);
                 h += codeSize.Height + 16; // 上下各 8px 内边距
             }
 
             // 状态文本
             if (!string.IsNullOrEmpty(StatusText))
             {
-                var size = canvas.MeasureText(StatusText, StatusFont, contentW);
+                var size = canvas.MeasureText(StatusText, StatusFont, contentW, FormatFlags.Top | FormatFlags.Left);
                 h += Math.Max(DetailLineH, size.Height) + 4;
             }
             if (Details.Count > 0)
@@ -745,7 +745,7 @@ namespace FuXing.UI
                     int contentW = bounds.Width - 24;
 
                     // 代码背景区域
-                    var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16);
+                    var codeSize = canvas.MeasureText(CodeSnippet, CodeFont, contentW - 16, FormatFlags.Top | FormatFlags.Left);
                     int codeBlockH = codeSize.Height + 16;
                     var codeRect = new Rectangle(textX, textY, contentW, codeBlockH);
                     using (var codePath = RoundedRect(codeRect, 6))
@@ -762,7 +762,7 @@ namespace FuXing.UI
                 // 状态文本
                 if (!string.IsNullOrEmpty(StatusText))
                 {
-                    var statusSize = canvas.MeasureText(StatusText, StatusFont, bounds.Width - 24);
+                    var statusSize = canvas.MeasureText(StatusText, StatusFont, bounds.Width - 24, FormatFlags.Top | FormatFlags.Left);
                     int statusH = Math.Max(DetailLineH, statusSize.Height);
                     canvas.DrawText(StatusText, StatusFont, accentColor,
                         new Rectangle(textX, textY + 4, bounds.Width - 24, statusH),
@@ -813,7 +813,7 @@ namespace FuXing.UI
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>子智能体执行步骤类型</summary>
-    internal enum SubAgentStepType { Round, Thinking, ToolCall, Output }
+    internal enum SubAgentStepType { Thinking, ToolCall, Output }
 
     /// <summary>子智能体内部执行步骤记录</summary>
     internal class SubAgentStep
@@ -846,7 +846,7 @@ namespace FuXing.UI
         // 字体
         private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         private static readonly Font StepFont = new Font("Microsoft YaHei UI", 8F);
-        private static readonly Font RoundFont = new Font("Microsoft YaHei UI", 7.5F, FontStyle.Bold);
+
 
         // 颜色（与 ToolCallCard / ThinkBlock 一致）
         private static readonly Color CardBg = Color.FromArgb(243, 244, 246);
@@ -854,7 +854,7 @@ namespace FuXing.UI
         private static readonly Color HeaderFg = Color.FromArgb(107, 114, 128);
         private static readonly Color ContentFg = Color.FromArgb(75, 85, 99);
         private static readonly Color ThinkFg = Color.FromArgb(130, 140, 155);
-        private static readonly Color RoundFg = Color.FromArgb(156, 163, 175);
+
         private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
         private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
         private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
@@ -878,20 +878,31 @@ namespace FuXing.UI
 
         // ── 步骤操作 API（由 ISubAgentProgress 实现调用）──
 
-        /// <summary>添加轮次开始步骤</summary>
-        public void AddRound(int round, int maxRounds)
+        /// <summary>添加"正在思考"占位步骤（LLM 请求期间显示，结束后自动移除）</summary>
+        public void AddThinkingPlaceholder()
         {
+            // 避免重复添加
+            if (_steps.Count > 0 && _steps[_steps.Count - 1].Type == SubAgentStepType.Thinking
+                && _steps[_steps.Count - 1].Text == "⏳")
+                return;
             _steps.Add(new SubAgentStep
             {
-                Type = SubAgentStepType.Round,
-                Text = $"轮次 {round}/{maxRounds}"
+                Type = SubAgentStepType.Thinking,
+                Text = "⏳" // 特殊标记，渲染时显示为动态文字
             });
             ToggleRequested?.Invoke();
+        }
+
+        /// <summary>移除"正在思考"占位步骤</summary>
+        private void RemoveThinkingPlaceholder()
+        {
+            _steps.RemoveAll(s => s.Type == SubAgentStepType.Thinking && s.Text == "⏳");
         }
 
         /// <summary>添加思考内容步骤</summary>
         public void AddThinking(string content)
         {
+            RemoveThinkingPlaceholder(); // LLM 已返回，移除占位
             string preview = Abbreviate(content, MaxThinkPreviewLen);
             _steps.Add(new SubAgentStep
             {
@@ -904,6 +915,7 @@ namespace FuXing.UI
         /// <summary>添加工具调用步骤（初始为运行中状态）</summary>
         public void AddToolCallStep(string toolName)
         {
+            RemoveThinkingPlaceholder(); // 开始工具调用，移除占位
             _steps.Add(new SubAgentStep
             {
                 Type = SubAgentStepType.ToolCall,
@@ -1010,14 +1022,13 @@ namespace FuXing.UI
 
                 switch (step.Type)
                 {
-                    case SubAgentStepType.Round:
-                        canvas.DrawText($"─── {step.Text} ───", RoundFont, RoundFg, rect,
-                            FormatFlags.VerticalCenter | FormatFlags.Left);
-                        break;
-
                     case SubAgentStepType.Thinking:
-                        canvas.DrawText($"💭 {step.Text}", StepFont, ThinkFg, rect,
-                            FormatFlags.VerticalCenter | FormatFlags.Left);
+                        if (step.Text == "⏳")
+                            canvas.DrawText("💭 正在思考...", StepFont, RunningColor, rect,
+                                FormatFlags.VerticalCenter | FormatFlags.Left);
+                        else
+                            canvas.DrawText($"💭 {step.Text}", StepFont, ThinkFg, rect,
+                                FormatFlags.VerticalCenter | FormatFlags.Left);
                         break;
 
                     case SubAgentStepType.ToolCall:
@@ -1193,7 +1204,7 @@ namespace FuXing.UI
             h += ContentGap;       // 分隔线→正文间距
 
             // 描述提示语
-            var descSize = canvas.MeasureText("AI 助手请求执行以下高风险操作，请确认是否允许：", DescFont, textW);
+            var descSize = canvas.MeasureText("AI 助手请求执行以下操作，请确认是否允许：", DescFont, textW, FormatFlags.Top | FormatFlags.Left);
             h += descSize.Height + 12;
 
             // 工具名称行（徽章）
@@ -1204,7 +1215,7 @@ namespace FuXing.UI
             {
                 h += LabelLineH; // "参数:" 标签
                 int codeW = textW - CodeBlockPadX * 2;
-                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW);
+                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW, FormatFlags.Top | FormatFlags.Left);
                 h += codeSize.Height + CodeBlockPadY * 2 + ButtonTopGap;
             }
             else
@@ -1257,8 +1268,8 @@ namespace FuXing.UI
             y += 1 + ContentGap;
 
             // 描述提示
-            string desc = "AI 助手请求执行以下高风险操作，请确认是否允许：";
-            var descSize = canvas.MeasureText(desc, DescFont, textW);
+            string desc = "AI 助手请求执行以下操作，请确认是否允许：";
+            var descSize = canvas.MeasureText(desc, DescFont, textW, FormatFlags.Top | FormatFlags.Left);
             canvas.DrawText(desc, DescFont, DescFg,
                 new Rectangle(textX, y, textW, descSize.Height),
                 FormatFlags.Top | FormatFlags.Left);
@@ -1266,14 +1277,14 @@ namespace FuXing.UI
 
             // 工具名称徽章
             string toolLabel = "工具: ";
-            var toolLabelSize = canvas.MeasureText(toolLabel, LabelFont, textW);
+            var toolLabelSize = canvas.MeasureText(toolLabel, LabelFont, textW, FormatFlags.VerticalCenter | FormatFlags.Left);
             canvas.DrawText(toolLabel, LabelFont, HeaderFg,
                 new Rectangle(textX, y, toolLabelSize.Width + 2, ToolBadgeH),
                 FormatFlags.VerticalCenter | FormatFlags.Left);
 
             string toolName = $"{ToolDisplayName} ({FunctionName})";
             int badgeX = textX + toolLabelSize.Width + 6;
-            var toolNameSize = canvas.MeasureText(toolName, DescFont, textW);
+            var toolNameSize = canvas.MeasureText(toolName, DescFont, textW, FormatFlags.Top | FormatFlags.Left);
             int badgeW = Math.Min(toolNameSize.Width + 16, bounds.Right - SidePad - badgeX);
             var badgeRect = new Rectangle(badgeX, y + (ToolBadgeH - 20) / 2, badgeW, 20);
             using (var path = RoundedRect(badgeRect, 4))
@@ -1297,7 +1308,7 @@ namespace FuXing.UI
 
                 // 代码块背景
                 int codeW = textW - CodeBlockPadX * 2;
-                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW);
+                var codeSize = canvas.MeasureText(Summary, CodeFont, codeW, FormatFlags.Top | FormatFlags.Left);
                 int codeBlockH = codeSize.Height + CodeBlockPadY * 2;
                 var codeRect = new Rectangle(textX, y, textW, codeBlockH);
                 using (var path = RoundedRect(codeRect, 6))
@@ -1432,8 +1443,8 @@ namespace FuXing.UI
         internal event Action ToggleRequested;
 
         /// <summary>嵌入的输入控件（由 MessageGroup.AddAskUserCard 创建并注入）</summary>
-        internal TextBox EmbeddedInput { get; set; }
-        internal System.Windows.Forms.Label EmbeddedSubmitBtn { get; set; }
+        internal AntdUI.Input EmbeddedInput { get; set; }
+        internal AntdUI.Button EmbeddedSubmitBtn { get; set; }
 
         // 布局常量
         private const int TopPad = 14;
@@ -1441,13 +1452,13 @@ namespace FuXing.UI
         private const int HeaderH = 28;
         private const int SepGap = 8;
         private const int ContentGap = 10;
-        private const int PillH = 32;
+        private const int PillH = 36;
         private const int PillPadH = 16;
         private const int PillGap = 8;
         private const int PillRowGap = 8;
-        private const int InputAreaH = 34;
+        private const int InputAreaH = 36;
         private const int InputGap = 10;
-        private const int SubmitBtnW = 60;
+        private const int SubmitBtnW = 64;
         private const int BottomPad = 14;
         private const int AnsweredH = 26;
 
@@ -1502,42 +1513,21 @@ namespace FuXing.UI
             h += SepGap + 1 + ContentGap; // 分隔线区
 
             // 问题文本
-            var qSize = canvas.MeasureText(Question, QuestionFont, textW);
+            var qSize = canvas.MeasureText(Question, QuestionFont, textW, FormatFlags.Top | FormatFlags.Left);
             h += qSize.Height + ContentGap;
 
-            // 计算 pill 布局（自动换行）
+            // 计算 pill 布局（全宽垂直堆叠，保持视觉整齐）
             _pillRects.Clear();
             if (Options.Count > 0 && _answer == null)
             {
-                int px = 0;
                 int py = h;
                 foreach (var opt in Options)
                 {
-                    var labelSize = canvas.MeasureText(opt.Label, PillFont, textW);
-                    int pillW = labelSize.Width + PillPadH * 2;
-                    if (opt.Description != null)
-                    {
-                        var descSize = canvas.MeasureText(opt.Description, PillDescFont, textW);
-                        pillW = Math.Max(pillW, descSize.Width + PillPadH * 2);
-                    }
-                    pillW = Math.Max(pillW, 48);
-                    pillW = Math.Min(pillW, textW);
-
                     int pillHeight = opt.Description != null ? PillH + 14 : PillH;
-
-                    if (px + pillW > textW && px > 0)
-                    {
-                        px = 0;
-                        py += pillHeight + PillRowGap;
-                    }
-                    // 矩形坐标是相对于卡片 bounds 的偏移（SidePad 已包含在 paint 中，这里用相对于 h 的偏移）
-                    _pillRects.Add(new Rectangle(px, py - h + (h - TopPad - HeaderH - SepGap - 1 - ContentGap - qSize.Height - ContentGap), pillW, pillHeight));
-                    // 实际上更简洁的方式：记录相对于块顶部的绝对偏移
-                    _pillRects[_pillRects.Count - 1] = new Rectangle(px, py, pillW, pillHeight);
-                    px += pillW + PillGap;
+                    _pillRects.Add(new Rectangle(0, py, textW, pillHeight));
+                    py += pillHeight + PillRowGap;
                 }
-                int lastPillBottom = _pillRects.Count > 0 ? _pillRects[_pillRects.Count - 1].Bottom : py;
-                h = lastPillBottom + PillRowGap;
+                h = py;
                 _cachedPillsEndY = h;
             }
             else if (_answer != null)
@@ -1594,7 +1584,7 @@ namespace FuXing.UI
             y += 1 + ContentGap;
 
             // 问题文本
-            var qSize = canvas.MeasureText(Question, QuestionFont, textW);
+            var qSize = canvas.MeasureText(Question, QuestionFont, textW, FormatFlags.Top | FormatFlags.Left);
             canvas.DrawText(Question, QuestionFont, QuestionFg,
                 new Rectangle(textX, y, textW, qSize.Height),
                 FormatFlags.Top | FormatFlags.Left);
@@ -1634,7 +1624,7 @@ namespace FuXing.UI
                     }
                 }
 
-                // 定位嵌入的输入控件
+                // 定位嵌入的 AntdUI 输入控件
                 if (AllowFreeInput && EmbeddedInput != null && EmbeddedSubmitBtn != null)
                 {
                     int inputY = bounds.Y + _cachedInputYOffset;
@@ -2088,23 +2078,24 @@ namespace FuXing.UI
             // 如果允许自由输入，嵌入 TextBox 和提交按钮
             if (allowFreeInput)
             {
-                var inputBox = new TextBox
+                var inputBox = new AntdUI.Input
                 {
                     Font = new Font("Microsoft YaHei UI", 9F),
-                    BorderStyle = BorderStyle.FixedSingle,
+                    PlaceholderText = "输入自定义回答...",
+                    BorderWidth = 1,
+                    BorderColor = Color.FromArgb(180, 198, 230),
                     BackColor = Color.FromArgb(249, 250, 251),
                     ForeColor = Color.FromArgb(55, 65, 81),
+                    Radius = 6,
                     Visible = false
                 };
 
-                var submitBtn = new System.Windows.Forms.Label
+                var submitBtn = new AntdUI.Button
                 {
                     Text = "提交",
                     Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold),
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    ForeColor = Color.White,
-                    BackColor = Color.FromArgb(99, 120, 180),
-                    Cursor = Cursors.Hand,
+                    Type = AntdUI.TTypeMini.Primary,
+                    Radius = 6,
                     Visible = false
                 };
 
@@ -2465,8 +2456,13 @@ namespace FuXing.UI
             if (m.Msg == WM_MOUSEWHEEL)
             {
                 int delta = (short)((long)m.WParam >> 16);
-                int scrollAmount = delta / 3; // 调整滚动速度
-                int newY = Math.Max(0, Math.Min(_container.Height - ClientSize.Height, AutoScrollPosition.Y - scrollAmount));
+                int currentY = -AutoScrollPosition.Y;
+                int maxY = Math.Max(0, _container.Height - ClientSize.Height);
+                int lines = SystemInformation.MouseWheelScrollLines > 0 ? SystemInformation.MouseWheelScrollLines : 3;
+                int scrollAmount = (delta / 120) * lines * 14;
+                if (scrollAmount == 0 && delta != 0)
+                    scrollAmount = delta > 0 ? lines * 14 : -lines * 14;
+                int newY = Math.Max(0, Math.Min(maxY, currentY - scrollAmount));
                 AutoScrollPosition = new Point(0, newY);
                 m.Result = IntPtr.Zero;
                 return;

@@ -25,9 +25,12 @@ namespace FuXing.Core
             public string Heading6Style { get; set; }
             public string TableStyle { get; set; }
             public string BodyFontName { get; set; }
+            public string BodyFontNameAscii { get; set; }
             public float? BodyFontSize { get; set; }
             public string BodyAlignment { get; set; }
             public string BodyLineSpacingRule { get; set; }
+            public float? BodyLineSpacingPt { get; set; }
+            public float? BodyFirstLineIndentPt { get; set; }
         }
 
         public static string RenderToTempDocx(string markdown)
@@ -99,9 +102,16 @@ namespace FuXing.Core
                 Heading6Style = headingStyles?["h6"]?.ToString(),
                 TableStyle = table?["style_name"]?.ToString(),
                 BodyFontName = bodyFont?["name"]?.ToString(),
+                BodyFontNameAscii = bodyFont?["name_ascii"]?.ToString(),
                 BodyFontSize = bodyFontSize,
                 BodyAlignment = bodyFont?["alignment"]?.ToString(),
-                BodyLineSpacingRule = bodyFont?["line_spacing_rule"]?.ToString()
+                BodyLineSpacingRule = bodyFont?["line_spacing_rule"]?.ToString(),
+                BodyLineSpacingPt = bodyFont?["line_spacing_pt"]?.Type == JTokenType.Float || bodyFont?["line_spacing_pt"]?.Type == JTokenType.Integer
+                    ? bodyFont["line_spacing_pt"].Value<float>()
+                    : (float?)null,
+                BodyFirstLineIndentPt = bodyFont?["first_line_indent_pt"]?.Type == JTokenType.Float || bodyFont?["first_line_indent_pt"]?.Type == JTokenType.Integer
+                    ? bodyFont["first_line_indent_pt"].Value<float>()
+                    : (float?)null
             };
         }
 

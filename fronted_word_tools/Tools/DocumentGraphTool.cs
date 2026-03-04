@@ -227,15 +227,11 @@ namespace FuXing
                 throw new ToolArgumentException(
                     $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) 获取有效节点。");
 
-            if (node.AnchorLabel == null && (node.Meta == null
-                || !node.Meta.ContainsKey("range_start") || !node.Meta.ContainsKey("range_end")))
-                throw new ToolArgumentException($"节点 {node.Id} 无锚点且无位置元数据（可能是根节点）");
-
             var range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
 
             var sb = new StringBuilder();
             sb.AppendLine($"═══ [{node.Id}] {node.Title} ═══");
-            sb.AppendLine($"类型: {node.Type} | 锚点: {node.AnchorLabel}");
+            sb.AppendLine($"类型: {node.Type}");
 
             // 导航上下文
             if (node.ChildIds.Count > 0)
@@ -287,11 +283,11 @@ namespace FuXing
         private ToolExecutionResult ReadByHeadingName(
             NetOffice.WordApi.Document doc, string headingName, int maxChars)
         {
-            var heading = DocumentHelper.FindHeading(doc, headingName);
+            var heading = DocumentGraphBuilder.FindHeading(doc, headingName);
             if (heading == null)
                 throw new ToolArgumentException($"未找到标题: {headingName}");
 
-            var (start, end) = DocumentHelper.GetSectionRange(
+            var (start, end) = DocumentGraphBuilder.GetSectionRange(
                 doc, heading.Paragraph, heading.Level, true);
             var range = doc.Range(start, end);
 
@@ -336,7 +332,7 @@ namespace FuXing
                 throw new ToolArgumentException($"文件不存在: {filePath}");
 
             var app = connect.WordApplication;
-            var (doc, shouldClose) = DocumentHelper.GetOrOpenReadOnly(app, filePath);
+            var (doc, shouldClose) = DocumentGraphBuilder.GetOrOpenReadOnly(app, filePath);
 
             try
             {
@@ -371,9 +367,9 @@ namespace FuXing
                 var node = ResolveNodeOrSelection(graph, nodeIdOrLabel, connect);
                 if (node == null)
                     throw new ToolArgumentException($"节点不存在: {nodeIdOrLabel}");
-                if (node.AnchorLabel == null && (node.Meta == null
-                    || !node.Meta.ContainsKey("range_start") || !node.Meta.ContainsKey("range_end")))
-                    throw new ToolArgumentException($"节点 {node.Id} 无锚点且无位置元数据");
+                if (node.Meta == null
+                    || !node.Meta.ContainsKey("range_start") || !node.Meta.ContainsKey("range_end"))
+                    throw new ToolArgumentException($"节点 {node.Id} 无位置元数据");
 
                 range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
                 targetDesc = $"[{node.Id}] {node.Title}";
@@ -388,7 +384,7 @@ namespace FuXing
             }
             else if (!string.IsNullOrWhiteSpace(headingName))
             {
-                var heading = DocumentHelper.FindHeading(doc, headingName);
+                var heading = DocumentGraphBuilder.FindHeading(doc, headingName);
                 if (heading == null)
                     throw new ToolArgumentException($"未找到标题: {headingName}");
                 range = heading.Paragraph.Range;

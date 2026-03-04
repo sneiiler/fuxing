@@ -7,21 +7,36 @@
     "h5": "fx_标题5",
     "h6": "fx_标题6"
   },
-  "heading_seed_from": {
-    "h1": "标题 1",
-    "h2": "标题 2",
-    "h3": "标题 3",
-    "h4": "标题 4",
-    "h5": "标题 5",
-    "h6": "标题 6"
-  },
   "body_style": "fx_正文",
-  "body_seed_from": "正文",
   "body_font": {
     "name": "宋体",
+    "name_ascii": "Times New Roman",
     "size_pt": 12,
     "alignment": "justify",
-    "line_spacing_rule": "single"
+    "first_line_indent_pt": 24,
+    "space_before_pt": 0,
+    "space_after_pt": 0,
+    "line_spacing_rule": "exactly",
+    "line_spacing_pt": 25
+  },
+  "heading_font": {
+    "name": "宋体",
+    "name_ascii": "Times New Roman",
+    "alignment": "left",
+    "first_line_indent_pt": 0,
+    "left_indent_pt": 0,
+    "space_before_pt": 0,
+    "space_after_pt": 0,
+    "line_spacing_rule": "exactly",
+    "line_spacing_pt": 25,
+    "levels": {
+      "h1": { "size_pt": 16, "bold": true },
+      "h2": { "size_pt": 15, "bold": true },
+      "h3": { "size_pt": 14, "bold": true },
+      "h4": { "size_pt": 12, "bold": true },
+      "h5": { "size_pt": 12, "bold": true },
+      "h6": { "size_pt": 12, "bold": false }
+    }
   },
   "table": {
     "style_name": "fx_表格",

@@ -58,10 +58,7 @@ namespace FuXing
                 if (node == null)
                     throw new ToolArgumentException(
                         $"节点不存在: {nodeId}。请先调用 document_graph(map) 获取有效节点，或检查 label 是否正确。");
-                if (node.AnchorLabel == null)
-                    throw new ToolArgumentException($"节点 {node.Id} 无锚点");
-
-                var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+                var range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
                 deleteRange = range;
                 targetDesc = $"[{node.Id}] {node.Title}";
 
@@ -76,11 +73,11 @@ namespace FuXing
             else if (!string.IsNullOrWhiteSpace(headingName))
             {
                 // 按标题名定位（兼容无图场景）
-                var heading = DocumentHelper.FindHeading(doc, headingName);
+                var heading = DocumentGraphBuilder.FindHeading(doc, headingName);
                 if (heading == null)
                     return Task.FromResult(ToolExecutionResult.Fail($"未找到标题: {headingName}"));
 
-                var (start, end) = DocumentHelper.GetSectionRange(
+                var (start, end) = DocumentGraphBuilder.GetSectionRange(
                     doc, heading.Paragraph, heading.Level, includeHeading);
                 deleteRange = doc.Range(start, end);
                 targetDesc = headingName;

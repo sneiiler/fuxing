@@ -118,10 +118,6 @@ namespace FuXing
             {
                 if (!cc.ShowingPlaceholderText) continue;
 
-                // 跳过我们自己的 fxg 锚点 CC
-                string tag = cc.Tag;
-                if (tag != null && tag.StartsWith(FuXing.Core.AnchorManager.TagPrefix)) continue;
-
                 string ccText = cc.Range.Text;
                 if (ccText != null && ccText.Contains(findText))
                     return true;

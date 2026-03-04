@@ -118,7 +118,9 @@ namespace FuXing.Core
 
             var app = doc.Application;
             var prevAlerts = app.DisplayAlerts;
+            var prevScreenUpdating = app.ScreenUpdating;
             app.DisplayAlerts = WdAlertLevel.wdAlertsNone;
+            app.ScreenUpdating = false;
             try
             {
                 var result = Place(doc, range, label);
@@ -133,6 +135,7 @@ namespace FuXing.Core
             }
             finally
             {
+                app.ScreenUpdating = prevScreenUpdating;
                 app.DisplayAlerts = prevAlerts;
             }
         }

@@ -169,10 +169,7 @@ namespace FuXing
             if (node == null)
                 throw new ToolArgumentException(
                     $"节点不存在: {nodeId}。请先调用 document_graph(map) 获取有效节点，或检查 label 是否正确。");
-            if (node.AnchorLabel == null)
-                throw new ToolArgumentException($"节点 {node.Id} 无锚点（可能是根节点）");
-
-            var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+            var range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
             int targetPos = position == "start" ? range.Start : range.End;
 
             if (ShouldRenderMarkdown(text))
@@ -211,10 +208,7 @@ namespace FuXing
                     $"节点 [{node.Id}] 是 {node.Type} 类型，包含子节点（标题、文本块、表格等）。" +
                     "请指定具体子节点 ID 进行操作，避免破坏文档结构。");
 
-            if (node.AnchorLabel == null)
-                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
-
-            var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+            var range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
             int oldLen = (range.Text ?? "").Length;
 
             if (ShouldRenderMarkdown(text))
@@ -260,7 +254,7 @@ namespace FuXing
                 InsertMarkdownWithDefaultFormat(connect, doc, range, markdown);
             }
 
-            DocumentGraphCache.Instance.RefreshHash(doc);
+            DocumentGraphCache.Instance.Invalidate(doc);
             return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok("已在光标位置插入 Markdown 富文本。"));
         }
 
@@ -281,7 +275,7 @@ namespace FuXing
                 InsertMarkdownWithDefaultFormat(connect, doc, insertRange, markdown);
             }
 
-            DocumentGraphCache.Instance.RefreshHash(doc);
+            DocumentGraphCache.Instance.Invalidate(doc);
             return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok($"已将选中文本（{oldLen}字符）替换为 Markdown 富文本。"));
         }
 
@@ -294,7 +288,7 @@ namespace FuXing
                 InsertMarkdownWithDefaultFormat(connect, doc, range, markdown);
             }
 
-            DocumentGraphCache.Instance.RefreshHash(doc);
+            DocumentGraphCache.Instance.Invalidate(doc);
             return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok("已在文档末尾追加 Markdown 富文本。"));
         }
 
@@ -306,7 +300,7 @@ namespace FuXing
                 InsertMarkdownWithDefaultFormat(connect, doc, insertRange, markdown);
             }
 
-            DocumentGraphCache.Instance.RefreshHash(doc);
+            DocumentGraphCache.Instance.Invalidate(doc);
             string posDesc = position == "start" ? "开头" : "末尾";
             return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok($"已在节点 [{node.Id}] {node.Title} 的{posDesc}插入 Markdown 富文本。"));
         }
@@ -323,7 +317,7 @@ namespace FuXing
                 InsertMarkdownWithDefaultFormat(connect, doc, insertRange, markdown);
             }
 
-            DocumentGraphCache.Instance.RefreshHash(doc);
+            DocumentGraphCache.Instance.Invalidate(doc);
             return System.Threading.Tasks.Task.FromResult(ToolExecutionResult.Ok($"已替换节点 [{node.Id}] {node.Title} 的内容（{oldLen}→Markdown 富文本）。"));
         }
 
@@ -348,8 +342,10 @@ namespace FuXing
 
             foreach (WordParagraph paragraph in insertedRange.Paragraphs)
             {
+                bool isHeading = paragraph.OutlineLevel != WdOutlineLevel.wdOutlineLevelBodyText;
                 ApplyParagraphStyle(doc, paragraph, profile);
-                ApplyParagraphBodyFormat(paragraph, profile);
+                if (!isHeading)
+                    ApplyParagraphBodyFormat(paragraph, profile);
             }
 
             foreach (WordTable table in insertedRange.Tables)
@@ -359,6 +355,8 @@ namespace FuXing
 
                 if (!string.IsNullOrWhiteSpace(profile.BodyFontName))
                     table.Range.Font.Name = profile.BodyFontName;
+                if (!string.IsNullOrWhiteSpace(profile.BodyFontNameAscii))
+                    table.Range.Font.NameAscii = profile.BodyFontNameAscii;
                 if (profile.BodyFontSize.HasValue)
                     table.Range.Font.Size = profile.BodyFontSize.Value;
             }
@@ -409,6 +407,8 @@ namespace FuXing
         {
             if (!string.IsNullOrWhiteSpace(profile.BodyFontName))
                 paragraph.Range.Font.Name = profile.BodyFontName;
+            if (!string.IsNullOrWhiteSpace(profile.BodyFontNameAscii))
+                paragraph.Range.Font.NameAscii = profile.BodyFontNameAscii;
             if (profile.BodyFontSize.HasValue)
                 paragraph.Range.Font.Size = profile.BodyFontSize.Value;
 
@@ -416,7 +416,15 @@ namespace FuXing
                 paragraph.Range.ParagraphFormat.Alignment = WordHelper.ParseAlignment(profile.BodyAlignment);
 
             if (!string.IsNullOrWhiteSpace(profile.BodyLineSpacingRule))
-                paragraph.Range.ParagraphFormat.LineSpacingRule = ParseLineSpacingRule(profile.BodyLineSpacingRule);
+            {
+                var rule = ParseLineSpacingRule(profile.BodyLineSpacingRule);
+                paragraph.Range.ParagraphFormat.LineSpacingRule = rule;
+                if (rule == WdLineSpacing.wdLineSpaceExactly && profile.BodyLineSpacingPt.HasValue)
+                    paragraph.Range.ParagraphFormat.LineSpacing = profile.BodyLineSpacingPt.Value;
+            }
+
+            if (profile.BodyFirstLineIndentPt.HasValue)
+                paragraph.Range.ParagraphFormat.FirstLineIndent = profile.BodyFirstLineIndentPt.Value;
         }
 
         private static void ApplyStyleByNameOrThrow(WordDocument doc, WordRange range, string styleName)

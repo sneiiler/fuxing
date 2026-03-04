@@ -20,7 +20,8 @@ namespace FuXing
 
         public override string Description =>
             "Format text/paragraphs or create custom styles. action=\"format\": apply to target range " +
-            "(selection/search/heading/node/heading_level); " +
+            "(selection/search/heading/node/heading_level/body_text); " +
+            "body_text targets ALL body-level paragraphs (including list items). " +
             "can combine style_name with font/paragraph overrides. action=\"create_style\": create or update a named paragraph style. " +
             "Units: 1cm≈28.35pt, Chinese 2-char indent≈28pt.";
 
@@ -46,7 +47,7 @@ namespace FuXing
                         ["type"] = new JObject
                         {
                             ["type"] = "string",
-                            ["enum"] = new JArray("selection", "search", "heading", "node", "heading_level"),
+                            ["enum"] = new JArray("selection", "search", "heading", "node", "heading_level", "body_text"),
                             ["description"] = "定位方式"
                         },
                         ["value"] = new JObject
@@ -94,6 +95,8 @@ namespace FuXing
                     ["properties"] = new JObject
                     {
                         ["name"] = new JObject { ["type"] = "string", ["description"] = "字体名" },
+                        ["name_ascii"] = new JObject { ["type"] = "string", ["description"] = "西文字体名" },
+                        ["name_far_east"] = new JObject { ["type"] = "string", ["description"] = "中文字体名" },
                         ["size"] = new JObject { ["type"] = "number", ["description"] = "字号（磅）" },
                         ["bold"] = new JObject { ["type"] = "boolean" },
                         ["italic"] = new JObject { ["type"] = "boolean" },
@@ -116,7 +119,9 @@ namespace FuXing
                         ["spaceBefore"] = new JObject { ["type"] = "number", ["description"] = "段前间距（磅）" },
                         ["spaceAfter"] = new JObject { ["type"] = "number", ["description"] = "段后间距（磅）" },
                         ["lineSpacingMultiple"] = new JObject { ["type"] = "number", ["description"] = "行距倍数" },
+                        ["lineSpacingExact"] = new JObject { ["type"] = "number", ["description"] = "固定行距（磅）" },
                         ["firstLineIndent"] = new JObject { ["type"] = "number", ["description"] = "首行缩进（磅）" },
+                        ["leftIndent"] = new JObject { ["type"] = "number", ["description"] = "左缩进（磅）" },
                         ["outlineLevel"] = new JObject { ["type"] = "integer", ["description"] = "大纲级别 1-9，10=正文" }
                     }
                 }
@@ -224,6 +229,18 @@ namespace FuXing
                     summary.Append($"已格式化 {count} 个 {level} 级标题");
                     break;
 
+                case "body_text":
+                    foreach (Paragraph p in doc.Paragraphs)
+                    {
+                        if ((int)p.OutlineLevel == (int)WdOutlineLevel.wdOutlineLevelBodyText)
+                        {
+                            ApplyAll(p.Range, styleObj, font, paragraph);
+                            count++;
+                        }
+                    }
+                    summary.Append($"已格式化 {count} 个正文段落（含列表项）");
+                    break;
+
                 default:
                     return System.Threading.Tasks.Task.FromResult(
                         ToolExecutionResult.Fail($"未知 target.type: {targetType}"));
@@ -261,14 +278,22 @@ namespace FuXing
             dynamic comStyles = ((dynamic)doc.UnderlyingObject).Styles;
             dynamic style = FindOrCreateStyle(comStyles, styleName, styleType);
 
-            try
+            if (string.Equals(basedOn, "none", StringComparison.OrdinalIgnoreCase))
             {
-                if (Enum.TryParse<WdBuiltinStyle>(basedOn, ignoreCase: true, out var builtinBase))
-                    style.BaseStyle = comStyles[(int)builtinBase];
-                else
-                    style.BaseStyle = comStyles[basedOn];
+                try { style.BaseStyle = ""; }
+                catch { /* Word 可能不支持空基准 */ }
             }
-            catch { /* 基础样式不存在时忽略 */ }
+            else
+            {
+                try
+                {
+                    if (Enum.TryParse<WdBuiltinStyle>(basedOn, ignoreCase: true, out var builtinBase))
+                        style.BaseStyle = comStyles[(int)builtinBase];
+                    else
+                        style.BaseStyle = comStyles[basedOn];
+                }
+                catch { /* 基础样式不存在时忽略 */ }
+            }
 
             if (!string.IsNullOrWhiteSpace(nextStyle))
             {
@@ -303,6 +328,8 @@ namespace FuXing
         private void ApplyFont(dynamic f, JObject font)
         {
             if (font["name"] != null) f.Name = font["name"].ToString();
+            if (font["name_ascii"] != null) f.NameAscii = font["name_ascii"].ToString();
+            if (font["name_far_east"] != null) f.NameFarEast = font["name_far_east"].ToString();
             if (font["size"] != null) f.Size = (float)font["size"];
             if (font["bold"] != null) f.Bold = (bool)font["bold"] ? 1 : 0;
             if (font["italic"] != null) f.Italic = (bool)font["italic"] ? 1 : 0;
@@ -327,8 +354,15 @@ namespace FuXing
                 pf.LineSpacingRule = (int)WdLineSpacing.wdLineSpaceMultiple;
                 pf.LineSpacing = (float)paragraph["lineSpacingMultiple"] * 12f;
             }
+            if (paragraph["lineSpacingExact"] != null)
+            {
+                pf.LineSpacingRule = (int)WdLineSpacing.wdLineSpaceExactly;
+                pf.LineSpacing = (float)paragraph["lineSpacingExact"];
+            }
             if (paragraph["firstLineIndent"] != null)
                 pf.FirstLineIndent = (float)paragraph["firstLineIndent"];
+            if (paragraph["leftIndent"] != null)
+                pf.LeftIndent = (float)paragraph["leftIndent"];
             if (paragraph["outlineLevel"] != null)
                 pf.OutlineLevel = (int)paragraph["outlineLevel"];
         }
@@ -399,10 +433,7 @@ namespace FuXing
             if (node == null)
                 throw new ToolArgumentException(
                     $"节点不存在: {nodeIdOrLabel}。请先调用 document_graph(map) 获取有效节点，或检查 label 是否正确。");
-            if (node.AnchorLabel == null)
-                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
-
-            return DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+            return DocumentGraphCache.Instance.GetNodeRange(doc, node);
         }
     }
 }

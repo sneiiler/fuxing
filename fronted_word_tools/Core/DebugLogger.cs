@@ -230,7 +230,7 @@ namespace FuXing
             Write("INFO", message);
         }
 
-        /// <summary>记录内部组件调试信息（AnchorManager / GraphBuilder / GraphCache 等）</summary>
+        /// <summary>记录内部组件调试信息（GraphBuilder / GraphCache 等）</summary>
         public void LogDebug(string component, string message)
         {
             Write("DEBUG", $"  [{component}] {message}");

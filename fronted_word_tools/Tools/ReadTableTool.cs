@@ -211,10 +211,7 @@ namespace FuXing
             if (node.Type != DocNodeType.Table)
                 throw new ToolArgumentException(
                     $"节点 [{node.Id}] 类型为 {node.Type}，不是 Table 节点");
-            if (node.AnchorLabel == null)
-                throw new ToolArgumentException($"节点 {node.Id} 无锚点");
-
-            var range = DocumentGraphCache.Instance.Anchors.GetRange(doc, node.AnchorLabel);
+            var range = DocumentGraphCache.Instance.GetNodeRange(doc, node);
 
             foreach (Table table in doc.Tables)
             {

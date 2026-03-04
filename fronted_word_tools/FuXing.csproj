@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="packages\Microsoft.Agents.AI.DevUI.1.0.0-preview.260225.1\build\Microsoft.Agents.AI.DevUI.props" Condition="Exists('packages\Microsoft.Agents.AI.DevUI.1.0.0-preview.260225.1\build\Microsoft.Agents.AI.DevUI.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <LangVersion>8.0</LangVersion>
@@ -13,6 +14,8 @@
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -56,8 +59,38 @@
     <Reference Include="Markdown, Version=2.0.0.0, Culture=neutral, PublicKeyToken=1b320cc08ad5aa89, processorArchitecture=MSIL">
       <HintPath>packages\Markdown.2.2.1\lib\net451\Markdown.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Agents.AI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=f300afd708cefcd3, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Agents.AI.1.0.0-rc2\lib\netstandard2.0\Microsoft.Agents.AI.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Agents.AI.Abstractions, Version=1.0.0.0, Culture=neutral, PublicKeyToken=f300afd708cefcd3, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Agents.AI.Abstractions.1.0.0-rc2\lib\netstandard2.0\Microsoft.Agents.AI.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Agents.AI.OpenAI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=f300afd708cefcd3, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Agents.AI.OpenAI.1.0.0-rc2\lib\netstandard2.0\Microsoft.Agents.AI.OpenAI.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Agents.AI.Workflows, Version=1.0.0.0, Culture=neutral, PublicKeyToken=f300afd708cefcd3, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Agents.AI.Workflows.1.0.0-rc2\lib\netstandard2.0\Microsoft.Agents.AI.Workflows.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.Bcl.AsyncInterfaces.10.0.3\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.HashCode, Version=6.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Bcl.HashCode.6.0.0\lib\net462\Microsoft.Bcl.HashCode.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.Numerics, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Bcl.Numerics.10.0.3\lib\net462\Microsoft.Bcl.Numerics.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.AI, Version=10.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Extensions.AI.10.3.0\lib\net462\Microsoft.Extensions.AI.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.AI.Abstractions, Version=10.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Extensions.AI.Abstractions.10.3.0\lib\net462\Microsoft.Extensions.AI.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.AI.OpenAI, Version=10.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Extensions.AI.OpenAI.10.3.0\lib\net462\Microsoft.Extensions.AI.OpenAI.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Caching.Abstractions, Version=10.0.0.3, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Extensions.Caching.Abstractions.10.0.3\lib\net462\Microsoft.Extensions.Caching.Abstractions.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Extensions.Configuration.Abstractions, Version=10.0.0.3, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.Extensions.Configuration.Abstractions.10.0.3\lib\net462\Microsoft.Extensions.Configuration.Abstractions.dll</HintPath>
@@ -83,6 +116,9 @@
     <Reference Include="Microsoft.Extensions.Primitives, Version=10.0.0.3, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.Extensions.Primitives.10.0.3\lib\net462\Microsoft.Extensions.Primitives.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Extensions.VectorData.Abstractions, Version=9.0.0.0, Culture=neutral, PublicKeyToken=f300afd708cefcd3, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Extensions.VectorData.Abstractions.9.7.0\lib\net462\Microsoft.Extensions.VectorData.Abstractions.dll</HintPath>
+    </Reference>
     <Reference Include="NetOffice, Version=1.9.8.0, Culture=neutral, PublicKeyToken=297f57b43ae7c1de, processorArchitecture=MSIL">
       <HintPath>packages\NetOfficeFw.Core.1.9.8\lib\net462\NetOffice.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
@@ -96,6 +132,9 @@
     </Reference>
     <Reference Include="OpenAI, Version=2.9.1.0, Culture=neutral, PublicKeyToken=b4187f3e65366280, processorArchitecture=MSIL">
       <HintPath>packages\OpenAI.2.9.1\lib\netstandard2.0\OpenAI.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTelemetry.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7bd6737fe5b67e3c, processorArchitecture=MSIL">
+      <HintPath>packages\OpenTelemetry.Api.1.13.1\lib\net462\OpenTelemetry.Api.dll</HintPath>
     </Reference>
     <Reference Include="stdole, Version=17.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\stdole.17.14.40260\lib\net45\stdole.dll</HintPath>
@@ -130,6 +169,9 @@
       <HintPath>packages\System.Net.ServerSentEvents.10.0.3\lib\net462\System.Net.ServerSentEvents.dll</HintPath>
     </Reference>
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Tensors, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Numerics.Tensors.10.0.3\lib\net462\System.Numerics.Tensors.dll</HintPath>
+    </Reference>
     <Reference Include="System.Numerics.Vectors, Version=4.1.6.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\System.Numerics.Vectors.4.6.1\lib\net462\System.Numerics.Vectors.dll</HintPath>
     </Reference>
@@ -144,6 +186,9 @@
     </Reference>
     <Reference Include="System.Text.Json, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>packages\System.Text.Json.10.0.3\lib\net462\System.Text.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Channels, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Threading.Channels.10.0.3\lib\net462\System.Threading.Channels.dll</HintPath>
     </Reference>
     <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.4.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>packages\System.Threading.Tasks.Extensions.4.6.3\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
@@ -178,10 +223,8 @@
     <Compile Include="Core\SessionManager.cs" />
     <Compile Include="Core\ToolRegistry.cs" />
     <Compile Include="Core\SkillManager.cs" />
-    <Compile Include="Core\DocumentHelper.cs" />
     <Compile Include="Core\DebugLogger.cs" />
     <Compile Include="Core\ToolCategory.cs" />
-    <Compile Include="Core\AnchorManager.cs" />
     <Compile Include="Core\CursorSnapshot.cs" />
     <Compile Include="Core\DocumentGraph.cs" />
     <Compile Include="Core\DocumentGraphBuilder.cs" />
@@ -189,10 +232,7 @@
     <Compile Include="Core\MarkdownWordRenderer.cs" />
     <Compile Include="SubAgents\SubAgent.cs" />
     <Compile Include="SubAgents\SubAgentModels.cs" />
-    <Compile Include="SubAgents\DocumentStructureExtractor.cs" />
     <Compile Include="SubAgents\RunSubAgentTool.cs" />
-    <Compile Include="SubAgents\DocumentAst.cs" />
-    <Compile Include="SubAgents\DocumentAstBuilder.cs" />
     <Compile Include="Core\WordHelper.cs" />
     <Compile Include="Core\CursorContextProvider.cs" />
     <!-- UI: ���� & ���� -->
@@ -287,4 +327,10 @@
     <LangVersion>8.0</LangVersion>
     <PostBuildEvent>"$(ProjectDir)PostBuild.bat" "$(TargetDir)" "$(TargetName)" "$(ConfigurationName)"</PostBuildEvent>
   </PropertyGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>这台计算机上缺少此项目引用的 NuGet 程序包。使用“NuGet 程序包还原”可下载这些程序包。有关更多信息，请参见 http://go.microsoft.com/fwlink/?LinkID=322105。缺少的文件是 {0}。</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\Microsoft.Agents.AI.DevUI.1.0.0-preview.260225.1\build\Microsoft.Agents.AI.DevUI.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\Microsoft.Agents.AI.DevUI.1.0.0-preview.260225.1\build\Microsoft.Agents.AI.DevUI.props'))" />
+  </Target>
 </Project>

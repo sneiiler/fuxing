@@ -291,10 +291,8 @@ namespace FuXing
             var profile = JObject.Parse(File.ReadAllText(profilePath));
 
             string bodyStyle = profile["body_style"]?.ToString();
-            string bodySeed = profile["body_seed_from"]?.ToString();
 
             var headingStyles = profile["heading_styles"] as JObject;
-            var headingSeed = profile["heading_seed_from"] as JObject;
 
             var captionObj = profile["caption"] as JObject;
             string captionStyle = captionObj?["style_name"]?.ToString();
@@ -304,18 +302,75 @@ namespace FuXing
             string tableStyle = tableObj?["style_name"]?.ToString();
             string tableSeed = tableObj?["seed_from_style_name"]?.ToString();
 
-            if (!string.IsNullOrWhiteSpace(bodyStyle) && !string.IsNullOrWhiteSpace(bodySeed))
-                CreateOrUpdateStyleByTool(bodyStyle, bodySeed, "fx_正文", "paragraph");
+            // ── 正文样式：无样式基准，明确设定所有属性 ──
+            var bodyFontObj = profile["body_font"] as JObject;
+            if (!string.IsNullOrWhiteSpace(bodyStyle) && bodyFontObj != null)
+            {
+                var bodyFont = new JObject
+                {
+                    ["name"] = bodyFontObj["name"]?.ToString(),
+                    ["size"] = bodyFontObj["size_pt"]?.Value<float>() ?? 12f
+                };
+                if (bodyFontObj["name_ascii"] != null)
+                    bodyFont["name_ascii"] = bodyFontObj["name_ascii"].ToString();
+                if (bodyFontObj["name"] != null)
+                    bodyFont["name_far_east"] = bodyFontObj["name"].ToString();
 
-            if (headingStyles != null && headingSeed != null)
+                var bodyPara = new JObject
+                {
+                    ["alignment"] = bodyFontObj["alignment"]?.ToString() ?? "justify",
+                    ["spaceBefore"] = bodyFontObj["space_before_pt"]?.Value<float>() ?? 0f,
+                    ["spaceAfter"] = bodyFontObj["space_after_pt"]?.Value<float>() ?? 0f
+                };
+                if (bodyFontObj["first_line_indent_pt"] != null)
+                    bodyPara["firstLineIndent"] = bodyFontObj["first_line_indent_pt"].Value<float>();
+                if (string.Equals(bodyFontObj["line_spacing_rule"]?.ToString(), "exactly", StringComparison.OrdinalIgnoreCase)
+                    && bodyFontObj["line_spacing_pt"] != null)
+                    bodyPara["lineSpacingExact"] = bodyFontObj["line_spacing_pt"].Value<float>();
+
+                CreateOrUpdateStyleByTool(bodyStyle, "none", bodyStyle, "paragraph", bodyFont, bodyPara);
+            }
+
+            // ── 标题样式：无样式基准，左对齐，缩进0，设置大纲级别 ──
+            var headingFontObj = profile["heading_font"] as JObject;
+            var headingLevels = headingFontObj?["levels"] as JObject;
+            if (headingStyles != null && headingFontObj != null)
             {
                 for (int i = 1; i <= 6; i++)
                 {
                     string key = "h" + i;
                     string target = headingStyles[key]?.ToString();
-                    string seed = headingSeed[key]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(target) && !string.IsNullOrWhiteSpace(seed))
-                        CreateOrUpdateStyleByTool(target, seed, bodyStyle, "paragraph");
+                    if (string.IsNullOrWhiteSpace(target)) continue;
+
+                    var levelObj = headingLevels?[key] as JObject;
+                    float fontSize = levelObj?["size_pt"]?.Value<float>() ?? 12f;
+                    bool bold = levelObj?["bold"]?.Value<bool>() ?? false;
+
+                    var hFont = new JObject
+                    {
+                        ["name"] = headingFontObj["name"]?.ToString(),
+                        ["size"] = fontSize,
+                        ["bold"] = bold
+                    };
+                    if (headingFontObj["name_ascii"] != null)
+                        hFont["name_ascii"] = headingFontObj["name_ascii"].ToString();
+                    if (headingFontObj["name"] != null)
+                        hFont["name_far_east"] = headingFontObj["name"].ToString();
+
+                    var hPara = new JObject
+                    {
+                        ["alignment"] = headingFontObj["alignment"]?.ToString() ?? "left",
+                        ["firstLineIndent"] = headingFontObj["first_line_indent_pt"]?.Value<float>() ?? 0f,
+                        ["leftIndent"] = headingFontObj["left_indent_pt"]?.Value<float>() ?? 0f,
+                        ["spaceBefore"] = headingFontObj["space_before_pt"]?.Value<float>() ?? 0f,
+                        ["spaceAfter"] = headingFontObj["space_after_pt"]?.Value<float>() ?? 0f,
+                        ["outlineLevel"] = i
+                    };
+                    if (string.Equals(headingFontObj["line_spacing_rule"]?.ToString(), "exactly", StringComparison.OrdinalIgnoreCase)
+                        && headingFontObj["line_spacing_pt"] != null)
+                        hPara["lineSpacingExact"] = headingFontObj["line_spacing_pt"].Value<float>();
+
+                    CreateOrUpdateStyleByTool(target, "none", bodyStyle, "paragraph", hFont, hPara);
                 }
             }
 
@@ -340,7 +395,7 @@ namespace FuXing
                 : fullName;
         }
 
-        private void CreateOrUpdateStyleByTool(string targetStyle, string basedOn, string nextStyle, string styleType)
+        private void CreateOrUpdateStyleByTool(string targetStyle, string basedOn, string nextStyle, string styleType, JObject font = null, JObject paragraph = null)
         {
             var args = new JObject
             {
@@ -352,6 +407,11 @@ namespace FuXing
 
             if (!string.IsNullOrWhiteSpace(nextStyle) && styleType == "paragraph")
                 args["next_style"] = nextStyle;
+
+            if (font != null)
+                args["font"] = font;
+            if (paragraph != null)
+                args["paragraph"] = paragraph;
 
             var result = ToolRegistry.ExecuteAsync("format_content", args).GetAwaiter().GetResult();
             if (!result.Success)

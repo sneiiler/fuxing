@@ -1,3 +1,4 @@
+using FuXing.Core;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Threading.Tasks;
@@ -130,7 +131,7 @@ namespace FuXing
             bool excludeSourceHeading,
             int deletedChars)
         {
-            var (sourceDoc, shouldCloseSourceDoc) = DocumentHelper.GetOrOpenReadOnly(app, sourceFilePath);
+            var (sourceDoc, shouldCloseSourceDoc) = DocumentGraphBuilder.GetOrOpenReadOnly(app, sourceFilePath);
 
             try
             {

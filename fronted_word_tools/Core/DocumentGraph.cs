@@ -7,7 +7,7 @@ namespace FuXing.Core
     // ═══════════════════════════════════════════════════════════════
     //  文档图（Document Graph）模型  ——  “万物皆节点”
     //
-    //  每个可寻址的文档元素都是图中的 DocNode，由 CC 锚定。
+    //  每个可寻址的文档元素都是图中的 DocNode，由 Meta 位置元数据定位。
     //  两层粒度：
     //  - 骨架+内容层：map 时一次性建立 Section / Heading / TextBlock / Table / Image / List / Preamble
     //  - 段落层：Paragraph，expand(textblock) 时创建
@@ -22,10 +22,10 @@ namespace FuXing.Core
         /// <summary>根节点，代表整个文档</summary>
         Document,
 
-        /// <summary>章节容器（CC 覆盖标题后的正文区域）</summary>
+        /// <summary>章节容器（范围覆盖标题后的正文区域）</summary>
         Section,
 
-        /// <summary>标题段落（CC 仅覆盖标题段落本身）</summary>
+        /// <summary>标题段落</summary>
         Heading,
 
         /// <summary>文档第一个标题之前的内容</summary>
@@ -49,8 +49,7 @@ namespace FuXing.Core
 
     /// <summary>
     /// 文档图节点。
-    /// 每个节点与一个 ContentControl 绑定，通过 AnchorLabel 引用。
-    /// 编辑文档时 CC 自动跟踪位置，无需重建索引。
+    /// 每个节点通过 Meta 中的 range_start/range_end 存储文档位置。
     /// </summary>
     public class DocNode
     {
@@ -73,14 +72,6 @@ namespace FuXing.Core
 
         /// <summary>Section 专用：标题级别 1-6，其他类型为 0</summary>
         public int Level { get; set; }
-
-        // ── CC 锚点 ──
-
-        /// <summary>
-        /// 对应的 AnchorManager 锚点标签。
-        /// 通过 AnchorManager.GetRange(doc, AnchorLabel) 获取实时位置。
-        /// </summary>
-        public string AnchorLabel { get; set; }
 
         // ── 图关系（邻接表） ──
 

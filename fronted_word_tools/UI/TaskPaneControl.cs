@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
 using System.Text.RegularExpressions;
+using FuXing.Core;
 using FuXing.UI;
 using FuXing.SubAgents;
 
@@ -60,6 +61,13 @@ namespace FuXing
         private AntdUI.Tag _selectionTag;
         private System.Windows.Forms.Timer _selectionTimer;
         private string _attachedSelectionText;
+
+        // ── 文档感知状态栏 ──
+        private System.Windows.Forms.Panel _perceptionBar;
+        private System.Windows.Forms.Label _perceptionStatusLabel;
+        private AntdUI.Button _deepPerceptionBtn;
+        private System.Windows.Forms.TreeView _docTreeView;
+        private bool _treeExpanded;
 
         // ── 问候消息（隐藏提示词，重建历史时需跳过）──
         private const string GreetingPrompt = "请用简洁友好的方式向用户打招呼，介绍你作为 Word 文档助手的核心能力（例如：文档编辑、格式调整、内容生成、纠错润色、文档分析等），然后询问用户想要做什么。控制在100字以内。";
@@ -151,6 +159,9 @@ namespace FuXing
                     _selectionTimer = null;
                 }
 
+                // 取消订阅缓存变更事件
+                DocumentGraphCache.Instance.CacheChanged -= OnGraphCacheChanged;
+
                 if (_application != null)
                 {
                     _application = null;
@@ -195,6 +206,9 @@ namespace FuXing
 
                     // 首次可见时，向 LLM 发送问候请求作为健康检查
                     CheckAndRequestGreeting();
+
+                    // 自动执行快速感知（无缓存时）
+                    AutoPerceiveIfNeeded();
                 }
             }
             catch (Exception ex)
@@ -638,7 +652,7 @@ namespace FuXing
                 Padding = new Padding(0),
                 Margin = new Padding(0),
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None
             };
 
@@ -647,23 +661,25 @@ namespace FuXing
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                 ?.SetValue(mainContainer, true, null);
 
-            // 设置行的大小类型：会话栏-状态栏-功能区-聊天-上下文条-输入
+            // 设置行的大小类型：会话栏-状态栏-功能区-聊天-上下文条-感知栏-输入
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));  // Row0: 会话工具栏
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));  // Row1: 状态栏
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));  // Row2: 顶部功能区
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // Row3: 聊天区域自适应
             mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));   // Row4: 上下文条（默认隐藏）
-            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // Row5: 底部输入区（可自适应）
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));  // Row5: 文档感知状态栏
+            mainContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // Row6: 底部输入区（可自适应）
 
             // 设置列宽为100%
             mainContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            // 创建六个区域
+            // 创建七个区域
             var sessionBar = CreateSessionToolbar();
             var statusBar = CreateStatusBar();
             var topPanel = CreateTopControlsPanel();
             var chatPanel = CreateRichChatPanel();
             var contextBar = CreateContextBar();
+            var perceptionBar = CreatePerceptionBar();
             var bottomPanel = CreateBottomInputPanel();
 
             // 设置每个面板的停靠方式
@@ -672,6 +688,7 @@ namespace FuXing
             topPanel.Dock = DockStyle.Fill;
             chatPanel.Dock = DockStyle.Fill;
             contextBar.Dock = DockStyle.Fill;
+            perceptionBar.Dock = DockStyle.Fill;
             bottomPanel.Dock = DockStyle.Fill;
 
             // 按顺序添加到表格布局中
@@ -681,7 +698,8 @@ namespace FuXing
             mainContainer.Controls.Add(topPanel, 0, 2);       // 第2行：功能区
             mainContainer.Controls.Add(chatPanel, 0, 3);      // 第3行：聊天区
             mainContainer.Controls.Add(contextBar, 0, 4);     // 第4行：上下文条
-            mainContainer.Controls.Add(bottomPanel, 0, 5);    // 第5行：输入区
+            mainContainer.Controls.Add(perceptionBar, 0, 5);  // 第5行：文档感知状态栏
+            mainContainer.Controls.Add(bottomPanel, 0, 6);    // 第6行：输入区
             mainContainer.ResumeLayout(false);
 
             _mainContainer = mainContainer;
@@ -1294,6 +1312,412 @@ namespace FuXing
             return _contextBarPanel;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  文档感知状态栏（Row 5）
+        // ═══════════════════════════════════════════════════════════
+
+        /// <summary>创建文档感知状态栏：左侧状态文字（可点击展开文档树） + 右侧「深度感知」按钮</summary>
+        private System.Windows.Forms.Panel CreatePerceptionBar()
+        {
+            _perceptionBar = new System.Windows.Forms.Panel
+            {
+                BackColor = Color.FromArgb(248, 250, 252),
+                Name = "PerceptionBar",
+                Height = 30,
+                Padding = new Padding(0)
+            };
+
+            _perceptionStatusLabel = new System.Windows.Forms.Label
+            {
+                Text = "⚠ 未感知",
+                Font = new Font("Microsoft YaHei UI", 8F),
+                ForeColor = Color.FromArgb(156, 163, 175),
+                AutoSize = true,
+                Location = new Point(8, 7),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+            _perceptionStatusLabel.Click += OnPerceptionStatusClick;
+
+            _deepPerceptionBtn = new AntdUI.Button
+            {
+                Text = "感知 ▾",
+                Size = new Size(64, 24),
+                Font = new Font("Microsoft YaHei UI", 8F),
+                Type = AntdUI.TTypeMini.Primary,
+                Radius = 4,
+                Anchor = AnchorStyles.Right
+            };
+            _deepPerceptionBtn.Click += OnPerceptionBtnShowMenu;
+
+            // 文档结构树（初始隐藏）
+            _docTreeView = new System.Windows.Forms.TreeView
+            {
+                Visible = false,
+                Dock = DockStyle.None,
+                BorderStyle = BorderStyle.None,
+                BackColor = Color.FromArgb(248, 250, 252),
+                Font = new Font("Microsoft YaHei UI", 8F),
+                ForeColor = Color.FromArgb(55, 65, 81),
+                ShowLines = true,
+                ShowPlusMinus = true,
+                ShowRootLines = false,
+                FullRowSelect = true,
+                ItemHeight = 22,
+                Indent = 16
+            };
+
+            // 顶部分隔线
+            _perceptionBar.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(229, 231, 235)))
+                    e.Graphics.DrawLine(pen, 0, 0, _perceptionBar.Width, 0);
+            };
+
+            // 响应式布局：状态行固定在底部 30px，树填充剩余空间
+            _perceptionBar.Resize += (s, e) =>
+            {
+                int pw = _perceptionBar.ClientSize.Width;
+                int ph = _perceptionBar.ClientSize.Height;
+                _deepPerceptionBtn.Location = new Point(pw - _deepPerceptionBtn.Width - 6, ph - 27);
+                _perceptionStatusLabel.Location = new Point(8, ph - 23);
+                if (_docTreeView.Visible)
+                {
+                    int treeHeight = ph - 30;
+                    _docTreeView.SetBounds(0, 0, pw, treeHeight > 0 ? treeHeight : 0);
+                }
+            };
+
+            _perceptionBar.Controls.AddRange(new Control[] { _docTreeView, _perceptionStatusLabel, _deepPerceptionBtn });
+
+            // 订阅缓存变更事件
+            DocumentGraphCache.Instance.CacheChanged += OnGraphCacheChanged;
+
+            return _perceptionBar;
+        }
+
+        /// <summary>点击状态文字，展开/收起文档结构树</summary>
+        private void OnPerceptionStatusClick(object sender, EventArgs e)
+        {
+            if (_treeExpanded)
+                CollapseDocTree();
+            else
+                ExpandDocTree();
+        }
+
+        /// <summary>展开文档结构树</summary>
+        private void ExpandDocTree()
+        {
+            PopulateDocTree();
+            if (_docTreeView.Nodes.Count == 0) return; // 无数据不展开
+
+            _treeExpanded = true;
+            _docTreeView.Visible = true;
+
+            // 根据节点数量动态计算高度，最大 220px
+            int desiredHeight = Math.Min(_docTreeView.GetNodeCount(true) * 22 + 8, 220);
+            int totalHeight = desiredHeight + 30; // 树高度 + 底部状态行高度
+
+            if (_mainContainer != null)
+            {
+                _mainContainer.RowStyles[5].Height = totalHeight;
+                _mainContainer.PerformLayout();
+            }
+        }
+
+        /// <summary>收起文档结构树</summary>
+        private void CollapseDocTree()
+        {
+            _treeExpanded = false;
+            _docTreeView.Visible = false;
+
+            if (_mainContainer != null)
+            {
+                _mainContainer.RowStyles[5].Height = 30f;
+                _mainContainer.PerformLayout();
+            }
+        }
+
+        /// <summary>根据当前文档图填充 TreeView 节点</summary>
+        private void PopulateDocTree()
+        {
+            _docTreeView.Nodes.Clear();
+
+            try
+            {
+                var doc = _application?.ActiveDocument;
+                if (doc == null) return;
+
+                var graph = DocumentGraphCache.Instance.GetCached(doc.FullName);
+                if (graph?.Root == null) return;
+
+                _docTreeView.BeginUpdate();
+                foreach (var childId in graph.Root.ChildIds)
+                    AddTreeNode(_docTreeView.Nodes, graph, childId);
+                _docTreeView.ExpandAll();
+                _docTreeView.EndUpdate();
+            }
+            catch
+            {
+                // 静默忽略
+            }
+        }
+
+        /// <summary>递归添加文档图节点到 TreeView</summary>
+        private void AddTreeNode(System.Windows.Forms.TreeNodeCollection parent, DocumentGraph graph, string nodeId)
+        {
+            var node = graph.GetById(nodeId);
+            if (node == null) return;
+
+            // 跳过 Heading 节点 — Section 已携带标题，Heading 是实现细节
+            if (node.Type == DocNodeType.Heading) return;
+
+            string icon = GetTreeNodeIcon(node.Type);
+            string text = $"{icon} {node.Title}";
+
+            var treeNode = new System.Windows.Forms.TreeNode(text) { Tag = node.Id };
+
+            // 根据节点类型设置颜色
+            switch (node.Type)
+            {
+                case DocNodeType.Section:
+                    treeNode.ForeColor = Color.FromArgb(30, 64, 175);  // 蓝色
+                    break;
+                case DocNodeType.Table:
+                    treeNode.ForeColor = Color.FromArgb(180, 83, 9);   // 琥珀
+                    break;
+                case DocNodeType.Image:
+                    treeNode.ForeColor = Color.FromArgb(124, 58, 237); // 紫色
+                    break;
+                case DocNodeType.List:
+                    treeNode.ForeColor = Color.FromArgb(4, 120, 87);   // 绿色
+                    break;
+            }
+
+            parent.Add(treeNode);
+
+            // Section 递归展示子节点（跳过 Heading 后只剩内容元素和子 Section）
+            if (node.Type == DocNodeType.Section || node.Type == DocNodeType.Document)
+            {
+                foreach (var childId in node.ChildIds)
+                    AddTreeNode(treeNode.Nodes, graph, childId);
+            }
+        }
+
+        private static string GetTreeNodeIcon(DocNodeType type)
+        {
+            switch (type)
+            {
+                case DocNodeType.Section: return "§";
+                case DocNodeType.Heading: return "H";
+                case DocNodeType.Preamble: return "📝";
+                case DocNodeType.Table: return "📋";
+                case DocNodeType.Image: return "🖼";
+                case DocNodeType.TextBlock: return "¶";
+                case DocNodeType.List: return "📌";
+                default: return "•";
+            }
+        }
+
+        /// <summary>自动感知：TaskPane 可见时若当前文档无缓存则执行快速感知</summary>
+        private async void AutoPerceiveIfNeeded()
+        {
+            try
+            {
+                // Word COM 可能尚未就绪，延迟等待 ActiveDocument 可用
+                NetOffice.WordApi.Document doc = null;
+                for (int retry = 0; retry < 6; retry++)
+                {
+                    try { doc = _application?.ActiveDocument; } catch { }
+                    if (doc != null) break;
+                    await Task.Delay(500);
+                }
+
+                if (doc == null) return;
+
+                var cached = DocumentGraphCache.Instance.GetCached(doc.FullName);
+                if (cached != null)
+                {
+                    RefreshPerceptionStatus();
+                    return;
+                }
+
+                // 异步执行快速感知
+                if (InvokeRequired)
+                    Invoke((MethodInvoker)delegate {
+                        _perceptionStatusLabel.Text = "⏳ 正在快速感知…";
+                        _perceptionStatusLabel.ForeColor = Color.FromArgb(245, 158, 11);
+                        _deepPerceptionBtn.Enabled = false;
+                    });
+                else
+                {
+                    _perceptionStatusLabel.Text = "⏳ 正在快速感知…";
+                    _perceptionStatusLabel.ForeColor = Color.FromArgb(245, 158, 11);
+                    _deepPerceptionBtn.Enabled = false;
+                }
+
+                await DocumentGraphCache.Instance.GetOrBuildAsync(doc, deep: false);
+                // CacheChanged 事件会自动触发 RefreshPerceptionStatus
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"AutoPerceive error: {ex.Message}");
+                RefreshPerceptionStatus();
+            }
+            finally
+            {
+                if (IsHandleCreated && !IsDisposed)
+                {
+                    if (InvokeRequired)
+                        BeginInvoke((MethodInvoker)delegate { _deepPerceptionBtn.Enabled = true; });
+                    else
+                        _deepPerceptionBtn.Enabled = true;
+                }
+            }
+        }
+
+        /// <summary>缓存变更时刷新感知状态栏</summary>
+        private void OnGraphCacheChanged(object sender, GraphCacheChangedEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)delegate { RefreshPerceptionStatus(); });
+                return;
+            }
+            RefreshPerceptionStatus();
+        }
+
+        /// <summary>刷新文档感知状态栏显示</summary>
+        private void RefreshPerceptionStatus()
+        {
+            if (_perceptionStatusLabel == null) return;
+            if (InvokeRequired) { Invoke((MethodInvoker)RefreshPerceptionStatus); return; }
+
+            string arrow = _treeExpanded ? "▾" : "▸";
+            bool hasGraph = false;
+
+            try
+            {
+                var doc = _application?.ActiveDocument;
+                if (doc == null)
+                {
+                    _perceptionStatusLabel.Text = "⚠ 无文档";
+                    _perceptionStatusLabel.ForeColor = Color.FromArgb(156, 163, 175);
+                    _perceptionStatusLabel.Cursor = Cursors.Default;
+                    return;
+                }
+
+                var graph = DocumentGraphCache.Instance.GetCached(doc.FullName);
+                if (graph == null)
+                {
+                    _perceptionStatusLabel.Text = "⚠ 未感知";
+                    _perceptionStatusLabel.ForeColor = Color.FromArgb(156, 163, 175);
+                    _perceptionStatusLabel.Cursor = Cursors.Default;
+                    return;
+                }
+
+                hasGraph = true;
+                int sectionCount = graph.FindByType(DocNodeType.Section).Count;
+
+                if (graph.IsDeepPerception)
+                {
+                    _perceptionStatusLabel.Text = $"{arrow} ✓ 深度感知 ({sectionCount}个章节)";
+                    _perceptionStatusLabel.ForeColor = Color.FromArgb(34, 197, 94); // 绿色
+                }
+                else
+                {
+                    _perceptionStatusLabel.Text = $"{arrow} ✓ 快速感知 ({sectionCount}个章节)";
+                    _perceptionStatusLabel.ForeColor = Color.FromArgb(59, 130, 246); // 蓝色
+                }
+                _perceptionStatusLabel.Cursor = Cursors.Hand;
+            }
+            catch
+            {
+                _perceptionStatusLabel.Text = "⚠ 未感知";
+                _perceptionStatusLabel.ForeColor = Color.FromArgb(156, 163, 175);
+                _perceptionStatusLabel.Cursor = Cursors.Default;
+            }
+
+            // 树展开中时同步刷新树内容
+            if (_treeExpanded && hasGraph)
+                PopulateDocTree();
+        }
+
+        /// <summary>点击感知按钮，弹出模式选择菜单</summary>
+        private void OnPerceptionBtnShowMenu(object sender, EventArgs e)
+        {
+            var menu = new ContextMenuStrip();
+            menu.Font = new Font("Microsoft YaHei UI", 9F);
+
+            var fastItem = new ToolStripMenuItem("⚡ 快速感知");
+            fastItem.ToolTipText = "基于大纲级别快速构建文档结构";
+            fastItem.Click += async (s2, e2) => await ExecutePerception(false);
+
+            var deepItem = new ToolStripMenuItem("🧠 深度感知");
+            deepItem.ToolTipText = "使用 AI 推断标题层级，适用于未使用标题样式的文档";
+            deepItem.Click += async (s2, e2) => await ExecutePerception(true);
+
+            // 标记当前模式
+            try
+            {
+                var doc = _application?.ActiveDocument;
+                if (doc != null)
+                {
+                    var cached = DocumentGraphCache.Instance.GetCached(doc.FullName);
+                    if (cached != null)
+                    {
+                        if (cached.IsDeepPerception)
+                            deepItem.Checked = true;
+                        else
+                            fastItem.Checked = true;
+                    }
+                }
+            }
+            catch { }
+
+            menu.Items.AddRange(new ToolStripItem[] { fastItem, deepItem });
+
+            var btn = sender as Control;
+            if (btn != null)
+                menu.Show(btn, new Point(0, -menu.PreferredSize.Height));
+            else
+                menu.Show(Cursor.Position);
+        }
+
+        /// <summary>执行指定模式的文档感知</summary>
+        private async Task ExecutePerception(bool deep)
+        {
+            if (_application?.ActiveDocument == null) return;
+
+            var doc = _application.ActiveDocument;
+            string modeLabel = deep ? "深度" : "快速";
+
+            _deepPerceptionBtn.Enabled = false;
+            _deepPerceptionBtn.Text = "感知中…";
+            _perceptionStatusLabel.Text = $"⏳ 正在{modeLabel}感知…";
+            _perceptionStatusLabel.ForeColor = Color.FromArgb(245, 158, 11);
+
+            try
+            {
+                DocumentGraphCache.Instance.Invalidate(doc);
+                await DocumentGraphCache.Instance.GetOrBuildAsync(doc, deep: deep);
+                if (!_treeExpanded)
+                    ExpandDocTree();
+            }
+            catch (Exception ex)
+            {
+                _perceptionStatusLabel.Text = $"✗ {modeLabel}感知失败";
+                _perceptionStatusLabel.ForeColor = Color.FromArgb(239, 68, 68);
+                System.Diagnostics.Debug.WriteLine($"Perception error: {ex.Message}");
+            }
+            finally
+            {
+                _deepPerceptionBtn.Enabled = true;
+                _deepPerceptionBtn.Text = "感知 ▾";
+                RefreshPerceptionStatus();
+            }
+        }
+
         /// <summary>设置附着的选中文本（显示 Tag + 展开上下文条）</summary>
         private void SetAttachedSelection(string fullText)
         {
@@ -1437,9 +1861,9 @@ namespace FuXing
                         var textSize = g.MeasureString(text, inputTextBox.Font, Math.Max(1, inputTextBox.Width - 16));
                         int lineCount = Math.Max(1, (int)Math.Ceiling(textSize.Height / inputTextBox.Font.GetHeight(g)));
                         int desiredPanelH = Math.Max(68, Math.Min(160, lineCount * 24 + 28));
-                        if (Math.Abs(_mainContainer.RowStyles[5].Height - desiredPanelH) > 2)
+                        if (Math.Abs(_mainContainer.RowStyles[6].Height - desiredPanelH) > 2)
                         {
-                            _mainContainer.RowStyles[5].Height = desiredPanelH;
+                            _mainContainer.RowStyles[6].Height = desiredPanelH;
                             _mainContainer.PerformLayout();
                         }
                     }

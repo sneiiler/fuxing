@@ -1,0 +1,56 @@
+<customUI xmlns='http://schemas.microsoft.com/office/2006/01/customui' onLoad='Ribbon_OnLoad'>
+	<ribbon>
+		<tabs>
+			<tab id='AIAssistantTab' label='福星'>
+				<group id='AIGroup' label='AI功能'>
+					<button id='toggle_taskpane_btn'
+                            label='AI福星'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='toggle_taskpane_btn_Click'
+                            screentip='显示/隐藏AI福星'
+                            supertip='打开或关闭AI福星对话窗口'/>
+					<button id='CheckStandardValidityButton'
+                            label='校验引用标准'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='CheckStandardValidityButton_Click'
+                            screentip='校验选中文本的标准引用'
+                            supertip='选中文本后点击按钮，将校验文本中引用的标准是否正确'/>
+				</group>
+				<group id='TextProcessingGroup' label='文本处理'>
+					<button id='LearnFormatButton'
+                            label='学习格式'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='LearnFormatButton_Click'
+                            screentip='学习当前段落格式'
+                            supertip='学习当前选中段落的所有格式信息，并保存为新样式'/>
+					<button id='LoadDefaultStylesButton'
+                            label='载入默认样式库'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='LoadDefaultStylesButton_Click'
+                            screentip='载入AI默认样式库'
+                            supertip='加载包含AI正文、AI一级到六级标题等预设样式'/>
+				</group>
+				<group id='SettingsGroup' label='设置'>
+					<button id='setting_btn'
+                            label='设置'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='setting_btn_Click'
+                            screentip='打开设置'
+                            supertip='打开插件设置界面'/>
+					<button id='about_btn'
+                            label='关于'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='about_btn_Click'
+                            screentip='关于福星'
+                            supertip='查看福星插件版本信息和帮助内容'/>
+				</group>
+			</tab>
+		</tabs>
+	</ribbon>
+</customUI>

@@ -2,24 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "📎 编译并附加到 Word",
-      "type": "clr",
-      "request": "attach",
-      "processName": "WINWORD",
-      "preLaunchTask": "插件：编译 Debug（含自动注册 COM）",
-      "justMyCode": true,
-      "requireExactSource": false
-    },
-    {
-      "name": "📎 附加到运行中的 Word",
-      "type": "clr",
-      "request": "attach",
-      "processName": "WINWORD",
-      "justMyCode": true,
-      "requireExactSource": false
-    },
-    {
-      "name": "🚀 编译 + 启动 Word + 附加调试器",
+      "name": "编译 + 启动 Word + 附加调试器",
       "type": "clr",
       "request": "attach",
       "processName": "WINWORD",

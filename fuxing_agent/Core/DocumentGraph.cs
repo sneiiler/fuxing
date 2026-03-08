@@ -181,7 +181,7 @@ namespace FuXingAgent.Core
         {
             var sb = new StringBuilder();
             sb.AppendLine($"Document Graph: {DocumentName}");
-            sb.AppendLine($"节点数: {Index.Count} | 感知: {(IsDeepPerception ? "深度" : "快速")}");
+            sb.AppendLine($"节点数: {Index.Count}");
             sb.AppendLine();
 
             if (Root.ChildIds.Count == 0)

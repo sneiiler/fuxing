@@ -10,6 +10,8 @@ using Newtonsoft.Json.Linq;
 using Extensibility;
 using Microsoft.Office.Core;
 using Microsoft.Office.Interop.Word;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using FuXingAgent.Agents;
 using FuXingAgent.Core;
 
@@ -104,7 +106,29 @@ namespace FuXingAgent
                 _toolRegistry = new ToolRegistry();
                 _toolRegistry.Initialize(this);
 
-                _mainAgent = new MainAgent(_agentBootstrap, _toolRegistry, cfg.MaxToolRounds);
+                var historyProvider = new FuXingHistoryProvider();
+                var addinDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                var skillsDir = Path.Combine(addinDir, "Skills");
+#pragma warning disable MAAI001
+                var skillsProvider = new FileAgentSkillsProvider(skillPath: skillsDir);
+#pragma warning restore MAAI001
+
+                var innerAgent = _agentBootstrap.ChatClient.AsAIAgent(new ChatClientAgentOptions
+                {
+                    Name = "FuXing",
+                    Description = "Word 智能助手",
+                    ChatOptions = new Microsoft.Extensions.AI.ChatOptions
+                    {
+                        Temperature = 0.7f,
+                        Tools = _toolRegistry.GetAllTools(),
+                    },
+                    ChatHistoryProvider = historyProvider,
+                    AIContextProviders = new AIContextProvider[] { skillsProvider },
+                });
+
+                _mainAgent = new MainAgent(
+                    (ChatClientAgent)innerAgent,
+                    historyProvider, cfg.MaxToolRounds);
                 _subAgentRunner = new SubAgentRunner(_agentBootstrap, _toolRegistry);
 
                 BindInitialTaskPane();
@@ -176,6 +200,7 @@ namespace FuXingAgent
             switch (controlId)
             {
                 case "toggle_taskpane_btn": return "logo.png";
+                case "fact_perception_btn": return "icons8-deepseek-150.png";
                 case "CheckStandardValidityButton": return "icons8-deepseek-150.png";
                 case "LearnFormatButton": return "icons8-learn_styles.png";
                 case "LoadDefaultStylesButton": return "icons8-load_default_styles-all.png";
@@ -236,6 +261,28 @@ namespace FuXingAgent
             catch (Exception ex)
             {
                 MessageBox.Show("校验标准失败: " + ex.Message, "FuXingAgent",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        public void fact_perception_btn_Click(IRibbonControl control)
+        {
+            try
+            {
+                var ctx = GetOrCreatePaneForActiveWindow();
+                ApplyScaledTaskPaneWidth(ctx, _wordApplication?.ActiveWindow);
+                ctx.Visible = true;
+                ShowStartupWarningIfNeeded();
+
+                string message =
+                    "请立即调用 extract_document_facts_workflow，对当前文档执行事实感知。" +
+                    "只关注数据、事件、活动、技术指标四类信息。" +
+                    "先输出可预览的结构化结果，保留证据片段和上下文，不要修改文档。";
+                ctx.Control.InjectUserMessage(message);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("文档感知启动失败: " + ex.Message, "FuXingAgent",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -354,7 +401,7 @@ namespace FuXingAgent
                 return;
 
             string addinDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string profilePath = Path.Combine(addinDir, "Skills", "load_default_style", "default_style_profile.json");
+            string profilePath = Path.Combine(addinDir, "Skills", "load-default-style", "references", "default_style_profile.json");
             if (!File.Exists(profilePath))
                 throw new FileNotFoundException("默认样式配置文件不存在", profilePath);
 

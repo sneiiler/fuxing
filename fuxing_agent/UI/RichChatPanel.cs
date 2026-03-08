@@ -881,9 +881,7 @@ namespace FuXingAgent.UI
                     g.DrawPath(pen, path);
             }
 
-            // 左侧装饰线（与 ThinkBlock 一致）
-            using (var pen = new Pen(Color.FromArgb(156, 163, 175), 2))
-                g.DrawLine(pen, bounds.X + 4, bounds.Y + 8, bounds.X + 4, bounds.Bottom - 8);
+
 
             var canvas = g.High();
             {
@@ -1034,7 +1032,6 @@ namespace FuXingAgent.UI
         private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
         private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
         private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
-        private static readonly Color AccentLine = Color.FromArgb(99, 102, 241); // 靛蓝装饰线，区别于普通工具
 
         /// <summary>将函数名翻译为中文显示名</summary>
         private static string TranslateToolName(string name)
@@ -1170,9 +1167,7 @@ namespace FuXingAgent.UI
                     g.DrawPath(pen, path);
             }
 
-            // 左侧装饰线（靛蓝色，区别于普通工具的灰色）
-            using (var pen = new Pen(AccentLine, lineWidth))
-                g.DrawLine(pen, bounds.X + BlockDpi.S(g, 4), bounds.Y + topGap, bounds.X + BlockDpi.S(g, 4), bounds.Bottom - topGap);
+
 
             var canvas = g.High();
 
@@ -1270,6 +1265,242 @@ namespace FuXingAgent.UI
             if (firstLine.Length > maxLen)
                 firstLine = firstLine.Substring(0, maxLen) + "…";
             return firstLine;
+        }
+
+        private GraphicsPath RoundedRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            if (r.Width < 1 || r.Height < 1) { p.AddRectangle(r); return p; }
+            radius = Math.Min(radius, Math.Min(r.Width, r.Height) / 2);
+            if (radius < 1) { p.AddRectangle(r); return p; }
+            int d = radius * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  工作流卡片 — 嵌入聊天消息的工作流执行进度
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>工作流步骤记录</summary>
+    internal class WorkflowStep
+    {
+        public int StepIndex;
+        public string StepName;
+        public string Description;
+        public bool IsCompleted;
+        public bool Success;
+    }
+
+    /// <summary>
+    /// 工作流执行进度卡片 — 嵌入 AI 消息内，展示工作流名称、各步骤状态及最终结果。
+    /// </summary>
+    public class WorkflowBlock : IContentBlock
+    {
+        public string WorkflowName { get; set; }
+        public string WorkflowDisplayName { get; set; }
+        public int TotalSteps { get; set; }
+        public bool? Finished { get; private set; }
+        public bool? Success { get; private set; }
+        public bool IsExpanded { get; set; }
+        internal event Action ToggleRequested;
+        private int _cachedHeaderHeight = HeaderH;
+
+        private readonly Dictionary<int, WorkflowStep> _steps = new Dictionary<int, WorkflowStep>();
+
+        // 布局常量
+        private const int HeaderH = 28;
+        private const int StepLineH = 22;
+        private const int DescLineH = 18;
+
+        // 字体
+        private static readonly Font HeaderFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        private static readonly Font StepFont = new Font("Microsoft YaHei UI", 8.5F);
+        private static readonly Font DescFont = new Font("Microsoft YaHei UI", 8F);
+
+        // 颜色
+        private static readonly Color CardBg = Color.FromArgb(243, 244, 246);
+        private static readonly Color CardBorder = Color.FromArgb(229, 231, 235);
+        private static readonly Color HeaderFg = Color.FromArgb(107, 114, 128);
+        private static readonly Color ContentFg = Color.FromArgb(75, 85, 99);
+        private static readonly Color DescFg = Color.FromArgb(156, 163, 175);
+        private static readonly Color RunningColor = Color.FromArgb(59, 130, 246);
+        private static readonly Color SuccessColor = Color.FromArgb(22, 163, 74);
+        private static readonly Color ErrorColor = Color.FromArgb(220, 38, 38);
+        private static readonly Color DotBg = Color.White;
+
+        public WorkflowBlock(string workflowName, string workflowDisplayName, int totalSteps)
+        {
+            WorkflowName = workflowName;
+            WorkflowDisplayName = string.IsNullOrWhiteSpace(workflowDisplayName) ? workflowName : workflowDisplayName;
+            TotalSteps = totalSteps;
+            IsExpanded = true;
+        }
+
+        /// <summary>更新步骤状态</summary>
+        public void UpdateStep(int stepIndex, string stepName, string description, bool isCompleted, bool success)
+        {
+            if (!_steps.TryGetValue(stepIndex, out var step))
+            {
+                step = new WorkflowStep { StepIndex = stepIndex };
+                _steps[stepIndex] = step;
+            }
+            step.StepName = stepName ?? step.StepName ?? $"Step {stepIndex}";
+            step.Description = description ?? step.Description;
+            step.IsCompleted = isCompleted;
+            step.Success = success;
+            ToggleRequested?.Invoke();
+        }
+
+        /// <summary>标记工作流完成</summary>
+        public void SetFinished(bool success, string summary)
+        {
+            Finished = true;
+            Success = success;
+            if (!string.IsNullOrWhiteSpace(summary))
+                WorkflowDisplayName = $"{WorkflowDisplayName}";
+            ToggleRequested?.Invoke();
+        }
+
+        // ── IContentBlock ──
+
+        public int MeasureHeight(Graphics g, int width)
+        {
+            int headerH = BlockDpi.S(g, HeaderH);
+            _cachedHeaderHeight = headerH;
+            if (!IsExpanded) return headerH;
+
+            int stepLineH = BlockDpi.S(g, StepLineH);
+            int descLineH = BlockDpi.S(g, DescLineH);
+            int h = headerH + BlockDpi.S(g, 4);
+
+            // 按 stepIndex 排序的步骤
+            var sorted = new List<WorkflowStep>(_steps.Values);
+            sorted.Sort((a, b) => a.StepIndex.CompareTo(b.StepIndex));
+            foreach (var step in sorted)
+            {
+                h += stepLineH;
+                if (!string.IsNullOrEmpty(step.Description))
+                    h += descLineH;
+            }
+            return Math.Max(headerH, h + BlockDpi.S(g, 4));
+        }
+
+        public void Paint(Graphics g, Rectangle bounds, bool isUser)
+        {
+            int headerH = BlockDpi.S(g, HeaderH);
+            int stepLineH = BlockDpi.S(g, StepLineH);
+            int descLineH = BlockDpi.S(g, DescLineH);
+            int cornerRadius = BlockDpi.S(g, 8);
+            int lineWidth = BlockDpi.S(g, 2);
+            int topGap = BlockDpi.S(g, 8);
+            int sidePad = BlockDpi.S(g, 12);
+            int sidePadWide = BlockDpi.S(g, 24);
+            int dotSize = BlockDpi.S(g, 8);
+            int dotX = bounds.X + BlockDpi.S(g, 20);
+            _cachedHeaderHeight = headerH;
+
+            // 圆角背景
+            using (var path = RoundedRect(bounds, cornerRadius))
+            {
+                using (var brush = new SolidBrush(CardBg))
+                    g.FillPath(brush, path);
+                using (var pen = new Pen(CardBorder))
+                    g.DrawPath(pen, path);
+            }
+
+
+
+            var canvas = g.High();
+
+            // ── 头部 ──
+            string chevron = IsExpanded ? "▾" : "▸";
+            bool done = Finished == true;
+            bool ok = Success == true;
+            string statusLabel = done ? (ok ? "Completed" : "Failed") : "Running";
+            var statusColor = done ? (ok ? SuccessColor : ErrorColor) : RunningColor;
+
+            canvas.DrawText($"{chevron}  {WorkflowDisplayName}", HeaderFont, HeaderFg,
+                new Rectangle(bounds.X + sidePad, bounds.Y, bounds.Width - sidePadWide, headerH),
+                FormatFlags.VerticalCenter | FormatFlags.Left);
+
+            canvas.DrawText(statusLabel, HeaderFont, statusColor,
+                new Rectangle(bounds.X + sidePad, bounds.Y, bounds.Width - sidePadWide, headerH),
+                FormatFlags.VerticalCenter | FormatFlags.Right);
+
+            if (!IsExpanded) return;
+
+            // ── 分隔线 ──
+            int sepY = bounds.Y + headerH;
+            using (var pen = new Pen(CardBorder))
+                g.DrawLine(pen, bounds.X + sidePad, sepY, bounds.Right - sidePad, sepY);
+
+            // ── 步骤列表（Timeline 风格）──
+            var sorted = new List<WorkflowStep>(_steps.Values);
+            sorted.Sort((a, b) => a.StepIndex.CompareTo(b.StepIndex));
+
+            int y = sepY + BlockDpi.S(g, 4);
+            int textX = dotX + dotSize + BlockDpi.S(g, 8);
+            int textW = bounds.Right - sidePad - textX;
+
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                var step = sorted[i];
+                var dotColor = step.IsCompleted ? (step.Success ? SuccessColor : ErrorColor) : RunningColor;
+
+                // 竖线（连接相邻的点）
+                if (i < sorted.Count - 1)
+                {
+                    int lineStartY = y + stepLineH / 2 + dotSize / 2;
+                    int nextH = stepLineH + (!string.IsNullOrEmpty(step.Description) ? descLineH : 0);
+                    using (var pen = new Pen(Color.FromArgb(209, 213, 219), 1))
+                        g.DrawLine(pen, dotX + dotSize / 2, lineStartY, dotX + dotSize / 2, y + nextH + stepLineH / 2 - dotSize / 2);
+                }
+
+                // 圆点
+                int dotY = y + (stepLineH - dotSize) / 2;
+                using (var brush = new SolidBrush(DotBg))
+                    g.FillEllipse(brush, dotX, dotY, dotSize, dotSize);
+                using (var pen = new Pen(dotColor, lineWidth))
+                    g.DrawEllipse(pen, dotX, dotY, dotSize, dotSize);
+                if (step.IsCompleted && step.Success)
+                {
+                    using (var brush = new SolidBrush(dotColor))
+                        g.FillEllipse(brush, dotX + 2, dotY + 2, dotSize - 4, dotSize - 4);
+                }
+
+                // 步骤名称
+                canvas.DrawText(step.StepName, StepFont, ContentFg,
+                    new Rectangle(textX, y, textW, stepLineH),
+                    FormatFlags.VerticalCenter | FormatFlags.Left);
+
+                y += stepLineH;
+
+                // 描述
+                if (!string.IsNullOrEmpty(step.Description))
+                {
+                    canvas.DrawText(step.Description, DescFont, DescFg,
+                        new Rectangle(textX, y, textW, descLineH),
+                        FormatFlags.VerticalCenter | FormatFlags.Left);
+                    y += descLineH;
+                }
+            }
+        }
+
+        public bool HitTest(Point pt, Rectangle bounds) => pt.Y <= bounds.Y + _cachedHeaderHeight;
+
+        public void OnClick(Point pt, Rectangle bounds)
+        {
+            if (pt.Y <= bounds.Y + _cachedHeaderHeight)
+            {
+                IsExpanded = !IsExpanded;
+                ToggleRequested?.Invoke();
+            }
         }
 
         private GraphicsPath RoundedRect(Rectangle r, int radius)
@@ -2122,11 +2353,13 @@ namespace FuXingAgent.UI
                 mainContent = Regex.Replace(text, @"\s*<think>.*?(?:</think>|$)\s*", "", RegexOptions.Singleline).Trim();
             }
 
-            // 确定当前流式段落的起点（最后一个 ToolCallCard 之后）
+            // 确定当前流式段落的起点（最后一个持久 UI 块之后）
             int sectionStart = 0;
             for (int i = _blocks.Count - 1; i >= 0; i--)
             {
-                if (_blocks[i] is ToolCallCard)
+                if (_blocks[i] is ToolCallCard
+                    || _blocks[i] is WorkflowBlock
+                    || _blocks[i] is SubAgentBlock)
                 {
                     sectionStart = i + 1;
                     break;
@@ -2327,6 +2560,13 @@ namespace FuXingAgent.UI
             return block;
         }
 
+        /// <summary>移除指定的内容块</summary>
+        internal void RemoveBlock(IContentBlock block)
+        {
+            _blocks.Remove(block);
+            RequestLayout();
+        }
+
         /// <summary>添加工具调用卡片</summary>
         public ToolCallCard AddToolCall(string toolName, string statusText)
         {
@@ -2341,6 +2581,16 @@ namespace FuXingAgent.UI
         public SubAgentBlock AddSubAgent(string taskName)
         {
             var block = new SubAgentBlock(taskName);
+            block.ToggleRequested += () => RequestLayout();
+            _blocks.Add(block);
+            RequestLayout();
+            return block;
+        }
+
+        /// <summary>添加工作流进度卡片</summary>
+        public WorkflowBlock AddWorkflowCard(string workflowName, string workflowDisplayName, int totalSteps)
+        {
+            var block = new WorkflowBlock(workflowName, workflowDisplayName, totalSteps);
             block.ToggleRequested += () => RequestLayout();
             _blocks.Add(block);
             RequestLayout();

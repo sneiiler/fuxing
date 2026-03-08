@@ -64,22 +64,30 @@ namespace FuXingAgent
         private Panel _bottom;
         private Panel _chipBar;
         private AntdUI.Tag _selChip;
-        private AntdUI.Button _percBtn;
+        private AntdUI.Button _structBtn;     // "文档结构" 标签按钮
+        private AntdUI.Button _graphBtn;      // "知识图谱" 标签按钮
         private Panel _inputRow;
         private AntdUI.Input _inputBox;
         private AntdUI.Button _sendBtn;
 
         // ═══════════════════════════════════════════════════════════════
-        //  UI — 浮层
+        //  UI — 内联感知面板（输入框上方）
         // ═══════════════════════════════════════════════════════════════
 
-        private Panel _treePopup;
-        private TreeView _treeView;
-        private Label _treeLbl;          // 进度行右侧短文字
-        private Label _treeEmpty;        // 空状态 / 感知中中心提示
-        private Panel _percRow;          // 进度行容器
+        private Panel _inlinePanel;           // 内联内容容器
+        private Label _inlineTitleLbl;        // 内联面板标题
+        private AntdUI.Button _inlineCloseBtn;// 内联面板关闭按钮
+        private TreeView _treeView;           // 文档结构树
+        private Label _treeEmpty;             // 文档结构的空状态提示
+        private Panel _percRow;               // 进度行容器
         private AntdUI.Progress _percProgress;
+        private Label _treeLbl;               // 进度行右侧短文字
+        private Panel _factPanel;             // 知识图谱内容面板
+        private TreeView _factTreeView;       // 知识图谱树
+        private Label _factEmpty;             // 知识图谱空状态提示
         private SessionListPanel _sessionList;
+        private WorkflowBlock _activeWorkflowBlock;
+        private string _activeWorkflowName;
 
         private sealed class DocTreeAnchor
         {
@@ -109,15 +117,16 @@ namespace FuXingAgent
         private System.Windows.Forms.Timer _sTimer;
         private bool _sStripThink;
         private string _percSig;
-        private bool _deepPerception;
         private bool _isPerceiving;
+        private string _activeTab;            // "struct" | "graph" | null
+        private const int B_InlinePanel = 200;
         private string _cachedSoulContent;
         private DateTime _cachedSoulModTime;
         private ConfigLoader.Config _cachedConfig;
         private DateTime _configCacheTime;
 
         private const string GreetPrompt =
-            "请用简洁友好的方式向用户打招呼，介绍你作为 Word 文档助手的核心能力，然后询问用户想做什么。控制在100字以内。";
+            "对话开始，这是一条预置消息。先说说你的能力，然后问问用户想做什么。控制在100字以内。";
 
         // 布局基准（96 DPI）
         private const int B_Header = 44;
@@ -195,8 +204,8 @@ namespace FuXingAgent
             SuspendLayout();
             BackColor = Bg;
             Dock = DockStyle.Fill;
-            AutoScaleMode = AutoScaleMode.Dpi;
-            Font = new Font("Microsoft YaHei UI", 9F * UiScale.GetScaleForControl(this));
+            AutoScaleMode = AutoScaleMode.None;
+            Font = new Font("Microsoft YaHei UI", 9F);
 
             _header = BuildHeader();
             _bottom = BuildBottom();
@@ -211,24 +220,15 @@ namespace FuXingAgent
             Controls.Add(_sessionList);
             _sessionList.BringToFront();
 
-            _treePopup = BuildTreePopup();
-            Controls.Add(_treePopup);
-            _treePopup.BringToFront();
-
             _tip = new ToolTip();
 
             Resize += (s, e) =>
             {
                 if (_sessionList.Visible)
                     _sessionList.Bounds = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
-                if (_treePopup.Visible)
-                    PlaceTreePopup();
             };
 
-            _bottom.SizeChanged += (s, e) =>
-            {
-                if (_treePopup.Visible) PlaceTreePopup();
-            };
+            _bottom.SizeChanged += (s, e) => { };
 
             _sTimer = new System.Windows.Forms.Timer { Interval = 40 };
             _sTimer.Tick += (s, e) => FlushStream();
@@ -248,7 +248,7 @@ namespace FuXingAgent
                 Text = "+",
                 Size = new Size(S(32), S(32)),
                 Type = AntdUI.TTypeMini.Default,
-                Font = new Font("Microsoft YaHei UI", 14F * UiScale.GetScaleForControl(this)),
+                Font = new Font("Microsoft YaHei UI", 14F),
                 Radius = 2
             };
             _newChatBtn.Click += (s, e) => StartNewSession();
@@ -256,7 +256,7 @@ namespace FuXingAgent
             _titleLabel = new AntdUI.Label
             {
                 Text = "新对话",
-                Font = new Font("Microsoft YaHei UI", 10F * UiScale.GetScaleForControl(this), FontStyle.Bold),
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
                 ForeColor = Fg1,
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
@@ -265,7 +265,7 @@ namespace FuXingAgent
             _ctxDot = new Label
             {
                 Text = "●",
-                Font = new Font("Microsoft YaHei UI", 9F * UiScale.GetScaleForControl(this)),
+                Font = new Font("Microsoft YaHei UI", 9F),
                 ForeColor = CGreen,
                 AutoSize = true,
                 BackColor = Color.Transparent,
@@ -277,7 +277,7 @@ namespace FuXingAgent
                 Text = "≡",
                 Size = new Size(S(32), S(32)),
                 Type = AntdUI.TTypeMini.Default,
-                Font = new Font("Microsoft YaHei UI", 14F * UiScale.GetScaleForControl(this)),
+                Font = new Font("Microsoft YaHei UI", 14F),
                 Radius = 2
             };
             _historyBtn.Click += (s, e) => ToggleSessions(true);
@@ -321,14 +321,14 @@ namespace FuXingAgent
                     e.Graphics.DrawLine(pen, 0, 0, sec.Width, 0);
             };
 
-            // ── Chip 栏 ──
+            // -- Chip 栏 --
             _chipBar = new Panel { Height = H_ChipBar, Dock = DockStyle.Top, BackColor = Color.Transparent };
 
             _selChip = new AntdUI.Tag
             {
                 Visible = false,
-                Text = "📎 已选中",
-                Font = new Font("Microsoft YaHei UI", 8F * UiScale.GetScaleForControl(this)),
+                Text = "已选中",
+                Font = new Font("Microsoft YaHei UI", 8F),
                 ForeColor = Color.FromArgb(194, 65, 12),
                 BackColor = Color.FromArgb(255, 247, 237),
                 BorderWidth = 1,
@@ -339,11 +339,11 @@ namespace FuXingAgent
             };
             _selChip.CloseChanged += (s, e) => { ClearSel(); return true; };
 
-            _percBtn = new AntdUI.Button
+            _structBtn = new AntdUI.Button
             {
-                Text = "文档感知 ▴",
-                Size = new Size(S(110), S(30)),
-                Font = new Font("Microsoft YaHei UI", 8.5F * UiScale.GetScaleForControl(this)),
+                Text = "文档结构",
+                Size = new Size(S(88), S(30)),
+                Font = new Font("Microsoft YaHei UI", 8.5F),
                 Type = AntdUI.TTypeMini.Default,
                 Radius = 2,
                 WaveSize = 0,
@@ -351,7 +351,21 @@ namespace FuXingAgent
                 BackColor = Color.FromArgb(239, 246, 255),
                 BorderWidth = 1
             };
-            _percBtn.Click += (s, e) => ToggleTreePopup();
+            _structBtn.Click += (s, e) => ToggleInlineTab("struct");
+
+            _graphBtn = new AntdUI.Button
+            {
+                Text = "知识图谱",
+                Size = new Size(S(88), S(30)),
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                Type = AntdUI.TTypeMini.Default,
+                Radius = 2,
+                WaveSize = 0,
+                ForeColor = CBlue,
+                BackColor = Color.FromArgb(239, 246, 255),
+                BorderWidth = 1
+            };
+            _graphBtn.Click += (s, e) => ToggleInlineTab("graph");
 
             _chipBar.Resize += (s, e) => LayoutChips();
             _chipBar.Paint += (s, e) =>
@@ -359,14 +373,17 @@ namespace FuXingAgent
                 using (var pen = new Pen(Border))
                     e.Graphics.DrawLine(pen, 0, _chipBar.Height - 1, _chipBar.Width, _chipBar.Height - 1);
             };
-            _chipBar.Controls.AddRange(new Control[] { _selChip, _percBtn });
+            _chipBar.Controls.AddRange(new Control[] { _selChip, _structBtn, _graphBtn });
 
-            // ── 输入行 ──
+            // -- 内联感知面板 --
+            _inlinePanel = BuildInlinePanel();
+
+            // -- 输入行 --
             _inputRow = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
 
             _inputBox = new AntdUI.Input
             {
-                Font = new Font("Microsoft YaHei UI", 9.5F * UiScale.GetScaleForControl(this)),
+                Font = new Font("Microsoft YaHei UI", 9.5F),
                 BorderWidth = 1,
                 BorderColor = Color.FromArgb(209, 213, 219),
                 Radius = 2,
@@ -381,7 +398,7 @@ namespace FuXingAgent
                 Text = "发送",
                 Size = new Size(S(88), S(36)),
                 Type = AntdUI.TTypeMini.Primary,
-                Font = new Font("Microsoft YaHei UI", 9F * UiScale.GetScaleForControl(this), FontStyle.Bold),
+                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold),
                 Radius = 2,
                 WaveSize = 0
             };
@@ -401,16 +418,53 @@ namespace FuXingAgent
             _inputRow.Controls.AddRange(new Control[] { _inputBox, _sendBtn });
 
             sec.Controls.Add(_inputRow); // Fill
-            sec.Controls.Add(_chipBar);  // Top
+            sec.Controls.Add(_inlinePanel); // Top (below chipBar)
+            sec.Controls.Add(_chipBar);  // Top (topmost)
             return sec;
+        }
+
+        private void ResetWorkflowUi()
+        {
+            _activeWorkflowName = null;
+            _activeWorkflowBlock = null;
+        }
+
+        private void HandleWorkflowContent(AIContent content)
+        {
+            if (content is WorkflowExecutionStartContent started)
+            {
+                _activeWorkflowName = started.WorkflowName;
+                _activeWorkflowBlock = _sTarget?.AddWorkflowCard(
+                    started.WorkflowName,
+                    started.WorkflowDisplayName,
+                    started.TotalSteps);
+                return;
+            }
+
+            if (content is WorkflowStepUpdateContent step
+                && _activeWorkflowBlock != null
+                && string.Equals(step.WorkflowName, _activeWorkflowName, StringComparison.OrdinalIgnoreCase))
+            {
+                _activeWorkflowBlock.UpdateStep(step.StepIndex, step.StepName, step.Description, step.IsCompleted, step.Success);
+                return;
+            }
+
+            if (content is WorkflowExecutionEndContent ended
+                && _activeWorkflowBlock != null
+                && string.Equals(ended.WorkflowName, _activeWorkflowName, StringComparison.OrdinalIgnoreCase))
+            {
+                _activeWorkflowBlock.SetFinished(ended.Success, ended.Summary);
+            }
         }
 
         private void LayoutChips()
         {
             int x = S(10);
-            int cy = (H_ChipBar - _percBtn.Height) / 2;
-            _percBtn.Location = new Point(x, cy);
-            x += _percBtn.Width + S(8);
+            int cy = (H_ChipBar - _structBtn.Height) / 2;
+            _structBtn.Location = new Point(x, cy);
+            x += _structBtn.Width + S(4);
+            _graphBtn.Location = new Point(x, cy);
+            x += _graphBtn.Width + S(8);
             if (_selChip.Visible)
             {
                 int scy = (H_ChipBar - _selChip.Height) / 2;
@@ -434,105 +488,118 @@ namespace FuXingAgent
             _inputBox.SetBounds(pad, S(2), Math.Max(S(60), iw), ih);
         }
 
-        // ── 文档感知弹出面板 ──────────────────────────────────────────
+        // -- 内联感知面板（输入框上方，标签页切换） --------------------
 
-        private Panel BuildTreePopup()
+        private Panel BuildInlinePanel()
         {
-            var p = new Panel { Visible = false, BackColor = Bg, BorderStyle = BorderStyle.None };
+            var p = new Panel
+            {
+                Visible = false,
+                Dock = DockStyle.Top,
+                Height = S(B_InlinePanel),
+                BackColor = Bg,
+                BorderStyle = BorderStyle.None
+            };
             DB(p);
 
-            float fScale = UiScale.GetScaleForControl(this);
+            var smallFont = new Font("Microsoft YaHei UI", 8F);
+            var bodyFont = new Font("Microsoft YaHei UI", 9F);
 
-            // ── 顶部工具栏：状态文字 + 按钮 ──
-            var toolbar = new Panel
+            // -- 标题栏：标签名 + 关闭按钮 --
+            var headerRow = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = S(36),
-                BackColor = Color.FromArgb(249, 250, 251),
-                Padding = Padding.Empty
+                Height = S(28),
+                BackColor = Color.FromArgb(249, 250, 251)
             };
-            DB(toolbar);
+            DB(headerRow);
 
-            _treeLbl = new Label
+            _inlineTitleLbl = new Label
             {
-                Text = "未感知文档",
-                Font = new Font("Microsoft YaHei UI", 8.5F * fScale),
-                ForeColor = Fg2,
+                Text = "文档结构",
+                Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold),
+                ForeColor = Fg1,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Location = new Point(S(10), 0),
-                Size = new Size(S(160), S(36))
+                Dock = DockStyle.Fill
             };
+            _inlineTitleLbl.Padding = new Padding(S(8), 0, 0, 0);
 
-            var quickBtn = new AntdUI.Button
+            _inlineCloseBtn = new AntdUI.Button
             {
-                Text = "快速感知",
-                Size = new Size(S(76), S(26)),
-                Font = new Font("Microsoft YaHei UI", 8F * fScale, FontStyle.Bold),
+                Text = "收起",
+                Size = new Size(S(48), S(22)),
+                Font = smallFont,
                 Type = AntdUI.TTypeMini.Default,
                 Radius = 2,
-                WaveSize = 0
+                WaveSize = 0,
+                ForeColor = Fg2,
+                BackColor = Color.Transparent,
+                BorderWidth = 0,
+                Dock = DockStyle.Right
             };
-            quickBtn.Click += async (s, e) =>
+            _inlineCloseBtn.Click += (s, e) =>
             {
-                _deepPerception = false;
-                await ExecutePerceptionAsync(false);
+                _activeTab = null;
+                _inlinePanel.Visible = false;
+                UpdateTabButtons();
+                ResizeBottom();
             };
 
-            var deepBtn = new AntdUI.Button
-            {
-                Text = "深度感知",
-                Size = new Size(S(76), S(26)),
-                Font = new Font("Microsoft YaHei UI", 8F * fScale, FontStyle.Bold),
-                Type = AntdUI.TTypeMini.Primary,
-                Radius = 2,
-                WaveSize = 0
-            };
-            deepBtn.Click += async (s, e) =>
-            {
-                _deepPerception = true;
-                await ExecutePerceptionAsync(true);
-            };
+            headerRow.Controls.Add(_inlineTitleLbl);
+            headerRow.Controls.Add(_inlineCloseBtn);
 
-            toolbar.Controls.AddRange(new Control[] { _treeLbl, quickBtn, deepBtn });
-
-            // 工具栏布局：按钮靠右，标签占剩余空间
-            toolbar.Resize += (s, e) =>
-            {
-                int bY = (toolbar.Height - deepBtn.Height) / 2;
-                deepBtn.Location = new Point(toolbar.Width - deepBtn.Width - S(8), bY);
-                quickBtn.Location = new Point(deepBtn.Left - quickBtn.Width - S(4), bY);
-                _treeLbl.Size = new Size(Math.Max(S(60), quickBtn.Left - S(10)), toolbar.Height);
-            };
-
-            // ── 进度条 ──
-            _percProgress = new AntdUI.Progress
+            // -- 进度行：进度条 + 右侧短状态文字 --
+            _percRow = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = S(4),
+                Height = S(22),
+                BackColor = Color.FromArgb(249, 250, 251),
+                Visible = false,
+                Padding = new Padding(S(8), S(2), S(8), S(2))
+            };
+            DB(_percRow);
+
+            _percProgress = new AntdUI.Progress
+            {
+                Dock = DockStyle.Fill,
                 Shape = AntdUI.TShapeProgress.Round,
-                Radius = 0,
+                Radius = S(2),
                 Fill = CBlue,
                 Back = Color.FromArgb(229, 231, 235),
                 Loading = false,
                 LoadingFull = true,
-                Visible = false,
-                Value = 0F
+                Value = 0F,
+                UseSystemText = false
             };
 
-            // ── 空状态占位（感知前的友好提示）──
+            _treeLbl = new Label
+            {
+                Dock = DockStyle.Right,
+                AutoSize = false,
+                Width = S(80),
+                Font = smallFont,
+                ForeColor = Fg2,
+                TextAlign = ContentAlignment.MiddleRight,
+                Text = ""
+            };
+
+            _percRow.Controls.Add(_percProgress);
+            _percRow.Controls.Add(_treeLbl);
+
+            // -- 文档结构：空状态提示 --
             _treeEmpty = new Label
             {
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Text = "📄  点击上方按钮\n开始感知文档结构",
-                Font = new Font("Microsoft YaHei UI", 9.5F * fScale),
+                Text = "正在解析文档结构...",
+                Font = bodyFont,
                 ForeColor = Color.FromArgb(156, 163, 175),
                 BackColor = Bg,
                 Visible = true
             };
 
-            // ── 文档树 ──
+            // -- 文档结构：树控件 --
             _treeView = new TreeView
             {
                 Dock = DockStyle.Fill,
@@ -550,43 +617,106 @@ namespace FuXingAgent
             };
             _treeView.NodeMouseClick += (s, e) => OnTreeNodeClicked(e.Node);
 
-            // 添加顺序：Fill 区域先加，Top 区域后加（WinForms Dock 顺序）
+            // -- 知识图谱：空状态提示 --
+            _factEmpty = new Label
+            {
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Text = "使用 Ribbon \"文档感知\" 按钮提取文档事实",
+                Font = bodyFont,
+                ForeColor = Color.FromArgb(156, 163, 175),
+                BackColor = Bg,
+                Visible = false
+            };
+
+            // -- 知识图谱：事实树 --
+            _factTreeView = new TreeView
+            {
+                Dock = DockStyle.Fill,
+                BorderStyle = BorderStyle.None,
+                BackColor = Bg,
+                Font = new Font("Microsoft YaHei UI", 8.5F),
+                ForeColor = Color.FromArgb(55, 65, 81),
+                ShowLines = true,
+                ShowPlusMinus = true,
+                ShowRootLines = false,
+                FullRowSelect = true,
+                ItemHeight = S(24),
+                Indent = S(18),
+                Visible = false
+            };
+
+            // Dock 添加顺序：Fill 先加，Top 后加
             p.Controls.Add(_treeView);
             p.Controls.Add(_treeEmpty);
-            p.Controls.Add(_percProgress);
-            p.Controls.Add(toolbar);
+            p.Controls.Add(_factTreeView);
+            p.Controls.Add(_factEmpty);
+            p.Controls.Add(_percRow);
+            p.Controls.Add(headerRow);
 
-            // 底部线条边框
             p.Paint += (s, e) =>
             {
                 using (var pen = new Pen(Border))
-                    e.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
+                {
+                    e.Graphics.DrawLine(pen, 0, 0, p.Width, 0);
+                    e.Graphics.DrawLine(pen, 0, p.Height - 1, p.Width, p.Height - 1);
+                }
             };
 
             return p;
         }
 
-        private void PlaceTreePopup()
+        /// <summary>切换内联标签页（struct=文档结构, graph=知识图谱）</summary>
+        private void ToggleInlineTab(string tab)
         {
-            int w = ClientSize.Width - S(16);
-            int h = S(260);
-            int y = _bottom.Top - h - S(6);
-            _treePopup.SetBounds(S(8), Math.Max(H_Header + S(4), y), w, h);
-        }
-
-        private void ToggleTreePopup()
-        {
-            if (_treePopup.Visible)
+            if (_activeTab == tab)
             {
-                _treePopup.Visible = false;
-                UpdatePerceptionButton();
+                // 再次点击相同标签 -> 收起
+                _activeTab = null;
+                _inlinePanel.Visible = false;
+                UpdateTabButtons();
+                ResizeBottom();
                 return;
             }
-            RebuildDocTree(false, _deepPerception);
-            PlaceTreePopup();
-            _treePopup.Visible = true;
-            _treePopup.BringToFront();
-            UpdatePerceptionButton();
+
+            _activeTab = tab;
+            _inlinePanel.Visible = true;
+            _inlineTitleLbl.Text = tab == "struct" ? "文档结构" : "知识图谱";
+
+            bool isStruct = tab == "struct";
+            // 文档结构控件
+            _treeView.Visible = isStruct && _treeView.Nodes.Count > 0;
+            _treeEmpty.Visible = isStruct && _treeView.Nodes.Count == 0;
+            // 知识图谱控件
+            _factTreeView.Visible = !isStruct && _factTreeView.Nodes.Count > 0;
+            _factEmpty.Visible = !isStruct && _factTreeView.Nodes.Count == 0;
+
+            if (isStruct)
+            {
+                RebuildDocTree(false);
+            }
+            else
+            {
+                RebuildFactTree();
+            }
+
+            UpdateTabButtons();
+            ResizeBottom();
+        }
+
+        /// <summary>更新标签按钮样式（选中/未选中）</summary>
+        private void UpdateTabButtons()
+        {
+            bool structActive = _activeTab == "struct";
+            bool graphActive = _activeTab == "graph";
+
+            _structBtn.Type = structActive ? AntdUI.TTypeMini.Primary : AntdUI.TTypeMini.Default;
+            _structBtn.ForeColor = structActive ? Color.White : CBlue;
+            _structBtn.BackColor = structActive ? CBlue : Color.FromArgb(239, 246, 255);
+
+            _graphBtn.Type = graphActive ? AntdUI.TTypeMini.Primary : AntdUI.TTypeMini.Default;
+            _graphBtn.ForeColor = graphActive ? Color.White : CBlue;
+            _graphBtn.BackColor = graphActive ? CBlue : Color.FromArgb(239, 246, 255);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -614,6 +744,7 @@ namespace FuXingAgent
             DebugLogger.Instance.LogSessionStart(_currentSession.Title);
 
             _chatPanel.ClearAll();
+            ResetWorkflowUi();
             _titleLabel.Text = _currentSession.Title;
             _sAll.Clear();
             lock (_sLock) _sPending.Clear();
@@ -661,7 +792,7 @@ namespace FuXingAgent
             _chatPanel.ScrollToEnd();
             RefreshCtx();
             RefreshSystemPrompt();
-            RebuildDocTree(false, _deepPerception);
+            RebuildDocTree(false);
             _greetDone = true;
         }
 
@@ -735,6 +866,7 @@ namespace FuXingAgent
 
             _sTarget = _chatPanel.AddMessage("AI福星", _aiAvatar, UChatRole.AI, "");
             _sTarget.ShowThinkingIndicator();
+            ResetWorkflowUi();
             _sAll.Clear();
             lock (_sLock) _sPending.Clear();
             _sTimer.Start();
@@ -760,8 +892,12 @@ namespace FuXingAgent
                     var pendingApprovals = new List<FunctionApprovalRequestContent>();
                     var runOptions = new FuXingRunOptions
                     {
+                        InnerChatOptions = new Microsoft.Extensions.AI.ChatOptions
+                        {
+                            Instructions = BuildPrompt()
+                        },
                         InvokeOnSta = InvokeOnSta,
-                        SystemPrompt = BuildPrompt()
+                        RequestUserInputAsync = RequestUserInputOnUiAsync
                     };
 
                     int lastFlushTick = Environment.TickCount;
@@ -816,6 +952,21 @@ namespace FuXingAgent
                             else if (content is FunctionApprovalRequestContent approval)
                             {
                                 pendingApprovals.Add(approval);
+                            }
+                            else if (content is WorkflowExecutionStartContent
+                                  || content is WorkflowStepUpdateContent
+                                  || content is WorkflowExecutionEndContent)
+                            {
+                                Ui(() =>
+                                {
+                                    // 工作流自带详细卡片，移除之前为同一工具创建的 ToolCallCard
+                                    if (content is WorkflowExecutionStartContent && toolQueue.Count > 0)
+                                    {
+                                        var redundant = toolQueue.Dequeue();
+                                        _sTarget?.RemoveBlock(redundant);
+                                    }
+                                    HandleWorkflowContent(content);
+                                });
                             }
                             else if (content is AgentErrorContent error)
                             {
@@ -884,7 +1035,8 @@ namespace FuXingAgent
                 if (!runningReset) SetRunning(false);
                 _sendGuard = false;
                 _chatPanel.ScrollToEnd();
-                RebuildDocTree(false, _deepPerception);
+                RebuildDocTree(false);
+                RebuildFactTree();
             }
         }
 
@@ -919,7 +1071,10 @@ namespace FuXingAgent
                 };
                 var greetOptions = new FuXingRunOptions
                 {
-                    SystemPrompt = BuildPrompt()
+                    InnerChatOptions = new Microsoft.Extensions.AI.ChatOptions
+                    {
+                        Instructions = BuildPrompt()
+                    }
                 };
 
                 int lastFlushTick = Environment.TickCount;
@@ -970,6 +1125,8 @@ namespace FuXingAgent
             {
                 if (!string.IsNullOrEmpty(d)) _sAll.Append(d);
                 var display = _sStripThink ? StripThink(_sAll.ToString()) : _sAll.ToString();
+                // 流式阶段：strip 后为空说明仅有 think 内容，保持 thinking 指示器
+                if (string.IsNullOrEmpty(display) && !force) return;
                 _sTarget.SetText(display);
             });
         }
@@ -1032,7 +1189,7 @@ namespace FuXingAgent
 
         private void RefreshSystemPrompt()
         {
-            // 系统提示词在每次 Run 时通过 FuXingRunOptions.SystemPrompt 注入。
+            // 系统提示词在每次 Run 时通过 FuXingRunOptions ChatOptions.Instructions 注入。
         }
 
         private async Task TryGenTitle(string first)
@@ -1153,54 +1310,51 @@ namespace FuXingAgent
             LayoutChips();
         }
 
-        // ── 文档感知 ──────────────────────────────────────────────────
+        // -- 文档结构感知 ------------------------------------------------
 
-        /// <summary>执行感知并刷新树</summary>
+        /// <summary>执行文档结构感知并刷新树</summary>
         private async Task ExecutePerceptionAsync(bool deep)
         {
             var doc = _connect?.WordApplication?.ActiveDocument;
             if (doc == null)
             {
-                _treeLbl.Text = "未感知文档";
-                _treeLbl.ForeColor = Fg2;
-                UpdatePerceptionButton();
+                _treeEmpty.Text = "未检测到活动文档";
+                _treeEmpty.ForeColor = Color.FromArgb(156, 163, 175);
+                ShowTreeEmpty(true);
                 return;
             }
 
-            if (_isPerceiving)
-            {
-                _treeLbl.Text = "正在感知中…";
-                _treeLbl.ForeColor = CYellow;
-                UpdatePerceptionButton();
-                return;
-            }
-
+            if (_isPerceiving) return;
             _isPerceiving = true;
 
-            string modeLabel = deep ? "深度" : "快速";
-            _treeLbl.Text = $"正在{modeLabel}感知…";
+            _treeLbl.Text = "解析中";
             _treeLbl.ForeColor = CYellow;
             _percProgress.Value = 0F;
             _percProgress.Loading = true;
-            _percProgress.Visible = true;
-            _treeEmpty.Text = $"🔍  正在{modeLabel}感知文档结构…";
-            _treeEmpty.ForeColor = CYellow;
+            _percRow.Visible = true;
+            _treeEmpty.Text = "正在解析文档结构...";
+            _treeEmpty.ForeColor = Color.FromArgb(107, 114, 128);
             ShowTreeEmpty(true);
-            if (!_treePopup.Visible)
+
+            // 自动展开文档结构标签页
+            if (_activeTab != "struct")
             {
-                PlaceTreePopup();
-                _treePopup.Visible = true;
-                _treePopup.BringToFront();
+                _activeTab = "struct";
+                _inlineTitleLbl.Text = "文档结构";
+                _inlinePanel.Visible = true;
+                UpdateTabButtons();
+                ResizeBottom();
             }
-            UpdatePerceptionButton();
 
             var progress = new Progress<(float ratio, string message)>(p =>
                 Ui(() =>
                 {
-                    _treeLbl.Text = p.message;
-                    _treeLbl.ForeColor = CYellow;
+                    int pct = (int)(p.ratio * 100);
+                    _treeLbl.Text = $"{pct}%";
+                    _treeLbl.ForeColor = Fg2;
                     _percProgress.Value = p.ratio;
-                    _treeEmpty.Text = $"🔍  {p.message}";
+                    _treeEmpty.Text = p.message;
+                    _treeEmpty.ForeColor = Color.FromArgb(107, 114, 128);
                     if (p.ratio >= 1f) _percProgress.Loading = false;
                 }));
 
@@ -1213,15 +1367,15 @@ namespace FuXingAgent
 
                 _percProgress.Value = 1F;
                 _percProgress.Loading = false;
-                RebuildDocTree(true, deep);
+                RebuildDocTree(true);
             }
             catch (Exception ex)
             {
-                _treeLbl.Text = $"{modeLabel}感知失败";
-                _treeLbl.ForeColor = CRed;
                 _percProgress.Fill = CRed;
                 _percProgress.Loading = false;
-                _treeEmpty.Text = $"❌  {modeLabel}感知失败\n点击上方按钮重试";
+                _treeLbl.Text = "失败";
+                _treeLbl.ForeColor = CRed;
+                _treeEmpty.Text = "文档结构解析失败";
                 _treeEmpty.ForeColor = CRed;
                 ShowTreeEmpty(true);
                 System.Diagnostics.Debug.WriteLine($"Perception error: {ex.Message}");
@@ -1229,16 +1383,14 @@ namespace FuXingAgent
             finally
             {
                 _isPerceiving = false;
-                _percProgress.Visible = false;
+                _percRow.Visible = false;
                 _percProgress.Fill = CBlue;
-                // 重置空状态占位文字和颜色
                 if (_treeEmpty.Visible && _treeView.Nodes.Count == 0
                     && _treeEmpty.ForeColor != CRed)
                 {
-                    _treeEmpty.Text = "📄  点击上方按钮\n开始感知文档结构";
+                    _treeEmpty.Text = "正在解析文档结构...";
                     _treeEmpty.ForeColor = Color.FromArgb(156, 163, 175);
                 }
-                UpdatePerceptionButton();
                 RefreshSystemPrompt();
             }
         }
@@ -1249,17 +1401,16 @@ namespace FuXingAgent
         }
 
         /// <summary>从缓存的文档图刷新树控件</summary>
-        private void RebuildDocTree(bool force, bool deep)
+        private void RebuildDocTree(bool force)
         {
             try
             {
                 var doc = _connect?.WordApplication?.ActiveDocument;
                 if (doc == null)
                 {
-                    _treeLbl.Text = "未感知文档";
-                    _treeLbl.ForeColor = Fg2;
+                    _treeEmpty.Text = "未检测到文档";
+                    _treeEmpty.ForeColor = Color.FromArgb(156, 163, 175);
                     ShowTreeEmpty(true);
-                    UpdatePerceptionButton();
                     return;
                 }
 
@@ -1267,14 +1418,13 @@ namespace FuXingAgent
 
                 if (graph == null)
                 {
-                    _treeLbl.Text = "未感知文档";
-                    _treeLbl.ForeColor = Fg2;
+                    _treeEmpty.Text = "正在解析文档结构...";
+                    _treeEmpty.ForeColor = Color.FromArgb(156, 163, 175);
                     ShowTreeEmpty(true);
-                    UpdatePerceptionButton();
                     return;
                 }
 
-                var sig = (graph.IsDeepPerception ? "D|" : "Q|") + graph.Index.Count + "|" + graph.ContentHash;
+                var sig = graph.Index.Count + "|" + graph.ContentHash;
                 if (!force && sig == _percSig && _treeView.Nodes.Count > 0) return;
                 _percSig = sig;
 
@@ -1300,25 +1450,90 @@ namespace FuXingAgent
                 int tc = graph.FindByType(DocNodeType.Table).Count;
                 int ic = graph.FindByType(DocNodeType.Image).Count;
 
-                _treeLbl.Text = $"已感知（{(graph.IsDeepPerception ? "深度" : "快速")}） 标题{hc} 表格{tc} 图片{ic}";
-                _treeLbl.ForeColor = CGreen;
-                _tip.SetToolTip(_percBtn, $"标题{hc} 表格{tc} 图片{ic}");
-                UpdatePerceptionButton();
+                _tip.SetToolTip(_structBtn,
+                    $"标题{hc} 表格{tc} 图片{ic}");
             }
             catch
             {
-                _treeLbl.Text = "感知失败";
-                _treeLbl.ForeColor = CRed;
+                _treeEmpty.Text = "解析失败，请重试";
+                _treeEmpty.ForeColor = CRed;
                 ShowTreeEmpty(true);
-                UpdatePerceptionButton();
             }
         }
 
-        /// <summary>切换空状态占位和树控件可见性</summary>
+        /// <summary>切换文档结构空状态占位和树控件可见性</summary>
         private void ShowTreeEmpty(bool empty)
         {
-            _treeEmpty.Visible = empty;
-            _treeView.Visible = !empty;
+            bool isStructTab = _activeTab == "struct";
+            _treeEmpty.Visible = empty && isStructTab;
+            _treeView.Visible = !empty && isStructTab;
+        }
+
+        /// <summary>从事实缓存刷新知识图谱树</summary>
+        private void RebuildFactTree()
+        {
+            _factTreeView.Nodes.Clear();
+
+            var doc = _connect?.WordApplication?.ActiveDocument;
+            if (doc == null)
+            {
+                ShowFactEmpty(true, "未检测到文档");
+                return;
+            }
+
+            var snapshot = DocumentFactCache.Instance.GetFreshSnapshot(
+                doc.FullName, doc.Content.Text.GetHashCode(), "all", 0);
+            if (snapshot == null || snapshot.Facts.Count == 0)
+            {
+                ShowFactEmpty(true, "使用 Ribbon \"文档感知\" 按钮提取文档事实");
+                return;
+            }
+
+            // 按 Type 分组展示
+            var groups = new Dictionary<string, TreeNode>(StringComparer.OrdinalIgnoreCase);
+            var typeLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "data", "数据" },
+                { "event", "事件" },
+                { "activity", "活动" },
+                { "metric", "技术指标" }
+            };
+
+            _factTreeView.BeginUpdate();
+            foreach (var fact in snapshot.Facts)
+            {
+                string typeKey = (fact.Type ?? "other").ToLowerInvariant();
+                if (!groups.TryGetValue(typeKey, out var groupNode))
+                {
+                    string label = typeLabels.TryGetValue(typeKey, out var l) ? l : typeKey;
+                    groupNode = new TreeNode(label) { ForeColor = Color.FromArgb(30, 64, 175) };
+                    groups[typeKey] = groupNode;
+                    _factTreeView.Nodes.Add(groupNode);
+                }
+                var factNode = new TreeNode(fact.Summary ?? fact.Value ?? "(无摘要)")
+                {
+                    ForeColor = Color.FromArgb(55, 65, 81),
+                    ToolTipText = fact.Evidence
+                };
+                groupNode.Nodes.Add(factNode);
+            }
+            _factTreeView.ExpandAll();
+            _factTreeView.EndUpdate();
+
+            ShowFactEmpty(false, null);
+        }
+
+        /// <summary>切换知识图谱空状态占位和树控件可见性</summary>
+        private void ShowFactEmpty(bool empty, string message)
+        {
+            bool isGraphTab = _activeTab == "graph";
+            if (message != null)
+            {
+                _factEmpty.Text = message;
+                _factEmpty.ForeColor = Color.FromArgb(156, 163, 175);
+            }
+            _factEmpty.Visible = empty && isGraphTab;
+            _factTreeView.Visible = !empty && isGraphTab;
         }
 
         /// <summary>递归添加文档图节点到 TreeView</summary>
@@ -1369,37 +1584,6 @@ namespace FuXingAgent
             return new DocTreeAnchor(0);
         }
 
-        private void UpdatePerceptionButton()
-        {
-            if (_isPerceiving)
-            {
-                _percBtn.Text = _treePopup.Visible ? "感知中 ▾" : "感知中 ▴";
-                _percBtn.Type = AntdUI.TTypeMini.Default;
-                _percBtn.ForeColor = Color.FromArgb(180, 83, 9);
-                _percBtn.BackColor = Color.FromArgb(255, 247, 237);
-                if (_tip != null)
-                    _tip.SetToolTip(_percBtn, _treePopup.Visible ? "正在感知，点击查看详情" : "正在感知，点击展开详情");
-                return;
-            }
-
-            if (_treePopup.Visible)
-            {
-                _percBtn.Text = "文档感知 ▾";
-                _percBtn.Type = AntdUI.TTypeMini.Primary;
-                _percBtn.ForeColor = Color.White;
-                _percBtn.BackColor = CBlue;
-            }
-            else
-            {
-                _percBtn.Text = "文档感知 ▴";
-                _percBtn.Type = AntdUI.TTypeMini.Default;
-                _percBtn.ForeColor = CBlue;
-                _percBtn.BackColor = Color.FromArgb(239, 246, 255);
-            }
-            if (_tip != null)
-                _tip.SetToolTip(_percBtn, _treePopup.Visible ? "收起文档感知" : "展开文档感知");
-        }
-
         private void OnTreeNodeClicked(TreeNode node)
         {
             if (node?.Tag is not DocTreeAnchor anchor) return;
@@ -1416,12 +1600,12 @@ namespace FuXingAgent
             }
             catch
             {
-                _treeLbl.Text = "⚠ 跳转失败";
+                _treeLbl.Text = "跳转失败";
                 _treeLbl.ForeColor = CRed;
             }
         }
 
-        // ── 输入自适应 ────────────────────────────────────────────────
+        // -- 输入自适应 ------------------------------------------------
 
         private void ResizeBottom()
         {
@@ -1433,7 +1617,8 @@ namespace FuXingAgent
 
             int inputH = H_InputBase + Math.Min(4, lines - 1) * S(18);
             inputH = Math.Max(H_InputBase, Math.Min(H_InputMax, inputH));
-            int desired = H_ChipBar + inputH + H_BottomPad;
+            int inlineH = (_inlinePanel != null && _inlinePanel.Visible) ? S(B_InlinePanel) : 0;
+            int desired = H_ChipBar + inlineH + inputH + H_BottomPad;
 
             if (Math.Abs(_bottom.Height - desired) > 2)
                 _bottom.Height = desired;
@@ -1516,6 +1701,39 @@ namespace FuXingAgent
                 _chatPanel.ScrollToEnd();
             }));
             if (card == null) return false;
+            return await card.ResultTask.ConfigureAwait(false);
+        }
+
+        private async Task<string> RequestUserInputOnUiAsync(string question, List<FuXingAgent.Tools.AskUserOption> options, bool allowFreeInput)
+        {
+            AskUserCard card = null;
+
+            void BuildCard()
+            {
+                var uiOptions = new List<UI.AskUserOption>();
+                if (options != null)
+                {
+                    foreach (var opt in options)
+                    {
+                        if (opt == null || string.IsNullOrWhiteSpace(opt.label)) continue;
+                        uiOptions.Add(new UI.AskUserOption
+                        {
+                            Label = opt.label,
+                            Description = opt.description
+                        });
+                    }
+                }
+
+                card = _sTarget?.AddAskUserCard(question ?? "", uiOptions, allowFreeInput);
+                _chatPanel.ScrollToEnd();
+            }
+
+            if (InvokeRequired)
+                Invoke((MethodInvoker)BuildCard);
+            else
+                BuildCard();
+
+            if (card == null) return string.Empty;
             return await card.ResultTask.ConfigureAwait(false);
         }
 

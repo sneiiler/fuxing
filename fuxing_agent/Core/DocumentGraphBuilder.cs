@@ -43,7 +43,7 @@ namespace FuXingAgent.Core
         //  公共 API
         // ═══════════════════════════════════════════════════
 
-        /// <summary>快速路径：从大纲级别构建文档图</summary>
+        /// <summary>快速路径：仅提取大纲层级，不扫描正文内容</summary>
         public DocumentGraph BuildFull(Word.Document doc, IProgress<(float ratio, string message)> progress = null)
         {
             var sw = Stopwatch.StartNew();
@@ -60,23 +60,22 @@ namespace FuXingAgent.Core
             graph.Root = root;
             graph.AddNode(root);
 
-            progress?.Report((0.05f, "提取标题结构…"));
+            progress?.Report((0.1f, "提取大纲结构…"));
             var headings = ExtractHeadings(doc);
             BuildPreamble(doc, graph, root, headings);
 
             if (headings.Count > 0)
             {
-                progress?.Report((0.10f, $"构建章节层级（{headings.Count} 个标题）…"));
-                BuildSectionHierarchy(doc, graph, root, headings);
+                progress?.Report((0.5f, $"构建大纲层级（{headings.Count} 个标题）…"));
+                int docEnd = doc.Content.End - 1;
+                BuildOutlineHierarchy(graph, root, headings, docEnd);
                 BuildSiblingLinks(graph, root);
-
-                DiscoverAllSectionContents(doc, graph, progress);
             }
 
             sw.Stop();
             progress?.Report((1f, $"感知完成（{graph.Index.Count} 个节点）"));
             DebugLogger.Instance.LogDebug("GraphBuilder",
-                $"文档图构建完成: {graph.Index.Count} 个节点, 耗时 {sw.ElapsedMilliseconds}ms");
+                $"快速大纲感知完成: {graph.Index.Count} 个节点, 耗时 {sw.ElapsedMilliseconds}ms");
 
             return graph;
         }
@@ -313,6 +312,52 @@ namespace FuXingAgent.Core
         //  图层级构建
         // ═══════════════════════════════════════════════════
 
+        /// <summary>
+        /// 快速路径：纯内存大纲层级构建，不访问 COM。
+        /// 直接使用 ExtractHeadings 已采集的位置数据。
+        /// </summary>
+        private void BuildOutlineHierarchy(
+            DocumentGraph graph, DocNode root, List<HeadingEntry> headings, int docEnd)
+        {
+            var stack = new Stack<DocNode>();
+            stack.Push(root);
+
+            for (int i = 0; i < headings.Count; i++)
+            {
+                var h = headings[i];
+                int headingStart = h.RangeStart;
+                int bodyStart = h.RangeEnd;
+                int rangeEnd = (i + 1 < headings.Count) ? headings[i + 1].RangeStart : docEnd;
+
+                string nodeId = NextId("s");
+
+                var sectionNode = new DocNode
+                {
+                    Id = nodeId,
+                    Type = DocNodeType.Section,
+                    Title = h.Title,
+                    Level = h.Level,
+                    Meta = new Dictionary<string, string>
+                    {
+                        ["heading_start"] = headingStart.ToString(),
+                        ["range_start"] = bodyStart.ToString(),
+                        ["range_end"] = rangeEnd.ToString()
+                    }
+                };
+
+                while (stack.Count > 1 && stack.Peek().Level >= h.Level)
+                    stack.Pop();
+
+                var parent = stack.Peek();
+                sectionNode.ParentId = parent.Id;
+                parent.ChildIds.Add(nodeId);
+
+                graph.AddNode(sectionNode);
+                stack.Push(sectionNode);
+            }
+        }
+
+        /// <summary>深度路径：从 COM 查询构建完整层级（含正文预览）</summary>
         private void BuildSectionHierarchy(
             Word.Document doc, DocumentGraph graph, DocNode root, List<HeadingEntry> headings)
         {
@@ -413,14 +458,15 @@ namespace FuXingAgent.Core
             int firstHeadingStart;
 
             if (headings.Count > 0)
-                firstHeadingStart = doc.Paragraphs[headings[0].ParaIndex].Range.Start;
+                firstHeadingStart = headings[0].RangeStart;
             else
                 firstHeadingStart = doc.Content.End - 1;
 
             if (firstHeadingStart <= docStart) return;
 
-            var preambleRange = doc.Range(docStart, firstHeadingStart);
-            string text = preambleRange.Text ?? "";
+            int checkEnd = Math.Min(docStart + 300, firstHeadingStart);
+            var checkRange = doc.Range(docStart, checkEnd);
+            string text = checkRange.Text ?? "";
             if (string.IsNullOrWhiteSpace(text.TrimEnd('\r', '\n', '\a'))) return;
 
             string nodeId = NextId("pre");
@@ -430,7 +476,6 @@ namespace FuXingAgent.Core
                 Id = nodeId,
                 Type = DocNodeType.Preamble,
                 Title = "前言",
-                Preview = ExtractBodyPreview(preambleRange),
                 ParentId = root.Id,
                 Level = 0,
                 Meta = new Dictionary<string, string>

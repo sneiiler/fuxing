@@ -9,6 +9,8 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace FuXingAgent.Agents
 {
@@ -21,6 +23,9 @@ namespace FuXingAgent.Agents
         private readonly Dictionary<string, AIFunction> _tools =
             new Dictionary<string, AIFunction>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly HashSet<string> _workflowFunctions =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private static readonly HashSet<string> _dangerousTools =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -32,7 +37,8 @@ namespace FuXingAgent.Agents
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "batch_operations", "批量操作" },
-                { "execute_word_script", "执行脚本" }
+                { "execute_word_script", "执行脚本" },
+                { "web_request", "网络请求" }
             };
 
         public void Initialize(Connect connect)
@@ -55,17 +61,16 @@ namespace FuXingAgent.Agents
                     try
                     {
                         object instance = CreateToolInstance(type, connect);
-                        var baseFn = AIFunctionFactory.Create(method, instance);
-
-                        var fn = AIFunctionFactory.Create(
-                            method,
-                            (AIFunctionArguments args) => InvokeWithPolicies(baseFn, args),
-                            new AIFunctionFactoryOptions());
+                        AIFunction fn = new PolicyWrappedAIFunction(
+                            AIFunctionFactory.Create(method, instance),
+                            InvokeWithPolicies);
 
                         if (_dangerousTools.Contains(fn.Name) && cfg.RequireApprovalForDangerousTools)
                             fn = new ApprovalRequiredAIFunction(fn);
 
                         _tools[fn.Name] = fn;
+                        if (type.Namespace.StartsWith("FuXingAgent.Workflows"))
+                            _workflowFunctions.Add(fn.Name);
                     }
                     catch (Exception ex)
                     {
@@ -132,8 +137,8 @@ namespace FuXingAgent.Agents
                     if (string.IsNullOrWhiteSpace(question))
                         return "错误: ask_user 缺少 question 参数";
 
-                    var answer = runOptions.RequestUserInputAsync(question, options, allowFreeInput)
-                        .GetAwaiter().GetResult();
+                    var answerTask = runOptions.RequestUserInputAsync(question, options, allowFreeInput);
+                    var answer = WaitTaskSafely(answerTask);
                     return answer ?? string.Empty;
                 }
                 catch (Exception ex)
@@ -144,6 +149,10 @@ namespace FuXingAgent.Agents
 
             try
             {
+                // Workflow 自行管理 STA 调用，不整体包装到 UI 线程
+                if (_workflowFunctions.Contains(fn.Name))
+                    return fn.InvokeAsync(args, CancellationToken.None).GetAwaiter().GetResult();
+
                 if (runOptions?.InvokeOnSta != null)
                 {
                     return runOptions.InvokeOnSta(() =>
@@ -215,6 +224,45 @@ namespace FuXingAgent.Agents
                         }
                     }
                 }
+            }
+        }
+
+        private static T WaitTaskSafely<T>(Task<T> task)
+        {
+            if (task == null) return default(T);
+            if (task.IsCompleted) return task.GetAwaiter().GetResult();
+
+            bool isStaUiThread =
+                Thread.CurrentThread.GetApartmentState() == ApartmentState.STA &&
+                Application.MessageLoop;
+
+            if (!isStaUiThread)
+                return task.GetAwaiter().GetResult();
+
+            // 在 UI 线程上等待时保持消息泵运行，避免 Word 界面假死。
+            while (!task.IsCompleted)
+            {
+                Application.DoEvents();
+                Thread.Sleep(15);
+            }
+
+            return task.GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 用 DelegatingAIFunction 包装工具调用，在 InvokeCoreAsync 中注入 STA 封送和错误处理策略。
+        /// </summary>
+        private sealed class PolicyWrappedAIFunction : DelegatingAIFunction
+        {
+            private readonly Func<AIFunction, AIFunctionArguments, object> _invoke;
+
+            public PolicyWrappedAIFunction(AIFunction inner, Func<AIFunction, AIFunctionArguments, object> invoke)
+                : base(inner) => _invoke = invoke;
+
+            protected override ValueTask<object> InvokeCoreAsync(
+                AIFunctionArguments arguments, CancellationToken cancellationToken)
+            {
+                return new ValueTask<object>(_invoke(InnerFunction, arguments));
             }
         }
     }

@@ -59,6 +59,7 @@ namespace FuXingAgent.Core
             CancellationToken cancellation = default,
             IProgress<(float ratio, string message)> progress = null)
         {
+            // COM 操作必须在 Word STA 主线程执行（调用方保证当前在 STA）
             string docKey = doc.FullName;
             int contentHash = doc.Content.Text.GetHashCode();
 
@@ -92,8 +93,9 @@ namespace FuXingAgent.Core
             }
             else
             {
+                // 直接在当前 STA 线程执行 COM 操作（不创建新 STA 线程）
                 DebugLogger.Instance.LogDebug("GraphCache", $"构建快速图: {docKey}");
-                graph = await RunOnStaThreadAsync(() => builder.BuildFull(doc, progress), cancellation);
+                graph = builder.BuildFull(doc, progress);
             }
 
             graph.ContentHash = contentHash;
@@ -192,51 +194,5 @@ namespace FuXingAgent.Core
             return graph;
         }
 
-        private static Task<T> RunOnStaThreadAsync<T>(Func<T> work, CancellationToken cancellation)
-        {
-            if (work == null) throw new ArgumentNullException(nameof(work));
-
-            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            if (cancellation.IsCancellationRequested)
-            {
-                tcs.SetCanceled();
-                return tcs.Task;
-            }
-
-            var thread = new Thread(() =>
-            {
-                try
-                {
-                    if (cancellation.IsCancellationRequested)
-                    {
-                        tcs.TrySetCanceled();
-                        return;
-                    }
-
-                    var result = work();
-                    tcs.TrySetResult(result);
-                }
-                catch (OperationCanceledException)
-                {
-                    tcs.TrySetCanceled();
-                }
-                catch (Exception ex)
-                {
-                    tcs.TrySetException(ex);
-                }
-            });
-
-            thread.IsBackground = true;
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-
-            if (cancellation.CanBeCanceled)
-            {
-                cancellation.Register(() => tcs.TrySetCanceled());
-            }
-
-            return tcs.Task;
-        }
     }
 }

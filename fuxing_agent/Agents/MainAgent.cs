@@ -16,79 +16,34 @@ namespace FuXingAgent.Agents
 {
 #pragma warning disable MEAI001
     /// <summary>
-    /// 主对话 Agent — 继承 AIAgent 基类，驱动用户与 LLM 之间的完整对话循环，
-    /// 包含流式响应、工具调用、截断续传、STA 线程封送。
+    /// 主对话 Agent — 继承 DelegatingAIAgent，包裹内部 ChatClientAgent 以走 AF 管线，
+    /// 同时提供自定义流式响应（工具执行通知、调试日志、STA 线程封送）。
+    /// 
+    /// 管线职责分配（由内部 ChatClientAgent 驱动）：
+    /// - FuXingHistoryProvider: 通过 ProvideChatHistoryAsync / StoreChatHistoryAsync 管理历史
+    /// - FileAgentSkillsProvider: 注入 load_skill / read_skill_resource 工具
+    /// - ChatOptions.Tools: 注册 ToolRegistry 中的所有工具
+    /// 
+    /// 本类职责：
+    /// - RunCoreStreamingAsync: 转发给内部 Agent 管线，拦截流式输出以发射工具执行通知
+    /// - ToolInvocationScope: STA 线程封送，让工具操作在 Word COM 主线程执行
     /// </summary>
-    public class MainAgent : AIAgent
+    public class MainAgent : DelegatingAIAgent
     {
-        private readonly AgentBootstrap _bootstrap;
-        private readonly ToolRegistry _toolRegistry;
+        private readonly FuXingHistoryProvider _historyProvider;
         private readonly int _maxToolRounds;
         private string _responseId;
 
-        public MainAgent(AgentBootstrap bootstrap, ToolRegistry toolRegistry, int maxToolRounds = 50)
+        public MainAgent(ChatClientAgent innerAgent,
+            FuXingHistoryProvider historyProvider, int maxToolRounds = 50)
+            : base(innerAgent)
         {
-            _bootstrap = bootstrap;
-            _toolRegistry = toolRegistry;
+            _historyProvider = historyProvider;
             _maxToolRounds = maxToolRounds;
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Session 工厂（使用 AgentSession 承载会话历史）
-        // ═══════════════════════════════════════════════════════════════
-
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)
-            => new ValueTask<AgentSession>(new FuXingSession());
-
-        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
-            JsonElement serializedSession, JsonSerializerOptions jsonSerializerOptions,
-            CancellationToken cancellationToken)
-        {
-            var session = new FuXingSession();
-
-            if (serializedSession.ValueKind == JsonValueKind.Object &&
-                serializedSession.TryGetProperty("messages", out var messagesElement) &&
-                messagesElement.ValueKind == JsonValueKind.Array)
-            {
-                try
-                {
-                    var stored = JsonSerializer.Deserialize<List<SessionMessage>>(
-                        messagesElement.GetRawText(),
-                        jsonSerializerOptions) ?? new List<SessionMessage>();
-
-                    session.State.ImportMessages(stored);
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Instance.LogError("MainAgent.DeserializeSessionCoreAsync", ex);
-                }
-            }
-
-            return new ValueTask<AgentSession>(session);
-        }
-
-        /// <summary>AgentSession 是抽象类，此为最小具体实现</summary>
-        private sealed class FuXingSession : AgentSession
-        {
-            public ConversationState State { get; } = new ConversationState();
-        }
-
-        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
-            AgentSession session, JsonSerializerOptions jsonSerializerOptions,
-            CancellationToken cancellationToken)
-        {
-            var fxSession = session as FuXingSession;
-            var payload = new
-            {
-                messages = fxSession?.State?.ExportMessages() ?? new List<SessionMessage>()
-            };
-
-            return new ValueTask<JsonElement>(
-                JsonSerializer.SerializeToElement(payload, jsonSerializerOptions));
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        //  流式对话循环（主入口）— 使用 Channel 避免 yield-in-try-catch 限制
+        //  流式对话循环 — 转发给内部 ChatClientAgent 管线，拦截工具通知
         // ═══════════════════════════════════════════════════════════════
 
         protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
@@ -102,10 +57,6 @@ namespace FuXingAgent.Agents
             return channel.Reader.ReadAllAsync(cancellationToken);
         }
 
-        /// <summary>
-        /// 实际的流式对话生产者——在后台 Task 中运行，通过 ChannelWriter 推送更新。
-        /// 主执行链使用 FunctionInvokingChatClient 自动处理工具调用循环。
-        /// </summary>
         private async Task ProduceStreamingUpdatesAsync(
             ChannelWriter<AgentResponseUpdate> writer,
             IEnumerable<ChatMessage> messages,
@@ -117,26 +68,11 @@ namespace FuXingAgent.Agents
             {
                 var fxOpts = options as FuXingRunOptions;
                 _responseId = Guid.NewGuid().ToString();
+                Action<WorkflowProgressEvent> previousWorkflowReporter = fxOpts?.ReportWorkflowProgress;
 
-                var innerClient = _bootstrap.ChatClient;
-                if (innerClient == null)
-                {
-                    writer.TryWrite(MakeErrorUpdate("Agent 未初始化，请检查配置"));
-                    return;
-                }
+                // 构建内部 ChatClientAgent 的运行选项
+                var innerRunOptions = new ChatClientAgentRunOptions(fxOpts?.InnerChatOptions);
 
-                var fxSession = session as FuXingSession ?? new FuXingSession();
-                var sessionState = fxSession.State;
-
-                foreach (var input in messages ?? Array.Empty<ChatMessage>())
-                {
-                    if (input?.Role == ChatRole.System) continue;
-                    sessionState.AddMessage(CloneMessage(input));
-                }
-
-                var roundMessages = sessionState.PrepareMessages(fxOpts?.SystemPrompt ?? string.Empty);
-
-                var chatOptions = BuildChatOptions();
                 var contentBuilder = new StringBuilder();
                 var toolCalls = new List<FunctionCallContent>();
                 var approvalRequests = new List<FunctionApprovalRequestContent>();
@@ -145,25 +81,38 @@ namespace FuXingAgent.Agents
 
                 try
                 {
-                    var messagesJson = JsonSerializer.Serialize(roundMessages, new JsonSerializerOptions
+                    var messageList = messages.ToList();
+
+                    // 如果有 Instructions（系统提示词），添加到消息列表最前面
+                    if (fxOpts?.InnerChatOptions?.Instructions != null)
+                    {
+                        var systemMsg = new ChatMessage(Microsoft.Extensions.AI.ChatRole.System, fxOpts.InnerChatOptions.Instructions);
+                        messageList.Insert(0, systemMsg);
+                    }
+
+                    var messagesJson = JsonSerializer.Serialize(messageList, new JsonSerializerOptions
                     {
                         WriteIndented = true,
                         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                     });
 
-                    var optionsJson = JsonSerializer.Serialize(new
+                    // 记录工具定义
+                    string toolsJson = "[]";
+                    if (innerRunOptions?.ChatOptions?.Tools != null && innerRunOptions.ChatOptions.Tools.Count > 0)
                     {
-                        Temperature = chatOptions.Temperature,
-                        ToolCount = chatOptions.Tools?.Count ?? 0,
-                        MaxToolRounds = _maxToolRounds
-                    }, new JsonSerializerOptions { WriteIndented = true });
+                        toolsJson = JsonSerializer.Serialize(innerRunOptions.ChatOptions.Tools, new JsonSerializerOptions
+                        {
+                            WriteIndented = true,
+                            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                        });
+                    }
 
                     DebugLogger.Instance.LogLlmRequest(
-                        _bootstrap.ChatClient?.ToString() ?? "未知",
-                        _bootstrap.CurrentModel,
-                        roundMessages.Count,
+                        InnerAgent?.ToString() ?? "未知",
+                        Name ?? "MainAgent",
+                        messageList.Count,
                         messagesJson,
-                        optionsJson);
+                        $"MaxToolRounds={_maxToolRounds}\nTools:\n{toolsJson}");
                 }
                 catch (Exception logEx)
                 {
@@ -172,13 +121,24 @@ namespace FuXingAgent.Agents
 
                 try
                 {
-                    using (ToolInvocationScope.Enter(fxOpts))
-                    using (var funcClient = new FunctionInvokingChatClient(innerClient))
+                    if (fxOpts != null)
                     {
-                        funcClient.MaximumIterationsPerRequest = _maxToolRounds;
+                        fxOpts.ReportWorkflowProgress = evt =>
+                        {
+                            previousWorkflowReporter?.Invoke(evt);
+                            writer.TryWrite(MakeWorkflowUpdate(evt));
+                        };
+                    }
 
-                        await foreach (var update in funcClient.GetStreamingResponseAsync(
-                            roundMessages, chatOptions, cancellationToken).ConfigureAwait(false))
+                    using (ToolInvocationScope.Enter(fxOpts))
+                    {
+                        // 转发给内部 ChatClientAgent — 完整管线：
+                        // 1. PrepareSessionAndMessages → FuXingHistoryProvider 注入历史
+                        // 2. FileAgentSkillsProvider 注入技能工具
+                        // 3. ChatClientAgent.RunCoreStreamingAsync → FunctionInvokingChatClient → LLM
+                        // 4. StoreChatHistoryAsync → 保存对话到会话状态
+                        await foreach (var update in ((ChatClientAgent)InnerAgent).RunStreamingAsync(
+                            messages, session, innerRunOptions, cancellationToken).ConfigureAwait(false))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
 
@@ -187,9 +147,6 @@ namespace FuXingAgent.Agents
                                 contentBuilder.Append(update.Text);
                                 writer.TryWrite(MakeTextUpdate(update.Text));
                             }
-
-                            if (update.FinishReason != null)
-                                finishReason = update.FinishReason.Value.ToString();
 
                             if (update.Contents != null)
                             {
@@ -207,7 +164,10 @@ namespace FuXingAgent.Agents
                                             writer.TryWrite(MakeToolStartUpdate(fc.Name));
 
                                             string argsJson = fc.Arguments != null
-                                                ? JsonSerializer.Serialize(fc.Arguments)
+                                                ? JsonSerializer.Serialize(fc.Arguments, new JsonSerializerOptions
+                                                {
+                                                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                                                })
                                                 : "{}";
                                             DebugLogger.Instance.LogToolCall(fc.Name, fc.CallId, argsJson);
                                         }
@@ -223,7 +183,6 @@ namespace FuXingAgent.Agents
 
                                         writer.TryWrite(MakeToolEndUpdate(toolName, success));
                                         DebugLogger.Instance.LogToolResult(toolName, fr.CallId, success, resultText);
-                                        sessionState.AddToolResult(fr.CallId, resultText);
 
                                         runningToolCalls.Remove(fr.CallId);
                                     }
@@ -238,34 +197,14 @@ namespace FuXingAgent.Agents
                     }
 
                     string content = contentBuilder.ToString();
-
                     DebugLogger.Instance.LogLlmStreamResponse(content, toolCalls.Count, finishReason);
 
-                    if (approvalRequests.Count > 0)
-                    {
-                        var approvalMessage = new ChatMessage { Role = ChatRole.Assistant };
-                        if (!string.IsNullOrEmpty(content))
-                            approvalMessage.Contents.Add(new TextContent(content));
-                        foreach (var approval in approvalRequests)
-                            approvalMessage.Contents.Add(approval);
+                    if (toolCalls.Count > 0)
+                        DebugLogger.Instance.LogAssistantToolCallMessage(content, toolCalls);
+                    else if (!string.IsNullOrWhiteSpace(content))
+                        DebugLogger.Instance.LogAssistantMessage(content);
 
-                        sessionState.AddMessage(approvalMessage);
-                    }
-                    else
-                    {
-                        if (toolCalls.Count > 0)
-                        {
-                            sessionState.AddAssistantToolCallMessage(content, toolCalls);
-                            DebugLogger.Instance.LogAssistantToolCallMessage(content, toolCalls);
-                        }
-                        else
-                        {
-                            sessionState.AddAssistantMessage(content);
-                            DebugLogger.Instance.LogAssistantMessage(content);
-                        }
-                    }
-
-                    if (string.IsNullOrWhiteSpace(content))
+                    if (string.IsNullOrWhiteSpace(content) && approvalRequests.Count == 0)
                         writer.TryWrite(MakeErrorUpdate("未收到模型响应，请检查模型服务或重试"));
                 }
                 catch (OperationCanceledException)
@@ -277,6 +216,11 @@ namespace FuXingAgent.Agents
                     DebugLogger.Instance.LogError("MainAgent.RunCoreStreamingAsync", ex);
                     DebugLogger.Instance.LogLlmError("MainAgent.RunCoreStreamingAsync", ex);
                     writer.TryWrite(MakeErrorUpdate($"对话请求失败: {ex.Message}"));
+                }
+                finally
+                {
+                    if (fxOpts != null)
+                        fxOpts.ReportWorkflowProgress = previousWorkflowReporter;
                 }
             }
             catch (OperationCanceledException)
@@ -335,7 +279,7 @@ namespace FuXingAgent.Agents
             string conversationSummary,
             CancellationToken cancellationToken = default)
         {
-            var client = _bootstrap.ChatClient;
+            var client = ((ChatClientAgent)InnerAgent).ChatClient;
             if (client == null) return null;
 
             try
@@ -362,31 +306,14 @@ namespace FuXingAgent.Agents
         }
 
         public List<SessionMessage> ExportSessionMessages(AgentSession session)
-        {
-            var fxSession = session as FuXingSession;
-            return fxSession?.State?.ExportMessages() ?? new List<SessionMessage>();
-        }
+            => _historyProvider.ExportMessages(session);
 
         public int EstimateSessionTokens(AgentSession session)
-        {
-            var fxSession = session as FuXingSession;
-            return fxSession?.State?.EstimateTotalTokens() ?? 0;
-        }
+            => _historyProvider.EstimateTotalTokens(session);
 
         // ═══════════════════════════════════════════════════════════════
         //  内部辅助
         // ═══════════════════════════════════════════════════════════════
-
-        private ChatOptions BuildChatOptions()
-        {
-            var opts = new ChatOptions { Temperature = 0.7f };
-
-            var tools = _toolRegistry.GetAllTools();
-            if (tools != null && tools.Count > 0)
-                opts.Tools = tools;
-
-            return opts;
-        }
 
         private AgentResponseUpdate MakeTextUpdate(string text)
         {
@@ -448,23 +375,61 @@ namespace FuXingAgent.Agents
             };
         }
 
-        private static ChatMessage CloneMessage(ChatMessage message)
+        private AgentResponseUpdate MakeWorkflowUpdate(WorkflowProgressEvent progressEvent)
         {
-            if (message == null) return null;
+            AIContent content;
 
-            var clone = new ChatMessage { Role = message.Role };
-            foreach (var content in message.Contents)
+            switch (progressEvent.Kind)
             {
-                if (content is TextContent tc)
-                    clone.Contents.Add(new TextContent(tc.Text));
-                else if (content is FunctionCallContent fc)
-                    clone.Contents.Add(new FunctionCallContent(fc.CallId, fc.Name, fc.Arguments));
-                else if (content is FunctionResultContent fr)
-                    clone.Contents.Add(new FunctionResultContent(fr.CallId, fr.Result));
+                case WorkflowProgressKind.WorkflowStarted:
+                    content = new WorkflowExecutionStartContent(
+                        progressEvent.WorkflowName,
+                        progressEvent.WorkflowDisplayName,
+                        progressEvent.TotalSteps);
+                    break;
+                case WorkflowProgressKind.StepStarted:
+                    content = new WorkflowStepUpdateContent(
+                        progressEvent.WorkflowName,
+                        progressEvent.StepIndex,
+                        progressEvent.TotalSteps,
+                        progressEvent.StepName,
+                        progressEvent.Description,
+                        false,
+                        true);
+                    break;
+                case WorkflowProgressKind.StepFinished:
+                    content = new WorkflowStepUpdateContent(
+                        progressEvent.WorkflowName,
+                        progressEvent.StepIndex,
+                        progressEvent.TotalSteps,
+                        progressEvent.StepName,
+                        progressEvent.Description,
+                        true,
+                        progressEvent.Success ?? true);
+                    break;
+                case WorkflowProgressKind.WorkflowFinished:
+                    content = new WorkflowExecutionEndContent(
+                        progressEvent.WorkflowName,
+                        progressEvent.WorkflowDisplayName,
+                        progressEvent.TotalSteps,
+                        progressEvent.Success ?? true,
+                        progressEvent.Description);
+                    break;
+                default:
+                    content = new AgentErrorContent("未知 workflow 事件");
+                    break;
             }
 
-            return clone;
+            return new AgentResponseUpdate
+            {
+                AgentId = this.Id,
+                AuthorName = this.Name,
+                Role = ChatRole.Assistant,
+                ResponseId = _responseId,
+                Contents = new List<AIContent> { content }
+            };
         }
+
     }
 #pragma warning restore MEAI001
 }

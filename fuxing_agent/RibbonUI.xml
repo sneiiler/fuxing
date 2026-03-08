@@ -10,6 +10,13 @@
                             onAction='toggle_taskpane_btn_Click'
                             screentip='显示/隐藏AI福星'
                             supertip='打开或关闭AI福星对话窗口'/>
+					<button id='fact_perception_btn'
+                            label='文档感知'
+                            size='large'
+                            getImage='GetButtonImage'
+                            onAction='fact_perception_btn_Click'
+                            screentip='提取关键事实'
+                            supertip='提取文档中的数据、事件、活动和技术指标，生成可预览的事实摘要'/>
 					<button id='CheckStandardValidityButton'
                             label='校验引用标准'
                             size='large'

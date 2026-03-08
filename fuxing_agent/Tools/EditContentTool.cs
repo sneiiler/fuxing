@@ -30,7 +30,6 @@ namespace FuXingAgent.Tools
 
             replace_text = (replace_text ?? "").Replace("\r\n", "\r").Replace("\n", "\r");
 
-            int count = 0;
             object findObj = find_text;
             object replaceObj = replace_text;
             object matchCaseObj = match_case;
@@ -38,33 +37,42 @@ namespace FuXingAgent.Tools
             object useWildcardsObj = use_wildcards;
             object forwardObj = true;
             object wdFindStop = Word.WdFindWrap.wdFindStop;
-            object replaceOne = Word.WdReplace.wdReplaceOne;
             object missing = Type.Missing;
 
-            using (WordHelper.BeginTrackRevisions(app))
+            // Phase 1: 先用 find-only 计数（不修改文档，不受 Track Changes 影响）
+            int count = 0;
             {
-                while (count <= 10000)
+                var range = doc.Content;
+                range.Find.ClearFormatting();
+                object replaceNone = Word.WdReplace.wdReplaceNone;
+                while (range.Find.Execute(
+                    ref findObj, ref matchCaseObj, ref matchWholeWordObj, ref useWildcardsObj,
+                    ref missing, ref missing, ref forwardObj, ref wdFindStop,
+                    ref missing, ref missing, ref replaceNone,
+                    ref missing, ref missing, ref missing, ref missing))
                 {
-                    var range = doc.Content;
-                    range.Find.ClearFormatting();
-                    range.Find.Replacement.ClearFormatting();
-
-                    bool found = range.Find.Execute(
-                        ref findObj, ref matchCaseObj, ref matchWholeWordObj, ref useWildcardsObj,
-                        ref missing, ref missing, ref forwardObj, ref wdFindStop,
-                        ref missing, ref replaceObj, ref replaceOne,
-                        ref missing, ref missing, ref missing, ref missing);
-
-                    if (!found) break;
                     count++;
+                    if (count > 10000)
+                        throw new InvalidOperationException("匹配次数超过 10000，已中止");
                 }
-
-                if (count > 10000)
-                    throw new InvalidOperationException("替换次数超过 10000，已中止");
             }
 
             if (count == 0)
                 return "未找到匹配文本";
+
+            // Phase 2: wdReplaceAll 原子替换（单次调用，Track Changes 下不会重复匹配）
+            using (WordHelper.BeginTrackRevisions(app))
+            {
+                var range = doc.Content;
+                range.Find.ClearFormatting();
+                range.Find.Replacement.ClearFormatting();
+                object replaceAll = Word.WdReplace.wdReplaceAll;
+                range.Find.Execute(
+                    ref findObj, ref matchCaseObj, ref matchWholeWordObj, ref useWildcardsObj,
+                    ref missing, ref missing, ref forwardObj, ref wdFindStop,
+                    ref missing, ref replaceObj, ref replaceAll,
+                    ref missing, ref missing, ref missing, ref missing);
+            }
 
             string action = string.IsNullOrEmpty(replace_text) ? "删除" : "替换";
             return $"已{action} {count} 处";

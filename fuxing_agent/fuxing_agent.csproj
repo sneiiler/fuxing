@@ -219,22 +219,24 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <!-- ── Agents ── -->
     <Compile Include="Agents\AgentBootstrap.cs" />
-    <Compile Include="Agents\ConversationState.cs" />
+    <Compile Include="Agents\FuXingHistoryProvider.cs" />
     <Compile Include="Agents\FuXingRunOptions.cs" />
     <Compile Include="Agents\MainAgent.cs" />
+    <Compile Include="Agents\StaHelper.cs" />
     <Compile Include="Agents\SubAgentRunner.cs" />
     <Compile Include="Agents\ToolNotificationContent.cs" />
     <Compile Include="Agents\ToolRegistry.cs" />
     <!-- ── Core ── -->
-    <Compile Include="Core\ChatSession.cs" />
     <Compile Include="Core\ConfigLoader.cs" />
+    <Compile Include="Core\ConversationSession.cs" />
     <Compile Include="Core\CursorSnapshot.cs" />
     <Compile Include="Core\DebugLogger.cs" />
+    <Compile Include="Core\DocumentFactCache.cs" />
+    <Compile Include="Core\DocumentFactModels.cs" />
     <Compile Include="Core\DocumentGraph.cs" />
     <Compile Include="Core\DocumentGraphBuilder.cs" />
     <Compile Include="Core\DocumentGraphCache.cs" />
     <Compile Include="Core\ResourceManager.cs" />
-    <Compile Include="Core\SessionManager.cs" />
     <Compile Include="Core\UiScale.cs" />
     <Compile Include="Core\WordHelper.cs" />
     <!-- ── Tools ── -->
@@ -249,8 +251,10 @@
     <Compile Include="Tools\BatchOperationsTool.cs" />
     <Compile Include="Tools\ExecuteWordScriptTool.cs" />
     <Compile Include="Tools\ListFilesTool.cs" />
+    <Compile Include="Tools\WebRequestTool.cs" />
     <Compile Include="Tools\UndoRedoTool.cs" />
     <Compile Include="Workflows\CorrectTextWorkflow.cs" />
+    <Compile Include="Workflows\ExtractDocumentFactsWorkflow.cs" />
     <Compile Include="Workflows\MergeDocumentWorkflow.cs" />
     <!-- ── UI ── -->
     <Compile Include="UI\TaskPaneHost.cs" />

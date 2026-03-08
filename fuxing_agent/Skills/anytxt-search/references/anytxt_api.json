@@ -1,0 +1,52 @@
+{
+  "name": "anytxt_search",
+  "description": "基于 AnyTxt 本地全文检索引擎的文档搜索能力，通过 HTTP JSON-RPC 2.0 调用 ATGUI.exe 提供的 API",
+  "base_url": "http://127.0.0.1:9920",
+  "protocol": "JSON-RPC 2.0",
+
+  "apis": {
+    "search": {
+      "method": "ATRpcServer.Searcher.V1.Search",
+      "description": "搜索匹配关键词的文件数量",
+      "params": {
+        "pattern": { "type": "string", "required": true, "description": "搜索关键词，支持双引号精确匹配" },
+        "filterDir": { "type": "string", "required": false, "description": "限定搜索目录，如 C:\\some path" },
+        "filterExt": { "type": "string", "required": false, "default": "*", "description": "文件扩展名过滤，* 表示全部" },
+        "lastModifyBegin": { "type": "integer", "required": false, "default": 0, "description": "起始修改时间 Unix 时间戳" },
+        "lastModifyEnd": { "type": "integer", "required": false, "default": 2147483647, "description": "结束修改时间 Unix 时间戳" }
+      }
+    },
+
+    "get_result": {
+      "method": "ATRpcServer.Searcher.V1.GetResult",
+      "description": "获取匹配关键词的文件列表及基本信息",
+      "params": {
+        "pattern": { "type": "string", "required": true, "description": "搜索关键词" },
+        "filterDir": { "type": "string", "required": false, "description": "限定搜索目录" },
+        "filterExt": { "type": "string", "required": false, "default": "*", "description": "文件扩展名过滤" },
+        "lastModifyBegin": { "type": "integer", "required": false, "default": 0, "description": "起始修改时间 Unix 时间戳" },
+        "lastModifyEnd": { "type": "integer", "required": false, "default": 2147483647, "description": "结束修改时间 Unix 时间戳" },
+        "limit": { "type": "string", "required": false, "default": "300", "description": "返回结果数量上限" },
+        "offset": { "type": "integer", "required": false, "default": 0, "description": "分页偏移量" },
+        "order": { "type": "integer", "required": false, "default": 0, "description": "排序方式: 0=默认, 1=修改时间升序, 2=修改时间降序, 3=目录升序, 4=目录降序" }
+      }
+    },
+
+    "get_fragment": {
+      "method": "ATRpcServer.Searcher.V1.GetFragment",
+      "description": "获取指定文件中关键词匹配的片段文本",
+      "params": {
+        "fid": { "type": "string", "required": true, "description": "文件 ID，从 GetResult 返回结果中获取" },
+        "pattern": { "type": "string", "required": true, "description": "搜索关键词" }
+      }
+    },
+
+    "ocr": {
+      "method": "ATRpcServer.Searcher.V1.OCR",
+      "description": "识别图片中的文字",
+      "params": {
+        "file": { "type": "string", "required": true, "description": "图片文件绝对路径" }
+      }
+    }
+  }
+}
